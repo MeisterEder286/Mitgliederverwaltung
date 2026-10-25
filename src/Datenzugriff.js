@@ -148,13 +148,15 @@ var DB = (function () {
         });
       });
       if (doppelt) {
-        throw Fehler.fachlich('Diesen Eintrag gibt es bereits (gleiche Angaben bei: ' + g.map(Werte.feldname).join(', ') + ').');
+        throw Fehler.fachlich('Diesen Eintrag gibt es bereits (gleiche Angaben bei: ' + g.map(Werte.feldname).join(', ') + ').',
+          g.map(function (f) { return { feld: f, meldung: 'Bereits vergeben.' }; }));
       }
     });
   }
 
   function fachlichAusPruefung(fehler) {
-    if (fehler.length) throw Fehler.fachlich(fehler.map(function (f) { return f.meldung; }).join(' '));
+    // Feldliste mitgeben: der Browser zeigt die Meldungen direkt am jeweiligen Eingabefeld (App.formular).
+    if (fehler.length) throw Fehler.fachlich(fehler.map(function (f) { return f.meldung; }).join(' '), fehler);
   }
 
   /** Entfernt Felder, die nur das Skript setzt (ID, version, geaendert_*). */

@@ -434,7 +434,8 @@
 
   /**
    * Formular aus Felddefinitionen. felder: [{ name, titel, typ: 'text'|'datum'|'zahl'|'betrag'|'auswahl'|'janein'|
-   * 'langtext'|'email'|'tel', liste: [werte] oder [{wert, text}], pflicht, hilfe, nurLesen, breit }]
+   * 'langtext'|'email'|'tel', liste: [werte] oder [{wert, text}], zahl (Auswahl liefert Zahl, z. B. für IDs),
+   * pflicht, hilfe, nurLesen, breit }]
    * werte: Startwerte. Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name) }.
    */
   App.formular = function (felder, werte, optionen) {
@@ -482,6 +483,7 @@
           var e = eingaben[n], s = e.eingabe.value.trim();
           if (e.def.nurLesen) return;
           if (e.def.typ === 'janein') o[n] = s === 'ja' ? true : s === 'nein' ? false : null;
+          else if (e.def.typ === 'auswahl' && e.def.zahl) o[n] = s === '' ? null : Number(s);
           else if (e.def.typ === 'datum') o[n] = s ? (App.isoDatum(s) || s) : null;
           else if (e.def.typ === 'zahl') o[n] = s === '' ? null : Number(s);
           else if (e.def.typ === 'betrag') o[n] = s === '' ? null : Number(s.replace(/\./g, '').replace(',', '.'));
@@ -532,7 +534,7 @@
     if (inhalt) d.appendChild(inhalt);
     var leiste = App.el('div', null, { className: 'knopfleiste' });
     (knoepfe || [{ text: 'Schließen' }]).forEach(function (k) {
-      leiste.appendChild(App.knopf(k.text, function () { if (k.aktion) k.aktion(schliessen); else schliessen(); }, k.art || 'zweit'));
+      leiste.appendChild(App.knopf(k.text, function () { if (k.aktion) k.aktion(schliessen); else schliessen(); }, k.art === undefined || k.art === null ? 'zweit' : k.art));
     });
     d.appendChild(leiste);
     d.addEventListener('cancel', function () { d.remove(); });

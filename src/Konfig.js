@@ -38,11 +38,40 @@ var Konfig = (function () {
     return w === undefined ? null : w;
   }
 
+  /**
+   * Setzt einen Wert in _Konfig (legt den Schlüssel an, falls er fehlt). Nur innerhalb DB.mitSperre und nur
+   * nach Rechteprüfung (konfig_aendern) bzw. für skriptinterne Zähler (z. B. mitgliedsnummer_naechste).
+   * Liefert den alten Wert (oder null). Leert danach den Konfig-Cache.
+   */
+  function setze(schluessel, wert, beschreibung) {
+    var b = DB.blatt('_Konfig');
+    var letzte = b.getLastRow(), spalten = b.getLastColumn();
+    var daten = b.getRange(1, 1, Math.max(letzte, 1), spalten).getValues();
+    DB.zaehle(3);
+    var kopf = daten[0].map(function (k) { return String(k).trim(); });
+    var iS = kopf.indexOf('schluessel'), iW = kopf.indexOf('wert'), iB = kopf.indexOf('beschreibung');
+    for (var i = 1; i < daten.length; i++) {
+      if (String(daten[i][iS]).trim() === schluessel) {
+        var alt = daten[i][iW];
+        b.getRange(i + 1, iW + 1).setValue(Werte.zelleSchreiben(String(wert === null || wert === undefined ? '' : wert), { typ: 'Text' }));
+        DB.zaehle(1);
+        vergessen();
+        return alt === '' ? null : String(alt);
+      }
+    }
+    var zeile = kopf.map(function (k, j) {
+      return j === iS ? schluessel : j === iW ? String(wert === null || wert === undefined ? '' : wert) : j === iB ? (beschreibung || '') : '';
+    });
+    DB.anhaengen(b, [zeile], letzte);
+    vergessen();
+    return null;
+  }
+
   function vergessen() {
     speicher = null;
     if (typeof DB !== 'undefined' && DB.vorratLeeren) DB.vorratLeeren();
     CacheService.getScriptCache().remove(SCHLUESSEL);
   }
 
-  return { alle: alle, wert: wert, vergessen: vergessen };
+  return { alle: alle, wert: wert, setze: setze, vergessen: vergessen };
 })();
