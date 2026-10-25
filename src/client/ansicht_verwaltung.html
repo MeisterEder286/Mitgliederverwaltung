@@ -1,13 +1,379 @@
 <!--
-  ansicht_verwaltung – Verwaltung
+  ansicht_verwaltung – Verwaltung: Benutzer & Rechte, Einstellungen, Stammdaten, Datenqualität, System.
 
-  Zweck:      Benutzer und Rollen, Einstellungen (_Konfig), Stammdaten, Datenqualität.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   benutzer_verwalten / konfig_aendern – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Reiter „Benutzer“ (Zugänge anlegen/ändern/deaktivieren, Rechte je Rolle ansehen, Warnliste „Zugang ohne
+              passendes Amt“), „Einstellungen“ (Werte aus _Konfig mit Prüfung), „Stammdaten“ (Abteilungen,
+              Funktionsarten, Beitragsarten, Nachweisarten, Ehrungsstufen, Aufbewahrungsfristen), „Datenqualität“
+              (Prüfregeln über den ganzen Bestand) und „System“ (Cache, Zeilenzahlen, Snapshot neu aufbauen).
+  Datenquelle: apiVerwaltung…-Funktionen (src/api/Verwaltung.js); Abteilungen und Personen für Auswahlfelder aus App.daten.
+  Wer darf:   benutzer_verwalten, konfig_aendern, stammdaten_bearbeiten (Vorstand, Mitgliederverwalter) – je Reiter;
+              serverseitig erzwungen.
+  Besonderheiten:
+    - Die Rechte je Rolle werden nur angezeigt: Sie stehen bewusst im Code (src/lib/rechte.js, V5) und werden über
+      Git geändert, nicht über eine Tabellenzelle.
+    - Man kann sich nicht selbst die letzte Verwaltungsrolle entziehen (Server prüft).
+    - Stammdaten werden nicht gelöscht, sondern auf „aktiv = nein“ gesetzt.
 -->
+<style>
+  .vw-person { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+  .vw-person ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rand); border-radius: var(--radius); }
+  .vw-person li button { width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--flaeche); font: inherit; cursor: pointer; }
+  .vw-person input { min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .vw-konfig { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--rand); }
+  .vw-konfig > div { min-width: 0; overflow-wrap: anywhere; }
+  .vw-konfig code { font-size: 0.85rem; color: var(--text-leise); }
+  .vw-konfig .zeile { display: flex; gap: 8px; }
+  .vw-konfig input, .vw-konfig select { flex: 1; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; min-width: 0; }
+  .vw-warnung { padding: 10px; border-left: 4px solid #d39b00; background: #fffaeb; margin: 0 0 6px; border-radius: 0 var(--radius) var(--radius) 0; }
+  @media (min-width: 720px) { .vw-konfig { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; } }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+
+  // ================================================================== Hilfen
+
+  function titelVon(name) {
+    var t = String(name).replace(/_id$/, '').replace(/_/g, ' ');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  function abteilungsListe() {
+    return A.daten.liste('abteilungen').map(function (a) { return { wert: a.abteilung_id, text: a.bezeichnung + (a.aktiv === false ? ' (ruht)' : '') }; });
+  }
+
+  /** Formularfelder aus dem Feldkatalog; FK-Felder auf Abteilung/Funktionsart werden zu Auswahllisten. */
+  function felderAus(tab, namen, extra) {
+    var katalog = ((A.startdaten && A.startdaten.felder) || {})[tab] || [];
+    extra = extra || {};
+    return namen.map(function (n) {
+      var s = katalog.filter(function (x) { return x.name === n; })[0];
+      if (!s) return null;
+      var typ = { Text: 'text', Langtext: 'langtext', Datum: 'datum', Zeitpunkt: 'datum', Auswahl: 'auswahl', 'ja/nein': 'janein',
+        Ganzzahl: 'zahl', FK: 'zahl', Dezimal: 'betrag' }[s.typ] || 'text';
+      var f = { name: n, titel: titelVon(n), typ: typ, pflicht: s.pflicht === 'ja' };
+      if (typ === 'auswahl') f.liste = ((A.startdaten && A.startdaten.listen) || {})[s.liste] || [];
+      if (n === 'abteilung_id') { f.typ = 'auswahl'; f.liste = abteilungsListe(); }
+      Object.keys(extra[n] || {}).forEach(function (k) { f[k] = extra[n][k]; });
+      return f;
+    }).filter(Boolean);
+  }
+
+  /** Alle bearbeitbaren Fachfelder eines Tabs (ohne ID, version, geaendert_*, auto). */
+  function fachfelder(tab) {
+    var katalog = ((A.startdaten && A.startdaten.felder) || {})[tab] || [];
+    return katalog.filter(function (s) {
+      return s.pflicht !== 'PK' && s.pflicht !== 'auto' && ['version', 'geaendert_am', 'geaendert_von'].indexOf(s.name) < 0;
+    }).map(function (s) { return s.name; });
+  }
+
+  function personWahl(beiWahl, beschriftung, startText) {
+    var feld = A.el('input', null, { type: 'search', placeholder: 'Name oder Mitgliedsnummer …', autocomplete: 'off', value: startText || '' });
+    feld.setAttribute('aria-label', beschriftung);
+    var ul = A.el('ul', null, { hidden: true });
+    feld.addEventListener('input', A.verzoegert(function () {
+      var t = A.falte(feld.value).trim();
+      A.leere(ul);
+      if (!t) { ul.hidden = true; beiWahl(null); return; }
+      var l = A.daten.liste('mitglieder').filter(function (m) {
+        return String(m.mitgliedsnummer || '') === feld.value.trim() || A.falte([m.nachname, m.vorname].join(' ')).indexOf(t) >= 0;
+      }).slice(0, 8);
+      ul.hidden = !l.length;
+      l.forEach(function (m) {
+        var b = A.el('button', A.name(m) + ' · ' + (m.mitgliedsnummer || ''), { type: 'button' });
+        b.addEventListener('click', function () { ul.hidden = true; feld.value = A.name(m); beiWahl(m); });
+        ul.appendChild(A.el('li', null, null, [b]));
+      });
+    }, 120));
+    return A.el('div', null, { className: 'vw-person' }, [A.el('label', beschriftung), feld, ul]);
+  }
+
+  function reiterLeiste(reiter, aktiv, beiWahl) {
+    var leiste = A.el('div', null, { className: 'reiter' });
+    leiste.setAttribute('role', 'tablist');
+    reiter.forEach(function (r) {
+      var b = A.el('button', r.titel, { type: 'button' });
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', r.schluessel === aktiv ? 'true' : 'false');
+      b.addEventListener('click', function () { beiWahl(r.schluessel); });
+      leiste.appendChild(b);
+    });
+    return leiste;
+  }
+
+  function laedt(ziel) { var p = A.el('p', 'Lädt …', { className: 'laedt' }); ziel.appendChild(p); return p; }
+  function fehlerText(ziel) { A.leere(ziel); ziel.appendChild(A.el('p', 'Konnte nicht geladen werden.', { className: 'leise' })); }
+
+  /** Formular im Dialog speichern; ruft api mit (…args, werte) und zeigt Feldfehler. */
+  function speicherDialog(titel, form, api, args, fertig, zusatzVorher) {
+    var inhalt = A.el('div', null, null, [zusatzVorher || null, form.element]);
+    A.dialog(titel, inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: ' ', aktion: function (schliessen) {
+        A.rufe.apply(null, [api].concat(args).concat([form.werte(), A.still])).then(function (antwort) {
+          A.daten.uebernehme(antwort);
+          schliessen();
+          A.meldung((antwort && antwort.hinweis) ? 'Gespeichert. ' + antwort.hinweis : 'Gespeichert.', antwort && antwort.hinweis ? 'hinweis' : 'ok');
+          fertig(antwort);
+        }, function (err) {
+          if (err.felder) form.setzeFehler(err.felder);
+          else if (err.art === 'konflikt') A.meldung('Inzwischen von jemand anderem geändert – bitte neu öffnen.', 'fehler');
+          else A.fehler(err);
+        });
+      } }
+    ]);
+  }
+
+  // ================================================================== Benutzer
+
+  function benutzerDialog(b, daten, fertig) {
+    var person = b && b.mitglied_id ? A.daten.hole('mitglieder', b.mitglied_id) : null;
+    var gewaehlt = b ? b.mitglied_id || null : null;
+    var felder = felderAus('Benutzer', ['email', 'name', 'rolle', 'abteilung_id', 'aktiv', 'bemerkung'], {
+      email: { pflicht: true, typ: 'email', hilfe: 'Google-Konto der Vereinsdomain @' + daten.eigene_domain },
+      rolle: { pflicht: true, liste: daten.rollen },
+      abteilung_id: { hilfe: 'Nur bei Abteilungsleitern: welche Abteilung sie sehen.' }
+    });
+    var form = A.formular(felder, b || { aktiv: true });
+    var wahl = personWahl(function (m) { gewaehlt = m ? m.mitglied_id : null; }, 'Person (für die Prüfung „Zugang ohne Amt“)', person ? A.name(person) : '');
+    var formMitPerson = {
+      element: form.element, setzeFehler: form.setzeFehler,
+      werte: function () { var w = form.werte(); w.mitglied_id = gewaehlt; return w; }
+    };
+    form.element.appendChild(wahl);
+    speicherDialog(b ? 'Zugang bearbeiten' : 'Zugang anlegen', formMitPerson, 'apiVerwaltungBenutzerSpeichern',
+      [b ? b.benutzer_id : null, b ? b.version : null], fertig);
+  }
+
+  function reiterBenutzer(ziel) {
+    var neu = function () { A.leere(ziel); reiterBenutzer(ziel); };
+    var l = laedt(ziel);
+    A.rufe('apiVerwaltungBenutzer').then(function (d) {
+      l.remove();
+      ziel.appendChild(A.abschnitt('Zugänge', [A.knopf('Zugang anlegen', function () { benutzerDialog(null, d, neu); })]));
+      d.warnungen.forEach(function (w) {
+        ziel.appendChild(A.el('div', w.email + ' (' + w.rolle + (w.person ? ', ' + w.person : '') + '): ' + w.meldung, { className: 'vw-warnung' }));
+      });
+      var abt = {};
+      A.daten.liste('abteilungen').forEach(function (a) { abt[a.abteilung_id] = a.bezeichnung; });
+      ziel.appendChild(A.tabelle([
+        { feld: 'email', titel: 'Google-Konto' },
+        { feld: 'name', titel: 'Name' },
+        { feld: 'rolle', titel: 'Rolle' },
+        { feld: 'abteilung_id', titel: 'Abteilung', wert: function (b) { return b.abteilung_id ? abt[b.abteilung_id] || b.abteilung_id : '–'; } },
+        { feld: 'aktiv', titel: 'Status', wert: function (b) { return b.aktiv === true ? A.ampel('gruen', 'aktiv') : A.ampel('grau', 'deaktiviert'); } }
+      ], d.benutzer, { sortiere: 'email', beiKlick: function (b) { benutzerDialog(b, d, neu); } }));
+      ziel.appendChild(A.el('p', 'Zugang entziehen = „aktiv: nein“ setzen (nicht löschen). Wer zwei Rollen hat, bekommt zwei Zeilen.', { className: 'leise' }));
+
+      ziel.appendChild(A.el('h2', 'Rechte je Rolle'));
+      ziel.appendChild(A.el('p', 'Die Rechte stehen bewusst im Programmcode (src/lib/rechte.js) und werden nur über eine geprüfte Code-Änderung angepasst (V5).', { className: 'leise' }));
+      ziel.appendChild(A.tabelle([
+        { feld: 'rolle', titel: 'Rolle' },
+        { feld: 'zeilen', titel: 'sieht Personen', wert: function (r) { return { alle: 'alle', abteilung: 'eigene Abteilung', jugend: 'Jugend + Nachweispflichtige' }[r.zeilen] || r.zeilen; } },
+        { feld: 'sicht', titel: 'Datenarten', wert: function (r) { return r.sicht.join(', '); } },
+        { feld: 'aktionen', titel: 'darf', wert: function (r) { return r.aktionen.length + ' Aktionen: ' + r.aktionen.join(', '); } }
+      ], Object.keys(d.matrix).map(function (k) { var m = d.matrix[k]; return { rolle: k, zeilen: m.zeilen, sicht: m.sicht, aktionen: m.aktionen }; }), { block: 10 }));
+    }).catch(function () { fehlerText(ziel); });
+  }
+
+  // ================================================================== Einstellungen
+
+  function konfigZeile(k) {
+    var eingabe;
+    if (k.typ === 'auswahl' || k.typ === 'janein') {
+      eingabe = A.el('select');
+      (k.typ === 'janein' ? ['ja', 'nein'] : k.auswahl).forEach(function (w) { eingabe.appendChild(A.el('option', w, { value: w })); });
+    } else eingabe = A.el('input', null, { type: 'text' });
+    eingabe.value = k.wert;
+    eingabe.disabled = !k.bearbeitbar;
+    eingabe.setAttribute('aria-label', k.schluessel);
+    var fehler = A.el('span', '', { className: 'feldfehler' });
+    var bisher = k.wert;
+    var knopf = A.knopf('Speichern', function () {
+      knopf.disabled = true; fehler.textContent = '';
+      A.rufe('apiVerwaltungKonfigSpeichern', k.schluessel, eingabe.value, bisher, A.still).then(function (r) {
+        bisher = r.wert; eingabe.value = r.wert;
+        A.meldung(r.geaendert ? 'Einstellung „' + k.schluessel + '“ gespeichert.' : 'Keine Änderung.', 'ok');
+      }, function (err) {
+        if (err.felder && err.felder[0]) fehler.textContent = err.felder[0].meldung;
+        else if (err.art === 'konflikt') fehler.textContent = 'Inzwischen geändert – bitte neu laden.';
+        else A.fehler(err);
+      }).then(function () { knopf.disabled = false; });
+    }, 'zweit klein');
+    knopf.hidden = !k.bearbeitbar;
+    return A.el('div', null, { className: 'vw-konfig' }, [
+      A.el('div', null, null, [A.el('strong', titelVon(k.schluessel)), A.el('br'), A.el('code', k.schluessel), A.el('div', k.beschreibung, { className: 'leise' })]),
+      A.el('div', null, null, [A.el('div', null, { className: 'zeile' }, [eingabe, knopf]), fehler])
+    ]);
+  }
+
+  function reiterEinstellungen(ziel) {
+    var l = laedt(ziel);
+    A.rufe('apiVerwaltungKonfig').then(function (liste) {
+      l.remove();
+      ziel.appendChild(A.el('p', 'Änderungen wirken sofort für alle (Cache wird verworfen) und werden protokolliert. ID-Zähler verwaltet das System.', { className: 'leise' }));
+      var bereich = A.el('div');
+      var leiste = A.filterleiste([{ name: 'art', titel: 'Anzeigen', liste: [{ wert: 'bearbeitbar', text: 'nur bearbeitbare' }, { wert: 'zaehler', text: 'nur Zähler' }], start: 'bearbeitbar' }], zeichne, 'Einstellung suchen …');
+      ziel.appendChild(leiste);
+      ziel.appendChild(bereich);
+      function zeichne(z) {
+        A.leere(bereich);
+        var t = A.falte(z.suche || '');
+        liste.filter(function (k) {
+          if (z.art === 'bearbeitbar' && !k.bearbeitbar) return false;
+          if (z.art === 'zaehler' && k.bearbeitbar) return false;
+          return !t || A.falte(k.schluessel + ' ' + k.beschreibung).indexOf(t) >= 0;
+        }).forEach(function (k) { bereich.appendChild(konfigZeile(k)); });
+      }
+      zeichne(leiste.zustand);
+    }).catch(function () { fehlerText(ziel); });
+  }
+
+  // ================================================================== Stammdaten
+
+  var STAMM = [
+    { tab: 'Abteilung', titel: 'Abteilungen', name: 'bezeichnung' },
+    { tab: 'Funktionsart', titel: 'Funktionsarten', name: 'bezeichnung' },
+    { tab: 'Beitragsart', titel: 'Beitragsarten', name: 'bezeichnung' },
+    { tab: 'Qualifikationsart', titel: 'Nachweisarten', name: 'bezeichnung' },
+    { tab: 'Ehrungsregel', titel: 'Ehrungsstufen', name: 'bezeichnung' },
+    { tab: 'Aufbewahrungsfrist', titel: 'Aufbewahrungsfristen', name: 'datenkategorie' }
+  ];
+
+  function reiterStammdaten(ziel, param) {
+    var wahl = (param && param.tab) || 'Abteilung';
+    var auswahl = A.el('select');
+    auswahl.setAttribute('aria-label', 'Stammdaten-Art');
+    STAMM.forEach(function (s) { auswahl.appendChild(A.el('option', s.titel, { value: s.tab })); });
+    auswahl.value = wahl;
+    auswahl.addEventListener('change', function () { A.zeige('verwaltung', { reiter: 'stammdaten', tab: auswahl.value }, true); });
+    ziel.appendChild(A.el('div', null, { className: 'filterleiste' }, [auswahl]));
+    var def = STAMM.filter(function (s) { return s.tab === wahl; })[0];
+    var bereich = A.el('div');
+    ziel.appendChild(bereich);
+    var neu = function () { A.zeige('verwaltung', { reiter: 'stammdaten', tab: wahl }, true); };
+    laedt(bereich);
+    A.rufe('apiVerwaltungStammdaten', wahl).then(function (d) {
+      A.leere(bereich);
+      var namen = fachfelder(wahl);
+      function dialog(z) {
+        var form = A.formular(felderAus(wahl, namen), z || { aktiv: true });
+        speicherDialog((z ? def.titel + ': ' + (z[def.name] || 'Eintrag') + ' bearbeiten' : def.titel + ': neuer Eintrag'), form, 'apiVerwaltungStammdatenSpeichern',
+          [wahl, z ? z[d.idSpalte] : null, z ? z.version : null], neu);
+      }
+      bereich.appendChild(A.abschnitt(def.titel, [A.knopf('Neu', function () { dialog(null); })]));
+      var spalten = [{ feld: def.name, titel: titelVon(def.name) }];
+      namen.filter(function (n) { return n !== def.name && n !== 'bemerkung'; }).slice(0, 4).forEach(function (n) {
+        spalten.push({ feld: n, titel: titelVon(n), wert: function (z) { var v = z[n]; return v === true ? 'ja' : v === false ? 'nein' : v; } });
+      });
+      spalten.push({ feld: 'bemerkung', titel: 'Bemerkung' });
+      bereich.appendChild(A.tabelle(spalten, d.zeilen, { beiKlick: dialog, sortiere: def.name }));
+      bereich.appendChild(A.el('p', 'Einträge werden nicht gelöscht, sondern auf „aktiv: nein“ gesetzt – sonst würde die Historie unverständlich.', { className: 'leise' }));
+    }).catch(function () { fehlerText(bereich); });
+  }
+
+  // ================================================================== Datenqualität
+
+  function reiterDatenqualitaet(ziel) {
+    var l = laedt(ziel);
+    A.rufe('apiVerwaltungPruefregeln').then(function (d) {
+      l.remove();
+      var z = d.zusammenfassung;
+      var kacheln = A.el('div', null, { className: 'kacheln' }, [
+        A.kachel(A.zahl(z.fehler), 'Fehler', z.fehler ? 'fehler' : ''),
+        A.kachel(A.zahl(z.warnung), 'Warnungen', z.warnung ? 'warnung' : ''),
+        A.kachel(A.zahl(z.hinweis), 'Hinweise', '')
+      ]);
+      ziel.appendChild(kacheln);
+      var regeln = Object.keys(z.je_regel).map(function (r) { return { wert: r, text: z.je_regel[r].titel + ' (' + z.je_regel[r].anzahl + ')' }; });
+      var tabelle = null;
+      var leiste = A.filterleiste([
+        { name: 'schwere', titel: 'Schwere', liste: [{ wert: 'fehler', text: 'Fehler' }, { wert: 'warnung', text: 'Warnung' }, { wert: 'hinweis', text: 'Hinweis' }] },
+        { name: 'regel', titel: 'Regel', liste: regeln }
+      ], function (zu) { tabelle.aktualisiere(gefiltert(zu)); }, 'Person oder Meldung …');
+      function gefiltert(zu) {
+        var t = A.falte(zu.suche || '');
+        return d.befunde.filter(function (b) {
+          if (zu.schwere && b.schwere !== zu.schwere) return false;
+          if (zu.regel && b.regel !== zu.regel) return false;
+          return !t || A.falte((b.person || '') + ' ' + b.meldung + ' ' + b.titel).indexOf(t) >= 0;
+        });
+      }
+      var spalten = [
+        { feld: 'schwere', titel: 'Schwere', wert: function (b) { return A.ampel(b.schwere === 'fehler' ? 'rot' : b.schwere === 'warnung' ? 'gelb' : 'grau', b.schwere); } },
+        { feld: 'titel', titel: 'Regel' },
+        { feld: 'person', titel: 'Person / Datensatz', wert: function (b) { return b.person || (b.tab + ' ' + b.id); } },
+        { feld: 'meldung', titel: 'Meldung' }
+      ];
+      ziel.appendChild(A.abschnitt('Befunde', [A.knopf('CSV', function () {
+        A.csv('Datenqualitaet_' + A.heute() + '.csv', [
+          { titel: 'Schwere', wert: function (b) { return b.schwere; } }, { titel: 'Regel', wert: function (b) { return b.titel; } },
+          { titel: 'Tabelle', wert: function (b) { return b.tab; } }, { titel: 'ID', wert: function (b) { return b.id; } },
+          { titel: 'Person', wert: function (b) { return b.person || ''; } }, { titel: 'Meldung', wert: function (b) { return b.meldung; } }
+        ], gefiltert(leiste.zustand));
+      }, 'zweit')]));
+      ziel.appendChild(leiste);
+      tabelle = A.tabelle(spalten, d.befunde, { leer: 'Keine Befunde – die Daten sind sauber.', beiKlick: function (b) {
+        if (b.mitglied_id) A.zeige('mitglied', { id: b.mitglied_id });
+        else if (b.tab === 'Beitragskonto') A.zeige('konto', { id: b.id });
+      } });
+      ziel.appendChild(tabelle);
+    }).catch(function () { fehlerText(ziel); });
+  }
+
+  // ================================================================== System
+
+  function reiterSystem(ziel) {
+    var l = laedt(ziel);
+    A.rufe('apiVerwaltungSystem').then(function (d) {
+      l.remove();
+      ziel.appendChild(A.details([
+        ['Snapshot gebaut', A.datum(d.snapshot_gebaut_am, true)],
+        ['Cache beim letzten Laden', d.cache || '–'],
+        ['Serverzeit', A.datum(d.jetzt, true)],
+        ['Snapshot im Browser', (A.daten.bereiche || []).join(', ')]
+      ]));
+      ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [
+        A.knopf('Snapshot neu aufbauen', function (ev) {
+          var k = ev.target; k.disabled = true;
+          A.rufe('apiVerwaltungSnapshotNeu').then(function () { return A.ladeNeu(); })
+            .then(function () { A.meldung('Snapshot neu aufgebaut und geladen.', 'ok'); }, function () {})
+            .then(function () { k.disabled = false; });
+        }, 'zweit'),
+        A.darf('messung_lesen') ? A.knopf('Messwerte', function () { A.zeige('messwerte'); }, 'zweit') : null
+      ]));
+      ziel.appendChild(A.el('p', '„Snapshot neu aufbauen“ ist nur nötig, wenn jemand direkt in der Tabelle geändert hat – im Normalbetrieb hält sich der Snapshot selbst aktuell.', { className: 'leise' }));
+      ziel.appendChild(A.el('h2', 'Zeilen je Tabelle'));
+      ziel.appendChild(A.tabelle([{ feld: 'tab', titel: 'Tabelle' }, { feld: 'n', titel: 'Zeilen', zahl: true }],
+        Object.keys(d.zeilen).map(function (t) { return { tab: t, n: d.zeilen[t] }; }), { sortiere: 'tab', block: 40 }));
+    }).catch(function () { fehlerText(ziel); });
+  }
+
+  // ================================================================== Ansicht
+
+  A.registriere('verwaltung', {
+    titel: 'Verwaltung', aktion: 'stammdaten_bearbeiten', reihenfolge: 80,
+    zeichne: function (ziel, param) {
+      var reiter = [];
+      if (A.darf('benutzer_verwalten')) reiter.push({ schluessel: 'benutzer', titel: 'Benutzer' });
+      if (A.darf('konfig_aendern')) reiter.push({ schluessel: 'einstellungen', titel: 'Einstellungen' });
+      if (A.darf('stammdaten_bearbeiten')) {
+        reiter.push({ schluessel: 'stammdaten', titel: 'Stammdaten' });
+        reiter.push({ schluessel: 'datenqualitaet', titel: 'Datenqualität' });
+      }
+      if (A.darf('konfig_aendern')) reiter.push({ schluessel: 'system', titel: 'System' });
+      var aktiv = param && param.reiter && reiter.some(function (r) { return r.schluessel === param.reiter; }) ? param.reiter : (reiter[0] || {}).schluessel;
+      ziel.appendChild(A.el('h1', 'Verwaltung'));
+      ziel.appendChild(reiterLeiste(reiter, aktiv, function (s) { A.zeige('verwaltung', { reiter: s }, true); }));
+      var inhalt = A.el('div');
+      ziel.appendChild(inhalt);
+      if (aktiv === 'benutzer') reiterBenutzer(inhalt);
+      else if (aktiv === 'einstellungen') reiterEinstellungen(inhalt);
+      else if (aktiv === 'stammdaten') reiterStammdaten(inhalt, param);
+      else if (aktiv === 'datenqualitaet') reiterDatenqualitaet(inhalt);
+      else if (aktiv === 'system') reiterSystem(inhalt);
+    }
+  });
 })();
 </script>

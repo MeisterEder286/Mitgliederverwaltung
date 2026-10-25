@@ -1,13 +1,505 @@
 <!--
-  ansicht_datenschutz – Datenschutz
+  ansicht_datenschutz – Datenschutz: Einwilligungen, Betroffenenanfragen, Löschliste und Änderungsprotokoll.
 
-  Zweck:      Einwilligungen, Betroffenenanfragen, Löschliste (sperren, anonymisieren, löschen), Protokoll.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   benutzer_verwalten / protokoll_lesen – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Reiter „Einwilligungen“ (erfassen, widerrufen, Übersicht je Art, Fotoliste), „Anfragen“ (DSGVO
+              Kap. III mit Monatsfrist, Auskunft nach Art. 15 als Druck/Datei), „Löschliste“ (sperren, anonymisieren,
+              endgültig löschen, Konto leeren, Protokoll bereinigen) und „Protokoll“ (wer hat wann was geändert).
+  Datenquelle: App.daten (Bereich „historie“ für Einwilligungen) und apiDatenschutz…-Funktionen
+              (src/api/Datenschutz.js). Betroffenenanfragen, Löschliste und Protokoll liegen bewusst nicht im
+              Snapshot und werden beim Öffnen des Reiters vom Server geholt.
+  Wer darf:   datenschutz_bearbeiten (Vorstand, Mitgliederverwalter) für die ersten drei Reiter; protokoll_lesen
+              (zusätzlich Kassier – der Server filtert auf Finanz-Tabellen) für das Protokoll. Serverseitig erzwungen.
+  Besonderheiten:
+    - Anonymisieren und Löschen sind unwiderruflich: Vorschau aller Schritte, danach muss das Wort ANONYMISIEREN
+      bzw. LÖSCHEN eingetippt werden; der Server prüft das Wort ein zweites Mal.
+    - IBAN-Werte im Protokoll kommen bereits maskiert vom Server.
+    - Bei Minderjährigen schlägt das Formular die gesetzliche Vertretung als „erteilt durch“ vor.
 -->
+<style>
+  .ds-person { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; position: relative; }
+  .ds-person ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rand); border-radius: var(--radius); }
+  .ds-person li button { width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--flaeche); font: inherit; cursor: pointer; }
+  .ds-person li button:hover, .ds-person li button:focus { background: #eef4fb; }
+  .ds-person input { min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .ds-gefahr { border: 2px solid var(--fehler-text); border-radius: var(--radius); padding: 10px; background: var(--fehler-grund); margin: 8px 0; }
+  .ds-gefahr input { min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; width: 100%; margin-top: 6px; }
+  .ds-schritte { margin: 0 0 8px; padding-left: 20px; }
+  .ds-seiten { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+  .ds-filter { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; }
+  .ds-filter input, .ds-filter select { min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; width: 100%; }
+  @media (min-width: 720px) { .ds-filter { grid-template-columns: repeat(3, 1fr); } }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+
+  // ================================================================== Hilfen
+
+  function titelVon(name) {
+    var t = String(name).replace(/_id$/, '').replace(/_/g, ' ');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  /** Formularfelder aus dem Feldkatalog (App.startdaten.felder[tab]); namen bestimmt Auswahl und Reihenfolge. */
+  function felderAus(tab, namen, extra) {
+    var katalog = ((A.startdaten && A.startdaten.felder) || {})[tab] || [];
+    extra = extra || {};
+    return namen.map(function (n) {
+      var s = katalog.filter(function (x) { return x.name === n; })[0];
+      if (!s) return null;
+      var typ = { Text: 'text', Langtext: 'langtext', Datum: 'datum', Zeitpunkt: 'datum', Auswahl: 'auswahl', 'ja/nein': 'janein',
+        Ganzzahl: 'zahl', FK: 'zahl', Dezimal: 'betrag' }[s.typ] || 'text';
+      var f = { name: n, titel: titelVon(n), typ: typ, pflicht: s.pflicht === 'ja' };
+      if (typ === 'auswahl') f.liste = ((A.startdaten && A.startdaten.listen) || {})[s.liste] || [];
+      Object.keys(extra[n] || {}).forEach(function (k) { f[k] = extra[n][k]; });
+      return f;
+    }).filter(Boolean);
+  }
+
+  /** Personenauswahl: Suchfeld mit Vorschlägen aus dem Snapshot. beiWahl(mitglied). */
+  function personWahl(beiWahl, beschriftung) {
+    var feld = A.el('input', null, { type: 'search', placeholder: 'Name oder Mitgliedsnummer …', autocomplete: 'off' });
+    feld.setAttribute('aria-label', beschriftung || 'Person suchen');
+    var ul = A.el('ul', null, { hidden: true });
+    var gewaehlt = A.el('p', '', { className: 'leise' });
+    feld.addEventListener('input', A.verzoegert(function () {
+      var t = A.falte(feld.value).trim();
+      A.leere(ul);
+      if (!t) { ul.hidden = true; return; }
+      var l = A.daten.liste('mitglieder').filter(function (m) {
+        return String(m.mitgliedsnummer || '') === feld.value.trim() || A.falte([m.nachname, m.vorname].join(' ')).indexOf(t) >= 0 || A.falte([m.vorname, m.nachname].join(' ')).indexOf(t) >= 0;
+      }).slice(0, 8);
+      ul.hidden = !l.length;
+      l.forEach(function (m) {
+        var b = A.el('button', A.name(m) + ' · ' + (m.mitgliedsnummer || '') + (m.status_abgeleitet && m.status_abgeleitet !== 'aktiv' ? ' · ' + m.status_abgeleitet : ''), { type: 'button' });
+        b.addEventListener('click', function () {
+          ul.hidden = true; feld.value = A.name(m); gewaehlt.textContent = 'Gewählt: ' + A.name(m) + ' (' + (m.mitgliedsnummer || '') + ')';
+          beiWahl(m);
+        });
+        ul.appendChild(A.el('li', null, null, [b]));
+      });
+    }, 120));
+    return A.el('div', null, { className: 'ds-person' }, [A.el('label', beschriftung || 'Person'), feld, ul, gewaehlt]);
+  }
+
+  /** Reiterleiste; reiter = [{ schluessel, titel }]. beiWahl(schluessel). */
+  function reiterLeiste(reiter, aktiv, beiWahl) {
+    var leiste = A.el('div', null, { className: 'reiter' });
+    leiste.setAttribute('role', 'tablist');
+    reiter.forEach(function (r) {
+      var b = A.el('button', r.titel, { type: 'button' });
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', r.schluessel === aktiv ? 'true' : 'false');
+      b.addEventListener('click', function () { beiWahl(r.schluessel); });
+      leiste.appendChild(b);
+    });
+    return leiste;
+  }
+
+  function laedt(ziel) { var p = A.el('p', 'Lädt …', { className: 'laedt' }); ziel.appendChild(p); return p; }
+  function fehlerText(ziel, text) { A.leere(ziel); ziel.appendChild(A.el('p', text || 'Konnte nicht geladen werden.', { className: 'leise' })); }
+
+  var heute = function () { return (A.startdaten && A.startdaten.heute) || A.heute(); };
+
+  // ================================================================== Einwilligungen
+
+  function gueltig(e) { return !e.widerrufen_am; }
+
+  function einwilligungDialog(m, vorhandene, fertig) {
+    var vertretung = '';
+    if (m.jugend === true || (m.alter !== undefined && m.alter < 18)) {
+      if (m.vertreter_name) vertretung = m.vertreter_name;
+      else if (m.vertreter_mitglied_id) vertretung = A.name(A.daten.hole('mitglieder', m.vertreter_mitglied_id));
+    }
+    var werte = vorhandene || { erteilt_am: heute(), erteilt_durch: vertretung || null };
+    var form = A.formular(felderAus('Einwilligung', ['art', 'umfang', 'erteilt_am', 'erteilt_form', 'erteilt_durch', 'nachweis_ort', 'bemerkung'], {
+      art: { pflicht: true }, erteilt_am: { pflicht: true },
+      erteilt_durch: { hilfe: vertretung ? 'Minderjährig – vorgeschlagen: gesetzliche Vertretung' : 'bei Minderjährigen die gesetzliche Vertretung' }
+    }), werte);
+    var d = A.dialog((vorhandene ? 'Einwilligung bearbeiten' : 'Einwilligung erfassen') + ' – ' + A.name(m), form.element, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: ' ', aktion: function (schliessen) {
+        var w = form.werte();
+        if (!vorhandene) w.mitglied_id = m.mitglied_id;
+        A.rufe('apiDatenschutzEinwilligungSpeichern', vorhandene ? vorhandene.einwilligung_id : null, vorhandene ? vorhandene.version : null, w, A.still)
+          .then(function (antwort) { A.daten.uebernehme(antwort); A.meldung('Einwilligung gespeichert.', 'ok'); schliessen(); fertig(); },
+            function (err) { if (err.felder) form.setzeFehler(err.felder); else A.fehler(err); });
+      } }
+    ]);
+    return d;
+  }
+
+  function personEinwilligungen(m, ziel) {
+    A.leere(ziel);
+    ziel.appendChild(A.abschnitt('Einwilligungen von ' + A.name(m), [
+      A.knopf('Einwilligung erfassen', function () { einwilligungDialog(m, null, function () { personEinwilligungen(m, ziel); }); })
+    ]));
+    var liste = A.daten.liste('einwilligungen').filter(function (e) { return e.mitglied_id === m.mitglied_id; });
+    ziel.appendChild(A.tabelle([
+      { feld: 'art', titel: 'Art' },
+      { feld: 'umfang', titel: 'Umfang' },
+      { feld: 'erteilt_am', titel: 'erteilt', wert: function (e) { return A.datum(e.erteilt_am); } },
+      { feld: 'erteilt_durch', titel: 'durch' },
+      { feld: 'widerrufen_am', titel: 'Status', wert: function (e) { return e.widerrufen_am ? A.ampel('rot', 'widerrufen ' + A.datum(e.widerrufen_am)) : A.ampel('gruen', 'gültig'); } },
+      { feld: 'aktion', titel: '', sortierbar: false, wert: function (e) {
+        if (e.widerrufen_am) return '';
+        return A.knopf('Widerrufen', function (ev) {
+          ev.stopPropagation();
+          A.bestaetige('Widerruf erfassen', 'Widerruf der Einwilligung „' + e.art + '“ mit Datum ' + A.datum(heute()) + ' erfassen? Der Nachweis bleibt erhalten.', 'Widerruf erfassen').then(function (ja) {
+            if (!ja) return;
+            A.rufe('apiDatenschutzEinwilligungWiderrufen', e.einwilligung_id, e.version, heute()).then(function (antwort) {
+              A.daten.uebernehme(antwort); A.meldung('Widerruf gespeichert.', 'ok'); personEinwilligungen(m, ziel);
+            }).catch(function () {});
+          });
+        }, 'zweit klein');
+      } }
+    ], liste, { leer: 'Keine Einwilligungen erfasst.', beiKlick: function (e) { einwilligungDialog(m, e, function () { personEinwilligungen(m, ziel); }); } }));
+  }
+
+  function reiterEinwilligungen(ziel) {
+    var l = laedt(ziel);
+    A.daten.lade('historie').then(function () {
+      l.remove();
+      var alle = A.daten.liste('einwilligungen');
+      var jeArt = {};
+      alle.forEach(function (e) {
+        var x = jeArt[e.art] = jeArt[e.art] || { art: e.art, gueltig: 0, widerrufen: 0 };
+        if (gueltig(e)) x.gueltig++; else x.widerrufen++;
+      });
+      ziel.appendChild(A.abschnitt('Übersicht je Art', [
+        A.knopf('Fotoliste (CSV)', function () {
+          var personen = {};
+          alle.filter(function (e) { return gueltig(e) && /foto/i.test(e.art || ''); }).forEach(function (e) {
+            var m = A.daten.hole('mitglieder', e.mitglied_id);
+            if (m && m.status_abgeleitet === 'aktiv') personen[e.mitglied_id] = { m: m, e: e };
+          });
+          var zeilen = Object.keys(personen).map(function (k) { return personen[k]; })
+            .sort(function (a, b) { return A.falte(A.name(a.m)).localeCompare(A.falte(A.name(b.m))); });
+          A.csv('Fotoeinwilligungen_' + heute() + '.csv', [
+            { titel: 'Nr.', wert: function (x) { return x.m.mitgliedsnummer; } },
+            { titel: 'Name', wert: function (x) { return A.name(x.m); } },
+            { titel: 'Umfang', wert: function (x) { return x.e.umfang; } },
+            { titel: 'erteilt am', wert: function (x) { return A.datum(x.e.erteilt_am); } }
+          ], zeilen);
+        }, 'zweit')
+      ]));
+      ziel.appendChild(A.tabelle([
+        { feld: 'art', titel: 'Art' },
+        { feld: 'gueltig', titel: 'gültig', zahl: true },
+        { feld: 'widerrufen', titel: 'widerrufen', zahl: true }
+      ], Object.keys(jeArt).map(function (k) { return jeArt[k]; }), { leer: 'Noch keine Einwilligungen erfasst.' }));
+      ziel.appendChild(A.el('h2', 'Einwilligungen einer Person'));
+      var bereich = A.el('div');
+      ziel.appendChild(personWahl(function (m) { personEinwilligungen(m, bereich); }, 'Person suchen'));
+      ziel.appendChild(bereich);
+    }).catch(function () { fehlerText(ziel); });
+  }
+
+  // ================================================================== Betroffenenanfragen
+
+  function fristAnzeige(a) {
+    if (a.frist_status === 'beantwortet') return A.ampel('grau', 'beantwortet');
+    if (a.frist_status === 'überfällig') return A.ampel('rot', 'überfällig seit ' + A.datum(a.frist));
+    if (a.tage_rest !== null && a.tage_rest <= 7) return A.ampel('gelb', 'bis ' + A.datum(a.frist) + ' (' + a.tage_rest + ' T.)');
+    return A.ampel('gruen', 'bis ' + A.datum(a.frist));
+  }
+
+  function auskunftZeigen(daten) {
+    var inhalt = A.el('div');
+    inhalt.appendChild(A.el('p', 'Erstellt am ' + A.datum(daten.erstellt_am, true) + ' – vertraulich, nur für die betroffene Person.', { className: 'leise' }));
+    daten.abschnitte.forEach(function (ab) {
+      inhalt.appendChild(A.el('h3', ab.titel));
+      ab.eintraege.forEach(function (e) {
+        inhalt.appendChild(A.details(Object.keys(e).map(function (k) { return [k, e[k]]; })));
+      });
+    });
+    A.dialog('Auskunft nach Art. 15 DSGVO – ' + daten.person, inhalt, [
+      { text: 'Als Datei (JSON)', aktion: function () {
+        A.herunterladen('Auskunft_Art15_' + daten.mitglied_id + '_' + heute() + '.json', JSON.stringify(daten, null, 2), 'application/json');
+      } },
+      { text: 'Drucken', aktion: function () { druckeAuskunft(daten); } },
+      { text: 'Schließen' }
+    ]);
+  }
+
+  function druckeAuskunft(daten) {
+    var w = window.open('', '_blank');
+    if (!w) { A.meldung('Das Druckfenster wurde blockiert. Bitte Pop-ups erlauben.', 'fehler'); return; }
+    var doc = w.document;
+    doc.title = 'Auskunft nach Art. 15 DSGVO';
+    var st = doc.createElement('style');
+    st.textContent = 'body{font-family:system-ui,sans-serif;font-size:11pt;margin:16mm}h1{font-size:15pt}h2{font-size:12pt;margin:14px 0 4px}dl{display:grid;grid-template-columns:40% 60%;margin:0 0 8px}dt{color:#555}dd{margin:0}';
+    doc.head.appendChild(st);
+    function el(tag, text) { var e = doc.createElement(tag); e.textContent = text; doc.body.appendChild(e); return e; }
+    el('h1', 'Auskunft nach Art. 15 DSGVO');
+    el('p', daten.verein + ' · für ' + daten.person + ' · Stand ' + A.datum(daten.erstellt_am, true));
+    daten.abschnitte.forEach(function (ab) {
+      el('h2', ab.titel);
+      ab.eintraege.forEach(function (e) {
+        var dl = doc.createElement('dl');
+        Object.keys(e).forEach(function (k) {
+          var dt = doc.createElement('dt'); dt.textContent = k; dl.appendChild(dt);
+          var dd = doc.createElement('dd'); dd.textContent = e[k]; dl.appendChild(dd);
+        });
+        doc.body.appendChild(dl);
+      });
+    });
+    w.focus(); w.print();
+  }
+
+  function anfrageDialog(a, fertig) {
+    var person = null;
+    var inhalt = A.el('div');
+    if (!a) inhalt.appendChild(personWahl(function (m) { person = m; }, 'Betroffene Person *'));
+    var form = A.formular(felderAus('Betroffenenanfrage', a
+      ? ['art', 'status', 'umfang', 'geprueft_von', 'entscheidung', 'umgesetzte_stufe', 'umgesetzt_am', 'rueckmeldung_am', 'restdaten_bis', 'bemerkung']
+      : ['art', 'eingang_am', 'eingang_kanal', 'name_bei_eingang', 'umfang', 'bemerkung'], {
+      eingang_am: { pflicht: true, hilfe: 'Fristbeginn: Antwort binnen eines Monats (Art. 12 Abs. 3)' },
+      name_bei_eingang: { hilfe: 'Wird nach Abschluss automatisch geleert.' },
+      rueckmeldung_am: { hilfe: 'Mit Rückmeldung und abschließendem Status gilt der Vorgang als erledigt.' }
+    }), a || { eingang_am: heute(), status: 'eingegangen' });
+    inhalt.appendChild(form.element);
+    var knoepfe = [{ text: 'Abbrechen' }];
+    if (a) knoepfe.push({ text: 'Auskunft erstellen', aktion: function () {
+      A.rufe('apiDatenschutzAuskunft', a.mitglied_id).then(auskunftZeigen).catch(function () {});
+    } });
+    knoepfe.push({ text: 'Speichern', art: ' ', aktion: function (schliessen) {
+      var w = form.werte();
+      if (!a) {
+        if (!person) { A.meldung('Bitte die betroffene Person wählen.', 'fehler'); return; }
+        w.mitglied_id = person.mitglied_id;
+      }
+      A.rufe('apiDatenschutzAnfrageSpeichern', a ? a.anfrage_id : null, a ? a.version : null, w, A.still).then(function () {
+        A.meldung('Anfrage gespeichert.', 'ok'); schliessen(); fertig();
+      }, function (err) { if (err.felder) form.setzeFehler(err.felder); else A.fehler(err); });
+    } });
+    A.dialog(a ? 'Anfrage bearbeiten – ' + a.person : 'Neue Betroffenenanfrage', inhalt, knoepfe);
+  }
+
+  function reiterAnfragen(ziel) {
+    var neu = function () { A.leere(ziel); reiterAnfragen(ziel); };
+    ziel.appendChild(A.abschnitt('Betroffenenanfragen', [A.knopf('Neue Anfrage', function () { anfrageDialog(null, neu); })]));
+    ziel.appendChild(A.el('p', 'Auskunft, Berichtigung, Löschung, Einschränkung, Widerspruch, Datenübertragbarkeit – Antwort binnen eines Monats ab Eingang.', { className: 'leise' }));
+    var bereich = A.el('div');
+    ziel.appendChild(bereich);
+    laedt(bereich);
+    A.rufe('apiDatenschutzAnfragen').then(function (liste) {
+      A.leere(bereich);
+      bereich.appendChild(A.tabelle([
+        { feld: 'eingang_am', titel: 'Eingang', wert: function (a) { return A.datum(a.eingang_am); } },
+        { feld: 'person', titel: 'Person' },
+        { feld: 'art', titel: 'Art' },
+        { feld: 'status', titel: 'Status' },
+        { feld: 'frist', titel: 'Frist', wert: fristAnzeige }
+      ], liste, { leer: 'Keine Anfragen erfasst.', sortiere: 'eingang_am', absteigend: true, beiKlick: function (a) { anfrageDialog(a, neu); } }));
+    }).catch(function () { fehlerText(bereich); });
+  }
+
+  // ================================================================== Löschliste
+
+  var STUFEN = {
+    sperren: { titel: 'Sperren (Art. 18)', text: 'Mitgliedschaft beendet, Aufbewahrungsfrist läuft – Datensatz aus allen Listen nehmen.' },
+    anonymisieren: { titel: 'Anonymisieren', text: 'Frist für Stammdaten abgelaufen – Personenbezug unwiderruflich entfernen, Buchungen bleiben als anonymer Anker.' },
+    loeschen: { titel: 'Endgültig löschen', text: 'Anonymisierter Anker, alle Fristen abgelaufen – Zeilen entfernen.' },
+    konto_leeren: { titel: 'IBAN/Mandat leeren', text: 'Konto ohne aktives Mitglied, Frist nach letztem Einzug abgelaufen.' },
+    fz_loeschen: { titel: 'Führungszeugnis-Vermerke', text: 'Nachweispflichtige Tätigkeit beendet (§ 72a Abs. 5 SGB VIII) – Löschung unter „Nachweise“.' }
+  };
+
+  function bestaetigungsDialog(titel, inhalt, wort, ausfuehren) {
+    var feld = A.el('input', null, { type: 'text', autocomplete: 'off' });
+    feld.setAttribute('aria-label', 'Bestätigungswort ' + wort);
+    var box = A.el('div', null, { className: 'ds-gefahr' }, [
+      A.el('strong', 'Unwiderruflich. '), A.el('span', 'Zur Bestätigung bitte ' + wort + ' eingeben:'), feld
+    ]);
+    var wrap = A.el('div', null, null, [inhalt, box]);
+    A.dialog(titel, wrap, [
+      { text: 'Abbrechen' },
+      { text: titel, art: 'gefahr', aktion: function (schliessen) {
+        if (feld.value.trim() !== wort) { A.meldung('Bitte genau ' + wort + ' eingeben.', 'fehler'); feld.focus(); return; }
+        ausfuehren(feld.value.trim(), schliessen);
+      } }
+    ]);
+    setTimeout(function () { feld.focus(); }, 50);
+  }
+
+  function aktionFuer(k, neuLaden) {
+    if (k.stufe === 'sperren') return A.knopf('Sperren', function (ev) {
+      ev.stopPropagation();
+      A.bestaetige('Datensatz sperren', A.name(A.daten.hole('mitglieder', k.mitglied_id)) + ' sperren? Der Satz verschwindet aus Listen und Exporten und bleibt nur für die Aufbewahrung erreichbar.', 'Sperren').then(function (ja) {
+        if (!ja) return;
+        A.rufe('apiDatenschutzSperren', k.mitglied_id, k.version, true).then(function (antwort) {
+          A.daten.uebernehme(antwort); A.meldung('Gesperrt.', 'ok'); neuLaden();
+        }).catch(function () {});
+      });
+    }, 'zweit klein');
+    if (k.stufe === 'anonymisieren') return A.knopf('Vorschau …', function (ev) {
+      ev.stopPropagation();
+      A.rufe('apiDatenschutzAnonymisierungsplan', k.mitglied_id).then(function (plan) {
+        var inhalt = A.el('div');
+        inhalt.appendChild(A.el('p', plan.person + ' wird anonymisiert. Folgende Schritte werden ausgeführt:'));
+        var ul = A.el('ul', null, { className: 'ds-schritte' });
+        plan.schritte.forEach(function (s) {
+          ul.appendChild(A.el('li', s.art === 'ändern' ? s.tab + ' ' + s.id + ': ' + s.felder.join(', ') + ' überschreiben/leeren'
+            : s.art === 'entfernen' ? s.tab + ': ' + s.anzahl + ' Zeile(n) entfernen'
+            : 'Protokoll: Werte in ' + s.anzahl + ' Einträgen leeren'));
+        });
+        inhalt.appendChild(ul);
+        if (plan.sperre_grund) inhalt.appendChild(A.el('p', 'Buchungen bleiben gesperrt: ' + plan.sperre_grund, { className: 'leise' }));
+        (plan.hinweise || []).forEach(function (h) { inhalt.appendChild(A.el('p', h, { className: 'leise' })); });
+        bestaetigungsDialog('Anonymisieren', inhalt, 'ANONYMISIEREN', function (wort, schliessen) {
+          A.rufe('apiDatenschutzAnonymisieren', k.mitglied_id, wort).then(function (antwort) {
+            A.daten.uebernehme(antwort); schliessen();
+            A.meldung('Anonymisiert: ' + antwort.bericht.geaendert + ' Datensätze überschrieben, ' + antwort.bericht.entfernt + ' entfernt.', 'ok');
+            neuLaden();
+          }).catch(function () {});
+        });
+      }).catch(function () {});
+    }, 'zweit klein');
+    if (k.stufe === 'loeschen') return A.knopf('Löschen …', function (ev) {
+      ev.stopPropagation();
+      bestaetigungsDialog('Endgültig löschen', A.el('p', 'Der anonymisierte Datensatz ' + (k.person || k.id) + ' und alle zugehörigen Zeilen (Konto, Buchungen, Chronik) werden entfernt.'), 'LÖSCHEN', function (wort, schliessen) {
+        A.rufe('apiDatenschutzLoeschen', k.mitglied_id, wort).then(function (antwort) {
+          A.daten.uebernehme(antwort); schliessen(); A.meldung(antwort.bericht.entfernt + ' Zeilen gelöscht.', 'ok'); neuLaden();
+        }).catch(function () {});
+      });
+    }, 'gefahr klein');
+    if (k.stufe === 'konto_leeren') return A.knopf('Leeren', function (ev) {
+      ev.stopPropagation();
+      A.bestaetige('IBAN und Mandat leeren', 'Bei Konto ' + k.id + ' (' + (k.person || '') + ') IBAN, BIC und Mandat endgültig leeren?', 'Leeren').then(function (ja) {
+        if (!ja) return;
+        A.rufe('apiDatenschutzKontoLeeren', k.id, k.version).then(function (antwort) {
+          A.daten.uebernehme(antwort); A.meldung('Konto geleert.', 'ok'); neuLaden();
+        }).catch(function () {});
+      });
+    }, 'zweit klein');
+    if (k.stufe === 'fz_loeschen') return A.knopf('Zu Nachweise', function (ev) { ev.stopPropagation(); A.zeige('nachweise'); }, 'zweit klein');
+    return '';
+  }
+
+  function reiterLoeschliste(ziel) {
+    var neuLaden = function () { A.leere(ziel); reiterLoeschliste(ziel); };
+    ziel.appendChild(A.el('p', 'Vorschläge nach den Fristen im Tab „Aufbewahrungsfrist“ (Vorschläge, vom Vorstand zu bestätigen). Ausgelöst wird immer von Hand.', { className: 'leise' }));
+    var l = laedt(ziel);
+    A.rufe('apiDatenschutzLoeschliste').then(function (d) {
+      l.remove();
+      var je = {};
+      d.kandidaten.forEach(function (k) { (je[k.stufe] = je[k.stufe] || []).push(k); });
+      var kacheln = A.el('div', null, { className: 'kacheln' });
+      Object.keys(STUFEN).forEach(function (s) { kacheln.appendChild(A.kachel(A.zahl((je[s] || []).length), STUFEN[s].titel, (je[s] || []).length ? 'warnung' : '')); });
+      kacheln.appendChild(A.kachel(A.zahl(d.protokoll_bereinigen), 'Protokollwerte über Frist', d.protokoll_bereinigen ? 'warnung' : ''));
+      ziel.appendChild(kacheln);
+      if (d.protokoll_bereinigen) {
+        ziel.appendChild(A.abschnitt('Protokoll bereinigen', [A.knopf('Jetzt bereinigen', function () {
+          A.bestaetige('Protokoll bereinigen', 'Alte und neue Werte in ' + d.protokoll_bereinigen + ' Protokolleinträgen leeren? Zeitpunkt, Benutzer und Aktion bleiben erhalten.', 'Bereinigen').then(function (ja) {
+            if (!ja) return;
+            A.rufe('apiDatenschutzProtokollBereinigen').then(function (r) { A.meldung(r.anzahl + ' Einträge bereinigt.', 'ok'); neuLaden(); }).catch(function () {});
+          });
+        }, 'zweit')]));
+      }
+      Object.keys(STUFEN).forEach(function (s) {
+        var liste = je[s] || [];
+        if (!liste.length) return;
+        ziel.appendChild(A.el('h2', STUFEN[s].titel + ' (' + liste.length + ')'));
+        ziel.appendChild(A.el('p', STUFEN[s].text, { className: 'leise' }));
+        ziel.appendChild(A.tabelle([
+          { feld: 'person', titel: 'Person / Datensatz', wert: function (k) { return k.person || (k.tab + ' ' + k.id); } },
+          { feld: 'aktion', titel: '', sortierbar: false, wert: function (k) { return aktionFuer(k, neuLaden); } },
+          { feld: 'ab', titel: 'ab', wert: function (k) { return k.ab ? A.datum(k.ab) : '–'; } },
+          { feld: 'grund', titel: 'Grund' }
+        ], liste, { block: 25 }));
+      });
+      if (!d.kandidaten.length && !d.protokoll_bereinigen) ziel.appendChild(A.el('p', 'Derzeit ist nichts zu sperren, zu anonymisieren oder zu löschen.', { className: 'karte' }));
+    }).catch(function () { fehlerText(ziel); });
+  }
+
+  // ================================================================== Protokoll
+
+  function reiterProtokoll(ziel, startFilter) {
+    var filter = Object.assign({}, startFilter || {});
+    var seite = 0;
+    var auswahl = { tabellen: [], aktionen: [] };
+    var kopf = A.el('div', null, { className: 'ds-filter' });
+    var bereich = A.el('div');
+    ziel.appendChild(kopf);
+    ziel.appendChild(bereich);
+
+    function feld(name, typ, platzhalter) {
+      var e = A.el('input', null, { type: typ || 'text', placeholder: platzhalter || '' });
+      e.setAttribute('aria-label', platzhalter || name);
+      e.value = filter[name] || '';
+      e.addEventListener('change', function () { filter[name] = typ === 'datum' ? (A.isoDatum(e.value) || '') : e.value.trim(); seite = 0; lade(); });
+      return e;
+    }
+    function auswahlFeld(name, titel, werte) {
+      var s = A.el('select');
+      s.setAttribute('aria-label', titel);
+      [''].concat(werte).forEach(function (w) { s.appendChild(A.el('option', w || titel + ': alle', { value: w })); });
+      s.value = filter[name] || '';
+      s.addEventListener('change', function () { filter[name] = s.value; seite = 0; lade(); });
+      return s;
+    }
+    function kopfZeichnen() {
+      A.leere(kopf);
+      kopf.appendChild(feld('von', 'datum', 'von (TT.MM.JJJJ)'));
+      kopf.appendChild(feld('bis', 'datum', 'bis (TT.MM.JJJJ)'));
+      kopf.appendChild(feld('benutzer', 'text', 'Benutzer (E-Mail)'));
+      kopf.appendChild(auswahlFeld('tabelle', 'Tabelle', auswahl.tabellen));
+      kopf.appendChild(auswahlFeld('aktion', 'Aktion', auswahl.aktionen));
+      kopf.appendChild(feld('datensatz', 'text', 'Datensatz-ID'));
+    }
+    function lade() {
+      A.leere(bereich);
+      laedt(bereich);
+      A.rufe('apiDatenschutzProtokoll', filter, seite).then(function (d) {
+        var neueAuswahl = d.tabellen.join() !== auswahl.tabellen.join() || d.aktionen.join() !== auswahl.aktionen.join();
+        auswahl = { tabellen: d.tabellen, aktionen: d.aktionen };
+        if (neueAuswahl) kopfZeichnen();
+        A.leere(bereich);
+        bereich.appendChild(A.tabelle([
+          { feld: 'zeitpunkt', titel: 'Zeitpunkt', wert: function (z) { return A.datum(z.zeitpunkt, true); }, sort: function (z) { return z.protokoll_id; } },
+          { feld: 'benutzer_email', titel: 'Wer' },
+          { feld: 'aktion', titel: 'Was' },
+          { feld: 'tabelle', titel: 'Tabelle' },
+          { feld: 'datensatz_id', titel: 'Datensatz' },
+          { feld: 'feld', titel: 'Feld' },
+          { feld: 'alt_wert', titel: 'alt' },
+          { feld: 'neu_wert', titel: 'neu' },
+          { feld: 'kommentar', titel: 'Kommentar' }
+        ], d.eintraege, { block: 50, leer: 'Keine Einträge.' }));
+        var zurueck = A.knopf('‹ neuer', function () { seite--; lade(); }, 'zweit klein');
+        var weiter = A.knopf('älter ›', function () { seite++; lade(); }, 'zweit klein');
+        zurueck.disabled = d.seite <= 0;
+        weiter.disabled = d.seite >= d.seiten - 1;
+        bereich.appendChild(A.el('div', null, { className: 'ds-seiten' }, [zurueck, A.el('span', 'Seite ' + (d.seite + 1) + ' von ' + d.seiten + ' · ' + d.gesamt + ' Einträge', { className: 'leise' }), weiter]));
+      }).catch(function () { fehlerText(bereich); });
+    }
+    kopfZeichnen();
+    lade();
+  }
+
+  // ================================================================== Ansicht
+
+  A.registriere('datenschutz', {
+    titel: 'Datenschutz', aktion: 'protokoll_lesen', reihenfolge: 70,
+    zeichne: function (ziel, param) {
+      var reiter = [];
+      if (A.darf('datenschutz_bearbeiten')) {
+        reiter.push({ schluessel: 'einwilligungen', titel: 'Einwilligungen' });
+        reiter.push({ schluessel: 'anfragen', titel: 'Anfragen' });
+        reiter.push({ schluessel: 'loeschliste', titel: 'Löschliste' });
+      }
+      if (A.darf('protokoll_lesen')) reiter.push({ schluessel: 'protokoll', titel: 'Protokoll' });
+      var aktiv = param && param.reiter && reiter.some(function (r) { return r.schluessel === param.reiter; }) ? param.reiter : (reiter[0] || {}).schluessel;
+      ziel.appendChild(A.el('h1', A.darf('datenschutz_bearbeiten') ? 'Datenschutz' : 'Änderungsprotokoll'));
+      if (reiter.length > 1) ziel.appendChild(reiterLeiste(reiter, aktiv, function (s) { A.zeige('datenschutz', { reiter: s }, true); }));
+      var inhalt = A.el('div');
+      ziel.appendChild(inhalt);
+      if (aktiv === 'einwilligungen') reiterEinwilligungen(inhalt);
+      else if (aktiv === 'anfragen') reiterAnfragen(inhalt);
+      else if (aktiv === 'loeschliste') reiterLoeschliste(inhalt);
+      else if (aktiv === 'protokoll') reiterProtokoll(inhalt, param && param.filter);
+    }
+  });
 })();
 </script>

@@ -1,22 +1,211 @@
 <!--
-  ansicht_start – Startseite / Übersicht
+  ansicht_start – Startseite: Begrüßung, Kennzahlen je Rolle, Schnellsuche, Hinweise.
 
-  Zweck:      Begrüßung, Kennzahlen und Hinweise je Rolle.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   alle Benutzer – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Der erste Blick nach dem Öffnen: Was ist los im Verein und was ist zu tun? Kacheln mit Zahlen aus
+              dem lokalen Snapshot (aktive Mitglieder, Neuaufnahmen, Kündigungen, Geburtstage, Führungszeugnis-Ampel,
+              offene Ehrungen, offene Beiträge) und – für die Verwaltung – Datenqualität, überfällige DSGVO-Anfragen
+              und Hinweise auf noch nicht angepasste Beispielwerte. Jede Kachel führt zur passenden Ansicht.
+  Datenquelle: App.daten (Snapshot, Bereich Kern; Bereich „finanzen“ wird nur mit Finanzsicht nachgeladen),
+              dazu apiVerwaltungPruefregelnZusammenfassung, apiDatenschutzUebersicht und apiVerwaltungHinweise
+              (nur mit den passenden Rechten, sonst wird gar nicht gefragt).
+  Wer darf:   alle Benutzer. Was eine Kachel zeigt, hängt an den Sichtklassen/Rechten – der Server liefert ohnehin
+              nur, was die Rolle sehen darf.
+  Besonderheiten:
+    - Die Startseite fragt den Server nur nach Zusatzinfos, die nicht im Snapshot stehen; alles andere ist lokal.
+    - Geburtstage nur mit Sichtklasse „kontakt“ (Geburtsdatum).
+    - Schnellsuche: genau ein Treffer → Mitglied öffnen, sonst Mitgliederliste mit Suchbegriff.
 -->
+<style>
+  .start-suche { display: flex; gap: 8px; margin: 0 0 12px; }
+  .start-suche .knopf { flex: 0 0 auto; }
+  .start-suche input { flex: 1 1 auto; min-width: 0; width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .start-vorschlaege { list-style: none; margin: -6px 0 12px; padding: 0; border: 1px solid var(--rand); border-radius: var(--radius); }
+  .start-vorschlaege li button { width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--flaeche); font: inherit; cursor: pointer; }
+  .start-vorschlaege li button:hover, .start-vorschlaege li button:focus { background: #eef4fb; }
+  .start-hinweise { list-style: none; padding: 0; margin: 0 0 12px; }
+  .start-hinweise li { padding: 8px 10px; border-left: 4px solid #d39b00; background: #fffaeb; margin: 0 0 6px; border-radius: 0 var(--radius) var(--radius) 0; }
+  .start-hinweise li.warnung { border-left-color: var(--fehler-text); background: var(--fehler-grund); }
+  .start-hinweise li button { background: none; border: 0; padding: 0; font: inherit; color: var(--akzent); text-decoration: underline; cursor: pointer; text-align: left; }
+</style>
 <script>
 (function () {
   'use strict';
   var A = window.App;
-  // Vorläufige Startseite; das Dashboard mit Kennzahlen folgt.
+
+  function jahr() { return String((A.startdaten && A.startdaten.beitragsjahr) || A.heute().slice(0, 4)); }
+  function heute() { return (A.startdaten && A.startdaten.heute) || A.heute(); }
+  function rollen() { return ((A.startdaten && A.startdaten.benutzer && A.startdaten.benutzer.rollen) || []); }
+  function nurAbteilung() {
+    var b = (A.startdaten && A.startdaten.benutzer) || {};
+    return !A.sieht('verwaltung') && !A.sieht('finanz') && (b.abteilungen || []).length > 0;
+  }
+
+  /** Tage bis zum nächsten Geburtstag (0 = heute) für 'JJJJ-MM-TT'. */
+  function tageBisGeburtstag(geb, h) {
+    if (!geb) return null;
+    var hj = Number(h.slice(0, 4));
+    var heuteMs = Date.UTC(hj, Number(h.slice(5, 7)) - 1, Number(h.slice(8, 10)));
+    for (var j = hj; j <= hj + 1; j++) {
+      var mon = Number(geb.slice(5, 7)) - 1, tag = Number(geb.slice(8, 10));
+      if (mon === 1 && tag === 29 && new Date(Date.UTC(j, 1, 29)).getUTCMonth() !== 1) tag = 28;
+      var t = Date.UTC(j, mon, tag);
+      if (t >= heuteMs) return Math.round((t - heuteMs) / 86400000);
+    }
+    return null;
+  }
+
+  function aktiv(m) { return m.status_abgeleitet === 'aktiv'; }
+
+  function kennzahlen() {
+    var ms = A.daten.liste('mitglieder');
+    var j = jahr(), h = heute();
+    var z = {
+      aktiv: ms.filter(aktiv).length,
+      neu: ms.filter(function (m) { return aktiv(m) && String(m.mitglied_seit || '').slice(0, 4) === j; }).length,
+      gekuendigt: ms.filter(function (m) { return aktiv(m) && m.gekuendigt_zum; }).length,
+      jugend: ms.filter(function (m) { return aktiv(m) && m.jugend === true; }).length,
+      fzRot: ms.filter(function (m) { return m.fz_ampel === 'rot'; }).length,
+      fzGelb: ms.filter(function (m) { return m.fz_ampel === 'gelb'; }).length,
+      ehrungen: A.daten.liste('ehrungen').filter(function (e) {
+        return (e.status === 'fällig' || e.status === 'verschoben') && Number(e.faellig_jahr) <= Number(j);
+      }).length,
+      geburtstage: []
+    };
+    if (A.sieht('kontakt')) {
+      z.geburtstage = ms.filter(aktiv).map(function (m) {
+        return { m: m, tage: tageBisGeburtstag(m.geburtsdatum, h) };
+      }).filter(function (x) { return x.tage !== null && x.tage <= 7; })
+        .sort(function (a, b) { return a.tage - b.tage; });
+    }
+    return z;
+  }
+
+  function schnellsuche(ziel) {
+    var feld = A.el('input', null, { type: 'search', placeholder: 'Name oder Mitgliedsnummer …', autocomplete: 'off' });
+    feld.setAttribute('aria-label', 'Mitglied suchen');
+    var knopf = A.knopf('Suchen', function () { suche(true); });
+    var vorschlaege = A.el('ul', null, { className: 'start-vorschlaege', hidden: true });
+    function treffer(text) {
+      var t = A.falte(text).trim();
+      if (!t) return [];
+      return A.daten.liste('mitglieder').filter(function (m) {
+        return String(m.mitgliedsnummer || '') === text.trim() ||
+          A.falte([m.nachname, m.vorname].join(' ')).indexOf(t) >= 0 || A.falte([m.vorname, m.nachname].join(' ')).indexOf(t) >= 0;
+      });
+    }
+    function suche(enter) {
+      var text = feld.value;
+      var l = treffer(text);
+      if (enter) {
+        if (l.length === 1) A.zeige('mitglied', { id: l[0].mitglied_id });
+        else if (text.trim()) A.zeige('mitglieder', { suche: text.trim() });
+        return;
+      }
+      A.leere(vorschlaege);
+      vorschlaege.hidden = !l.length;
+      l.slice(0, 6).forEach(function (m) {
+        var b = A.el('button', A.name(m) + ' · ' + (m.mitgliedsnummer || '') + (aktiv(m) ? '' : ' · ' + (m.status_abgeleitet || '')), { type: 'button' });
+        b.addEventListener('click', function () { A.zeige('mitglied', { id: m.mitglied_id }); });
+        vorschlaege.appendChild(A.el('li', null, null, [b]));
+      });
+    }
+    feld.addEventListener('input', A.verzoegert(function () { suche(false); }, 120));
+    feld.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); suche(true); } });
+    ziel.appendChild(A.el('div', null, { className: 'start-suche' }, [feld, knopf]));
+    ziel.appendChild(vorschlaege);
+  }
+
+  function hinweisListe(liste) {
+    var ul = A.el('ul', null, { className: 'start-hinweise' });
+    liste.forEach(function (h) {
+      var li = A.el('li', null, { className: h.art === 'warnung' ? 'warnung' : '' });
+      if (h.ziel) {
+        var b = A.el('button', h.text, { type: 'button' });
+        b.addEventListener('click', function () { A.zeige(h.ziel.ansicht, h.ziel.param || null); });
+        li.appendChild(b);
+      } else li.textContent = h.text;
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
   A.registriere('start', {
     titel: 'Start', aktion: null, reihenfolge: 1,
     zeichne: function (ziel) {
       var b = A.startdaten.benutzer || {};
       ziel.appendChild(A.el('h1', 'Willkommen' + (b.name ? ', ' + b.name : '')));
-      ziel.appendChild(A.el('p', 'Angemeldet als ' + (b.email || '') + ' – Rolle: ' + ((b.rollen || []).join(', ') || '–'), { className: 'karte' }));
+      ziel.appendChild(A.el('p', 'Angemeldet als ' + (b.email || '') + ' · ' + (rollen().join(', ') || '–'), { className: 'leise' }));
+
+      if (A.darf('mitglied_lesen')) schnellsuche(ziel);
+
+      var z = kennzahlen();
+      var kacheln = A.el('div', null, { className: 'kacheln', aria: { label: 'Kennzahlen' } });
+      kacheln.setAttribute('role', 'group');
+      var zuMitglieder = function (param) { return function () { A.zeige('mitglieder', param || null); }; };
+      kacheln.appendChild(A.kachel(A.zahl(z.aktiv), nurAbteilung() ? 'aktiv in meiner Abteilung' : 'aktive Mitglieder', '', zuMitglieder({ status: 'aktiv' })));
+      kacheln.appendChild(A.kachel(A.zahl(z.neu), 'Neuaufnahmen ' + jahr(), '', zuMitglieder({ neu: jahr() })));
+      if (z.gekuendigt) kacheln.appendChild(A.kachel(A.zahl(z.gekuendigt), 'gekündigt zum Jahresende', 'warnung', zuMitglieder({ gekuendigt: true })));
+      if (A.sieht('kontakt')) kacheln.appendChild(A.kachel(A.zahl(z.jugend), 'Kinder und Jugendliche', '', zuMitglieder({ jugend: true })));
+      if (A.sieht('hochsensibel') && (z.fzRot || z.fzGelb)) {
+        kacheln.appendChild(A.kachel(A.zahl(z.fzRot), 'Führungszeugnis fehlt/abgelaufen', z.fzRot ? 'fehler' : '', function () { A.zeige('nachweise'); }));
+        kacheln.appendChild(A.kachel(A.zahl(z.fzGelb), 'Führungszeugnis bald fällig', z.fzGelb ? 'warnung' : '', function () { A.zeige('nachweise'); }));
+      }
+      if (z.ehrungen) kacheln.appendChild(A.kachel(A.zahl(z.ehrungen), 'offene Ehrungen bis ' + jahr(), '', function () { A.zeige('ehrungen'); }));
+      ziel.appendChild(kacheln);
+
+      // Finanzen (nur mit Finanzsicht): Bereich nachladen, dann Kachel ergänzen
+      if (A.sieht('finanz')) {
+        var fin = A.el('div', null, { className: 'kacheln' });
+        ziel.appendChild(fin);
+        A.daten.lade('finanzen').then(function () {
+          if (A.aktuell().schluessel !== 'start') return;
+          var offen = A.daten.liste('sollstellungen').filter(function (s) {
+            return String(s.jahr) === jahr() && ['offen', 'ruecklastschrift', 'gemahnt', 'widerspruch'].indexOf(s.status) >= 0;
+          });
+          var summe = offen.reduce(function (n, s) { return n + Number(s.soll_betrag || 0) - Number(s.ist_betrag || 0); }, 0);
+          fin.appendChild(A.kachel(A.zahl(offen.length), 'offene/strittige Beiträge ' + jahr(), offen.length ? 'warnung' : '', function () { A.zeige('finanzen'); }));
+          fin.appendChild(A.kachel(A.betrag(summe), 'Summe offen ' + jahr(), '', function () { A.zeige('finanzen'); }));
+          var rl = offen.filter(function (s) { return s.status === 'ruecklastschrift'; }).length;
+          if (rl) fin.appendChild(A.kachel(A.zahl(rl), 'Rücklastschriften ' + jahr(), 'fehler', function () { A.zeige('finanzen'); }));
+        }).catch(function () { /* Meldung zeigt App.rufe */ });
+      }
+
+      // Verwaltung: Datenqualität, DSGVO-Fristen, Hinweise (asynchron, Seite ist schon bedienbar)
+      var verw = A.el('div', null, { className: 'kacheln' });
+      var hinweise = A.el('div');
+      ziel.appendChild(verw);
+      if (A.darf('stammdaten_bearbeiten')) {
+        A.rufe('apiVerwaltungPruefregelnZusammenfassung', A.still).then(function (q) {
+          verw.appendChild(A.kachel(A.zahl(q.fehler), 'Datenfehler (Prüfregeln)', q.fehler ? 'fehler' : '', function () { A.zeige('verwaltung', { reiter: 'datenqualitaet' }); }));
+          if (q.warnung) verw.appendChild(A.kachel(A.zahl(q.warnung), 'Warnungen Datenqualität', 'warnung', function () { A.zeige('verwaltung', { reiter: 'datenqualitaet' }); }));
+        }).catch(function () {});
+      }
+      if (A.darf('datenschutz_bearbeiten')) {
+        A.rufe('apiDatenschutzUebersicht', A.still).then(function (d) {
+          if (d.anfragen_offen || d.anfragen_ueberfaellig) {
+            verw.appendChild(A.kachel(A.zahl(d.anfragen_offen + d.anfragen_ueberfaellig), 'offene DSGVO-Anfragen' + (d.anfragen_ueberfaellig ? ' (' + d.anfragen_ueberfaellig + ' überfällig)' : ''),
+              d.anfragen_ueberfaellig ? 'fehler' : 'warnung', function () { A.zeige('datenschutz', { reiter: 'anfragen' }); }));
+          }
+        }).catch(function () {});
+      }
+      if (A.darf('konfig_aendern')) {
+        ziel.appendChild(hinweise);
+        A.rufe('apiVerwaltungHinweise', A.still).then(function (liste) {
+          if (!liste || !liste.length) return;
+          hinweise.appendChild(A.el('h2', 'Zu erledigen'));
+          hinweise.appendChild(hinweisListe(liste));
+        }).catch(function () {});
+      }
+
+      if (z.geburtstage.length) {
+        ziel.appendChild(A.el('h2', 'Geburtstage in den nächsten 7 Tagen'));
+        ziel.appendChild(A.tabelle([
+          { feld: 'name', titel: 'Name', wert: function (x) { return A.name(x.m); }, sort: function (x) { return x.m.nachname; } },
+          { feld: 'tag', titel: 'Datum', wert: function (x) { return A.datum(x.m.geburtsdatum).slice(0, 6); }, sort: function (x) { return x.tage; } },
+          { feld: 'alter', titel: 'wird', zahl: true, wert: function (x) { return (x.m.alter || 0) + (x.tage === 0 ? 0 : 1); } },
+          { feld: 'tage', titel: 'in Tagen', zahl: true, wert: function (x) { return x.tage === 0 ? 'heute' : x.tage; } }
+        ], z.geburtstage, { block: 20, sortiere: 'tage', beiKlick: function (x) { A.zeige('mitglied', { id: x.m.mitglied_id }); } }));
+      }
     }
   });
 })();
