@@ -69,8 +69,24 @@ function Startdaten_(ktx) {
       return { id: z[abt.k.indexOf('abteilung_id')], bezeichnung: z[abt.k.indexOf('bezeichnung')], aktiv: z[abt.k.indexOf('aktiv')] };
     }),
     snapshot: snapshot,
+    felder: FelderFuerClient_(ktx),
+    listen: Schema.LISTEN,
     erzeugt: DB.jetzt()
   };
+}
+
+/**
+ * Feldkatalog für Formulare im Browser: je Tab nur die Spalten, deren Sichtklasse die Rolle sieht
+ * ({ name, typ, pflicht, liste, sicht }). Tabs ohne sichtbare Fachspalte fehlen ganz.
+ */
+function FelderFuerClient_(ktx) {
+  var aus = {};
+  Object.keys(Schema.TABELLEN).forEach(function (tab) {
+    var sichtbar = Rechte.sichtbareSpalten(ktx, tab);
+    if (!sichtbar.length) return;
+    aus[tab] = Schema.TABELLEN[tab].spalten.filter(function (s) { return sichtbar.indexOf(s.name) >= 0; });
+  });
+  return aus;
 }
 
 /** JSON so aufbereiten, dass es gefahrlos in <script type="application/json"> steht. */

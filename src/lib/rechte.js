@@ -24,7 +24,7 @@ var Rechte = (function () {
     'austritt_erfassen', 'zugehoerigkeit_bearbeiten', 'funktion_bearbeiten', 'qualifikation_lesen',
     'qualifikation_erfassen', 'konto_lesen', 'konto_bearbeiten', 'iban_aufdecken', 'sollstellung_bearbeiten',
     'sepa_lauf', 'ehrung_bearbeiten', 'export', 'protokoll_lesen', 'benutzer_verwalten', 'konfig_aendern',
-    'messung_lesen'
+    'messung_lesen', 'datenschutz_bearbeiten', 'stammdaten_bearbeiten'
   ];
 
   // Rangfolge der Zeilensicht: die weiteste Sicht gewinnt bei Mehrfachrollen.
