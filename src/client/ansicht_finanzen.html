@@ -1,13 +1,886 @@
 <!--
-  ansicht_finanzen – Beitragskonten, Einzugsstand, SEPA
+  ansicht_finanzen – Beitragskonten, Gemeinschaften, Einzugsstand, Sollstellungen, SEPA-Lauf, Klärliste, Tarifwechsel.
 
-  Zweck:      Konten und Gemeinschaften, Sollstellungen, Rücklastschriften/Mahnstufen, SEPA-Lauf, Klärliste.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   konto_lesen u. a. – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Arbeitsbereich für Kasse und Mitgliederverwaltung (MV-Mockup: Beitragskonten, Einzugsstand 2026, SEPA-Lauf).
+              Zwei Ansichten: 'finanzen' (Reiter) und 'konto' ({ id }, Detail eines Beitragskontos).
+  Datenquelle: Listen konten, gemeinschaften, sollstellungen aus dem Snapshot-Bereich „finanzen“ (App.daten.lade);
+              berechnete Werte (Soll je Konto, Mandatsstatus, Klärliste, Probeläufe) über apiFinanzen…-Funktionen.
+              IBAN im Klartext nur über „aufdecken“ (apiFinanzenIbanAufdecken, wird protokolliert, nach 60 s verborgen).
+  Wer darf:   Ansicht: konto_lesen (Vorstand, Mitgliederverwalter, Kassier). Bearbeiten von Konten/Gemeinschaften:
+              konto_bearbeiten (nicht der Kassier). Buchen: sollstellung_bearbeiten. SEPA: sepa_lauf. Tarifwechsel
+              übernehmen: mitglied_bearbeiten. Export: export. Alles serverseitig erzwungen; App.darf blendet nur aus.
+  Besonderheiten:
+    - Die SEPA-Datei entsteht auf dem Server (pain.008.001.08) und wird hier nur heruntergeladen – vor dem ersten
+      echten Einsatz einmal bei der Hausbank als Testdatei einreichen.
+    - Exporte aus dem Browser (Mahnliste, Kontenliste, Kontrollliste) werden über apiFinanzenExportVermerken protokolliert.
 -->
+<style>
+  .fin-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+  .fin-zeile select, .fin-zeile input { min-height: 44px; padding: 6px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .fin-summe { font-weight: 600; margin: 6px 0 12px; }
+  .fin-iban { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.02em; }
+  .fin-hinweis { background: #fff6dc; color: #5c4400; border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px; }
+  .fin-fehlerbox { background: var(--fehler-grund); color: var(--fehler-text); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px; }
+  .fin-ok { color: #135c2c; font-weight: 600; }
+  .fin-schlecht { color: var(--fehler-text); font-weight: 600; }
+  .fin-link { background: none; border: 0; padding: 0; color: var(--akzent); text-decoration: underline; cursor: pointer; font: inherit; text-align: left; }
+  .fin-check { width: 22px; height: 22px; }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+
+  var ERLAUBT = {   // wie Sollstellungslauf.ERLAUBT (src/lib/sollstellung.js) – nur zur Auswahl im Dialog
+    offen: ['bezahlt', 'ruecklastschrift', 'gemahnt', 'widerspruch', 'storniert'],
+    bezahlt: ['ruecklastschrift', 'widerspruch', 'storniert'],
+    ruecklastschrift: ['bezahlt', 'gemahnt', 'widerspruch', 'storniert'],
+    gemahnt: ['bezahlt', 'gemahnt', 'ruecklastschrift', 'widerspruch', 'storniert'],
+    widerspruch: ['bezahlt', 'gemahnt', 'storniert'],
+    storniert: []
+  };
+  var STATUSTEXT = { offen: 'offen', bezahlt: 'bezahlt', gemahnt: 'gemahnt', ruecklastschrift: 'Rücklastschrift', widerspruch: 'Widerspruch', storniert: 'storniert' };
+  var MANDATTEXT = { gueltig: 'gültig', ungenutzt: 'noch nicht genutzt', verfallen: 'verfallen', fehlt: 'fehlt', kein: '–' };
+
+  var zustand = { reiter: 'uebersicht', jahr: null, info: null, infoJahr: null };
+
+  // ------------------------------------------------------------------ Hilfen
+
+  function jahrStandard() {
+    var k = (A.startdaten && A.startdaten.konfig) || {};
+    return Number(k.beitragsjahr || A.startdaten.beitragsjahr) || new Date().getFullYear();
+  }
+  function jahr() { return zustand.jahr || jahrStandard(); }
+
+  function info(neu) {
+    if (!neu && zustand.info && zustand.infoJahr === jahr()) return Promise.resolve(zustand.info);
+    var j = jahr();
+    return A.rufe('apiFinanzenUebersicht', j).then(function (d) { zustand.info = d; zustand.infoJahr = j; return d; });
+  }
+  function infoVerwerfen() { zustand.info = null; }
+
+  function personenJeKonto() {
+    var m = {};
+    A.daten.liste('mitglieder').forEach(function (p) { if (p.beitragskonto_id) (m[p.beitragskonto_id] = m[p.beitragskonto_id] || []).push(p); });
+    return m;
+  }
+  function mitgliedNachNummer(nr) {
+    nr = String(nr || '').trim();
+    if (!nr) return null;
+    var ziel = nr.replace(/^0+/, '');
+    return A.daten.liste('mitglieder').filter(function (m) { return String(m.mitgliedsnummer || '').replace(/^0+/, '') === ziel; })[0] || null;
+  }
+  function personLink(m) {
+    if (!m) return '–';
+    return A.el('button', A.name(m) + (m.mitgliedsnummer ? ' (' + m.mitgliedsnummer + ')' : ''), { type: 'button', className: 'fin-link', onclick: function (e) { e.stopPropagation(); A.zeige('mitglied', { id: m.mitglied_id }); } });
+  }
+  function kontoLink(id) {
+    if (!id) return '–';
+    var k = A.daten.hole('konten', id);
+    return A.el('button', 'Konto ' + id + (k ? ' · ' + k.kontoinhaber_name : ''), { type: 'button', className: 'fin-link', onclick: function (e) { e.stopPropagation(); A.zeige('konto', { id: id }); } });
+  }
+  function jahreAusDaten() {
+    var j = {};
+    j[jahrStandard()] = true; j[jahrStandard() + 1] = true;
+    A.daten.liste('sollstellungen').forEach(function (s) { j[s.jahr] = true; });
+    if (zustand.info) (zustand.info.jahre || []).forEach(function (x) { j[x] = true; });
+    return Object.keys(j).map(Number).sort(function (a, b) { return b - a; });
+  }
+  function jahrAuswahl(beiWechsel) {
+    var s = A.el('select', null, { aria: { label: 'Beitragsjahr' } });
+    jahreAusDaten().forEach(function (j) { s.appendChild(A.el('option', 'Beitragsjahr ' + j, { value: String(j) })); });
+    s.value = String(jahr());
+    s.addEventListener('change', function () { zustand.jahr = Number(s.value); beiWechsel(); });
+    return s;
+  }
+  function laedt(ziel) { ziel.appendChild(A.el('p', 'Lädt …', { className: 'laedt' })); }
+  function exportVermerken(liste, anzahl) { A.rufe('apiFinanzenExportVermerken', liste, anzahl, A.still).catch(function () {}); }
+  /** Nach dem Speichern: Ansicht neu zeichnen (blendet Meldungen aus) und DANACH Erfolg bzw. Hinweise melden. */
+  function fertig(text, d) {
+    A.neuZeichnen();
+    if (d && d.hinweise && d.hinweise.length) A.meldung(text + ' ' + d.hinweise.join(' '), 'hinweis');
+    else A.meldung(text, 'ok');
+  }
+
+  /** Kleine IBAN-Prüfung im Browser (mod 97) – nur zur Rückmeldung beim Tippen; der Server prüft verbindlich. */
+  function ibanGueltig(text) {
+    var s = String(text || '').replace(/[\s\-.]/g, '').toUpperCase();
+    if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(s)) return false;
+    if (s.slice(0, 2) === 'DE' && s.length !== 22) return false;
+    var u = s.slice(4) + s.slice(0, 4), rest = 0;
+    for (var i = 0; i < u.length; i++) {
+      var c = u.charCodeAt(i), z = c >= 65 ? String(c - 55) : u.charAt(i);
+      for (var j = 0; j < z.length; j++) rest = (rest * 10 + Number(z.charAt(j))) % 97;
+    }
+    return rest === 1;
+  }
+
+  // ================================================================== Ansicht „finanzen“
+
+  var REITER = [
+    { k: 'uebersicht', t: 'Einzugsstand' },
+    { k: 'konten', t: 'Konten' },
+    { k: 'gemeinschaften', t: 'Gemeinschaften' },
+    { k: 'sollstellungen', t: 'Sollstellungen' },
+    { k: 'sepa', t: 'SEPA-Lauf', aktion: 'sepa_lauf' },
+    { k: 'klaerliste', t: 'Klärliste' },
+    { k: 'tarifwechsel', t: 'Tarifwechsel' }
+  ];
+
+  A.registriere('finanzen', {
+    titel: 'Finanzen', aktion: 'konto_lesen', reihenfolge: 30,
+    zeichne: function (ziel, param) {
+      if (param && param.reiter) zustand.reiter = param.reiter;
+      ziel.appendChild(A.el('h1', 'Finanzen'));
+      var leiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
+      var bereich = A.el('div', null, { role: 'tabpanel' });
+      REITER.filter(function (r) { return !r.aktion || A.darf(r.aktion); }).forEach(function (r) {
+        var b = A.el('button', r.t, { type: 'button', role: 'tab', onclick: function () { zustand.reiter = r.k; A.neuZeichnen(); } });
+        b.setAttribute('aria-selected', zustand.reiter === r.k ? 'true' : 'false');
+        leiste.appendChild(b);
+      });
+      ziel.appendChild(leiste);
+      ziel.appendChild(bereich);
+      laedt(bereich);
+      A.daten.lade('finanzen').then(function () {
+        A.leere(bereich);
+        var f = { uebersicht: zeigeUebersicht, konten: zeigeKonten, gemeinschaften: zeigeGemeinschaften, sollstellungen: zeigeSollstellungen,
+          sepa: zeigeSepa, klaerliste: zeigeKlaerliste, tarifwechsel: zeigeTarifwechsel }[zustand.reiter] || zeigeUebersicht;
+        f(bereich);
+      }).catch(function () { A.leere(bereich); bereich.appendChild(A.el('p', 'Die Finanzdaten konnten nicht geladen werden.', { className: 'leise' })); });
+    }
+  });
+
+  // ------------------------------------------------------------------ Einzugsstand
+
+  function zeigeUebersicht(ziel) {
+    var kopf = A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen)]);
+    if (A.darf('export')) kopf.appendChild(A.knopf('Buchhaltungs-Export (CSV)', buchhaltungExport, 'zweit'));
+    ziel.appendChild(kopf);
+    var inhalt = A.el('div');
+    ziel.appendChild(inhalt);
+    laedt(inhalt);
+    info().then(function (d) {
+      A.leere(inhalt);
+      var e = d.einzugsstand;
+      var kacheln = A.el('div', null, { className: 'kacheln' }, [
+        A.kachel(A.zahl(e.anzahl), 'Sollstellungen ' + d.jahr),
+        A.kachel(A.betrag(e.soll_gesamt), 'Soll gesamt'),
+        A.kachel(A.betrag(e.ist_gesamt), 'eingegangen'),
+        A.kachel(A.zahl(e.offen), 'offen (' + A.betrag(e.offen_betrag) + ')', e.offen ? 'warnung' : ''),
+        A.kachel(A.zahl(e.ruecklastschriften), 'Rücklastschriften', e.ruecklastschriften ? 'fehler' : ''),
+        A.kachel(A.zahl(e.gemahnt), 'gemahnt', e.gemahnt ? 'warnung' : ''),
+        A.kachel(A.zahl(e.ohne_mandat), 'ohne gültiges Mandat', e.ohne_mandat ? 'fehler' : '', function () { zustand.reiter = 'konten'; zustand.kontenFilter = { mandat: 'problem' }; A.neuZeichnen(); }),
+        A.kachel(A.zahl(d.klaerliste.fehler), 'Klärliste: Fehler', d.klaerliste.fehler ? 'fehler' : '', function () { zustand.reiter = 'klaerliste'; A.neuZeichnen(); })
+      ]);
+      inhalt.appendChild(kacheln);
+      var streitig = A.daten.liste('sollstellungen').filter(function (s) {
+        return s.jahr === d.jahr && ['ruecklastschrift', 'gemahnt', 'widerspruch', 'offen'].indexOf(s.status) >= 0;
+      });
+      var summe = streitig.reduce(function (n, s) { return n + Math.max(0, Number(s.soll_betrag || 0) + Number(s.gebuehr || 0) - Number(s.ist_betrag || 0)); }, 0);
+      var knoepfe = [];
+      if (A.darf('export')) {
+        knoepfe.push(A.knopf('Mahnliste CSV', function () { mahnlisteExport(streitig, d.jahr, 'csv'); }, 'zweit klein'));
+        knoepfe.push(A.knopf('Drucken', function () { mahnlisteExport(streitig, d.jahr, 'druck'); }, 'zweit klein'));
+      }
+      inhalt.appendChild(A.abschnitt('Offen und streitig ' + d.jahr, knoepfe));
+      inhalt.appendChild(A.el('p', 'Summe offen/streitig: ' + A.betrag(summe), { className: 'fin-summe' }));
+      inhalt.appendChild(sollTabelle(streitig, { sortiere: 'status' }));
+    }).catch(function () { A.leere(inhalt); });
+  }
+
+  function mahnSpalten() {
+    return [
+      { titel: 'Konto', wert: function (s) { return s.beitragskonto_id; } },
+      { titel: 'Inhaber', wert: function (s) { var k = A.daten.hole('konten', s.beitragskonto_id); return k ? k.kontoinhaber_name : ''; } },
+      { titel: 'Soll', wert: function (s) { return A.betrag(s.soll_betrag); } },
+      { titel: 'Gebühr', wert: function (s) { return s.gebuehr ? A.betrag(s.gebuehr) : ''; } },
+      { titel: 'Status', wert: function (s) { return STATUSTEXT[s.status] || s.status; } },
+      { titel: 'Mahnstufe', wert: function (s) { return s.mahnstufe || 0; } },
+      { titel: 'Grund', wert: function (s) { return s.ruecklastschrift_grund || ''; } }
+    ];
+  }
+  function mahnlisteExport(liste, j, art) {
+    if (art === 'csv') A.csv('Mahnliste_' + j + '.csv', mahnSpalten(), liste);
+    else A.drucke('Mahnliste ' + j, mahnSpalten(), liste, 'Offene und streitige Beiträge');
+    exportVermerken('Mahnliste ' + j, liste.length);
+  }
+  function buchhaltungExport() {
+    var j = jahr();
+    A.rufe('apiFinanzenBuchhaltung', j).then(function (d) {
+      A.csv('Beitraege_' + j + '_Buchhaltung.csv', [
+        { titel: 'Sollstellung', feld: 'sollstellung_id' }, { titel: 'Konto', feld: 'konto' }, { titel: 'Inhaber', feld: 'inhaber' },
+        { titel: 'Zahlweg', feld: 'zahlweg' }, { titel: 'Mandatsreferenz', feld: 'mandatsreferenz' },
+        { titel: 'Soll', wert: function (z) { return z.soll === null ? '' : String(z.soll).replace('.', ','); } },
+        { titel: 'Ist', wert: function (z) { return z.ist === null ? '' : String(z.ist).replace('.', ','); } },
+        { titel: 'Gebühr', wert: function (z) { return z.gebuehr === null ? '' : String(z.gebuehr).replace('.', ','); } },
+        { titel: 'Status', feld: 'status' }, { titel: 'Sequenz', feld: 'sequenz' },
+        { titel: 'Einzug', wert: function (z) { return z.einzugsdatum ? A.datum(z.einzugsdatum) : ''; } },
+        { titel: 'Buchung', wert: function (z) { return z.buchungsdatum ? A.datum(z.buchungsdatum) : ''; } },
+        { titel: 'Mahnstufe', feld: 'mahnstufe' }, { titel: 'Grund', feld: 'grund' }
+      ], d.zeilen);
+    }).catch(function () {});
+  }
+
+  // ------------------------------------------------------------------ Sollstellungstabelle (gemeinsam)
+
+  function sollTabelle(liste, optionen) {
+    optionen = optionen || {};
+    var spalten = [];
+    if (!optionen.ohneKonto) {
+      spalten.push({ feld: 'beitragskonto_id', titel: 'Konto', zahl: true });
+      spalten.push({ feld: 'inhaber', titel: 'Inhaber', wert: function (s) { var k = A.daten.hole('konten', s.beitragskonto_id); return k ? k.kontoinhaber_name : '–'; },
+        sort: function (s) { var k = A.daten.hole('konten', s.beitragskonto_id); return k ? k.kontoinhaber_name : ''; } });
+    } else {
+      spalten.push({ feld: 'jahr', titel: 'Jahr', zahl: true });
+    }
+    spalten.push({ feld: 'soll_betrag', titel: 'Soll', zahl: true, wert: function (s) { return A.betrag(s.soll_betrag); } });
+    spalten.push({ feld: 'ist_betrag', titel: 'Ist', zahl: true, wert: function (s) { return s.ist_betrag === undefined ? '–' : A.betrag(s.ist_betrag); } });
+    spalten.push({ feld: 'status', titel: 'Status', wert: function (s) { return STATUSTEXT[s.status] || s.status; } });
+    spalten.push({ feld: 'sepa_sequenz', titel: 'Seq.' });
+    spalten.push({ feld: 'einzugsdatum', titel: 'Einzug', wert: function (s) { return A.datum(s.einzugsdatum); } });
+    spalten.push({ feld: 'mahnstufe', titel: 'Mahnst.', zahl: true });
+    spalten.push({ feld: 'ruecklastschrift_grund', titel: 'Grund' });
+    return A.tabelle(spalten, liste, {
+      sortiere: optionen.sortiere || (optionen.ohneKonto ? 'jahr' : 'beitragskonto_id'), absteigend: !!optionen.ohneKonto,
+      beiKlick: A.darf('sollstellung_bearbeiten') ? statusDialog : null, leer: 'Keine Sollstellungen.'
+    });
+  }
+
+  function statusDialog(s) {
+    var arten = ERLAUBT[s.status || 'offen'] || [];
+    if (!arten.length) { A.meldung('Diese Sollstellung ist storniert und kann nicht mehr geändert werden.', 'hinweis'); return; }
+    var k = A.daten.hole('konten', s.beitragskonto_id);
+    var inhalt = A.el('div');
+    inhalt.appendChild(A.details([
+      ['Konto', (s.beitragskonto_id || '') + (k ? ' · ' + k.kontoinhaber_name : '')], ['Jahr', s.jahr],
+      ['Soll', A.betrag(s.soll_betrag)], ['Status', STATUSTEXT[s.status]], ['Mahnstufe', s.mahnstufe || 0],
+      ['Zusammensetzung', s.bemerkung || '–']
+    ]));
+    var form = A.formular([
+      { name: 'art', titel: 'Neuer Status', typ: 'auswahl', pflicht: true, liste: arten.map(function (a) { return { wert: a, text: STATUSTEXT[a] }; }) },
+      { name: 'datum', titel: 'Datum', typ: 'datum', hilfe: 'Buchungs- bzw. Rückgabedatum' },
+      { name: 'grund', titel: 'Grund', typ: 'text', hilfe: 'Pflicht bei Rücklastschrift und Storno' },
+      { name: 'betrag', titel: 'Eingegangener Betrag', typ: 'betrag', hilfe: 'Leer = Soll + Gebühren' },
+      { name: 'gebuehr', titel: 'Gebühr', typ: 'betrag', hilfe: 'Leer = Standardgebühr bei Rücklastschrift' }
+    ], { art: arten[0], datum: A.heute() });
+    inhalt.appendChild(form.element);
+    A.dialog('Zahlungsstatus buchen', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Buchen', art: '', aktion: function (schliessen) {
+        var w = form.werte();
+        if (!w.art) { form.setzeFehler([{ feld: 'art', meldung: 'Bitte einen Status wählen.' }]); return; }
+        A.rufe('apiFinanzenSollstellungStatus', s.sollstellung_id, s.version, w).then(function (d) {
+          A.daten.uebernehme(d); infoVerwerfen(); schliessen(); fertig('Gebucht.');
+        }, function (err) { if (err.felder) form.setzeFehler(err.felder); if (err.art === 'konflikt') { schliessen(); A.ladeNeu(); } });
+      } }
+    ]);
+  }
+
+  // ------------------------------------------------------------------ Konten
+
+  function zeigeKonten(ziel) {
+    var knoepfe = [];
+    if (A.darf('konto_bearbeiten')) knoepfe.push(A.knopf('Konto anlegen', function () { kontoFormular(null); }));
+    if (A.darf('export')) knoepfe.push(A.knopf('Kontenliste CSV', function () { kontenExport(); }, 'zweit'));
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen)].concat(knoepfe)));
+    var huelle = A.el('div');
+    ziel.appendChild(huelle);
+    laedt(huelle);
+    info().then(function (d) {
+      A.leere(huelle);
+      var pj = personenJeKonto();
+      var start = zustand.kontenFilter || {};
+      zustand.kontenFilter = null;
+      var leiste = A.filterleiste([
+        { name: 'zahlweg', titel: 'Zahlweg', liste: (A.startdaten.listen.zahlweg || []).map(function (z) { return { wert: z, text: z }; }) },
+        { name: 'mandat', titel: 'Mandat', start: start.mandat, liste: [
+          { wert: 'problem', text: 'fehlt oder verfallen' }, { wert: 'gueltig', text: 'gültig' }, { wert: 'ungenutzt', text: 'noch nicht genutzt' }] },
+        { name: 'probleme', titel: 'Klärliste', liste: [{ wert: 'ja', text: 'mit Klärfall' }] },
+        { name: 'aktiv', titel: 'Status', start: 'ja', liste: [{ wert: 'ja', text: 'aktive Konten' }, { wert: 'nein', text: 'stillgelegt' }] }
+      ], filtern, 'Inhaber, Konto, Mandat, Person …');
+      huelle.appendChild(leiste);
+      function zeilen(z) {
+        var such = A.falte(z.suche || '');
+        return A.daten.liste('konten').filter(function (k) {
+          var i = d.konten[k.beitragskonto_id] || {};
+          if (z.zahlweg && k.zahlweg !== z.zahlweg) return false;
+          if (z.aktiv === 'ja' && k.aktiv === false) return false;
+          if (z.aktiv === 'nein' && k.aktiv !== false) return false;
+          if (z.mandat === 'problem' && !(k.zahlweg === 'Lastschrift' && (i.mandat === 'fehlt' || i.mandat === 'verfallen'))) return false;
+          if (z.mandat && z.mandat !== 'problem' && i.mandat !== z.mandat) return false;
+          if (z.probleme === 'ja' && !i.probleme) return false;
+          if (!such) return true;
+          var text = [k.beitragskonto_id, k.kontoinhaber_name, k.mandatsreferenz].concat((pj[k.beitragskonto_id] || []).map(function (m) { return A.name(m) + ' ' + m.mitgliedsnummer; })).join(' ');
+          return A.falte(text).indexOf(such) >= 0;
+        });
+      }
+      var tab = A.tabelle(kontoSpalten(d, pj), zeilen(leiste.zustand), { sortiere: 'kontoinhaber_name', beiKlick: function (k) { A.zeige('konto', { id: k.beitragskonto_id }); }, leer: 'Keine Konten gefunden.' });
+      huelle.appendChild(tab);
+      function filtern(z) { tab.aktualisiere(zeilen(z)); }
+      zustand.kontenZeilen = function () { return zeilen(leiste.zustand); };
+    }).catch(function () { A.leere(huelle); });
+  }
+
+  function kontoSpalten(d, pj) {
+    return [
+      { feld: 'beitragskonto_id', titel: 'Konto', zahl: true },
+      { feld: 'kontoinhaber_name', titel: 'Inhaber' },
+      { feld: 'zahlweg', titel: 'Zahlweg' },
+      { feld: 'iban_maskiert', titel: 'IBAN', klasse: function () { return 'fin-iban'; } },
+      { feld: 'mandat', titel: 'Mandat', wert: function (k) { var i = d.konten[k.beitragskonto_id] || {}; return MANDATTEXT[i.mandat] || '–'; },
+        klasse: function (k) { var i = d.konten[k.beitragskonto_id] || {}; return i.mandat === 'verfallen' || i.mandat === 'fehlt' ? 'fin-schlecht' : ''; },
+        sort: function (k) { return (d.konten[k.beitragskonto_id] || {}).mandat; } },
+      { feld: 'personen', titel: 'Personen', zahl: true, wert: function (k) { return (pj[k.beitragskonto_id] || []).length; }, sort: function (k) { return (pj[k.beitragskonto_id] || []).length; } },
+      { feld: 'soll', titel: 'Soll ' + d.jahr, zahl: true, wert: function (k) { return A.betrag((d.konten[k.beitragskonto_id] || {}).soll); }, sort: function (k) { return (d.konten[k.beitragskonto_id] || {}).soll || 0; } },
+      { feld: 'probleme', titel: 'Klärfälle', zahl: true, wert: function (k) { return (d.konten[k.beitragskonto_id] || {}).probleme || ''; }, sort: function (k) { return (d.konten[k.beitragskonto_id] || {}).probleme || 0; } }
+    ];
+  }
+
+  function kontenExport() {
+    var liste = zustand.kontenZeilen ? zustand.kontenZeilen() : A.daten.liste('konten');
+    var d = zustand.info || { konten: {}, jahr: jahr() };
+    var pj = personenJeKonto();
+    A.csv('Beitragskonten.csv', [
+      { titel: 'Konto', feld: 'beitragskonto_id' }, { titel: 'Inhaber', feld: 'kontoinhaber_name' }, { titel: 'Zahlweg', feld: 'zahlweg' },
+      { titel: 'IBAN (maskiert)', feld: 'iban_maskiert' }, { titel: 'Mandatsreferenz', feld: 'mandatsreferenz' },
+      { titel: 'Mandatsdatum', wert: function (k) { return k.mandatsdatum ? A.datum(k.mandatsdatum) : ''; } },
+      { titel: 'Mandat', wert: function (k) { return MANDATTEXT[(d.konten[k.beitragskonto_id] || {}).mandat] || ''; } },
+      { titel: 'Personen', wert: function (k) { return (pj[k.beitragskonto_id] || []).map(A.name).join(' / '); } },
+      { titel: 'Soll ' + d.jahr, wert: function (k) { var s = (d.konten[k.beitragskonto_id] || {}).soll; return s === undefined ? '' : String(s).replace('.', ','); } }
+    ], liste);
+    exportVermerken('Kontenliste', liste.length);
+  }
+
+  // ------------------------------------------------------------------ Konto anlegen / bearbeiten
+
+  function kontoFormular(k, vorschlag) {
+    var inhaber = k && k.kontoinhaber_mitglied_id ? A.daten.hole('mitglieder', k.kontoinhaber_mitglied_id) : null;
+    var werte = k ? Object.assign({}, k, { inhaber_nummer: inhaber ? inhaber.mitgliedsnummer : '' }) : { zahlweg: 'Lastschrift', aktiv: true };
+    var form = A.formular([
+      { name: 'kontoinhaber_name', titel: 'Kontoinhaber (Nachname, Vorname)', typ: 'text', pflicht: true },
+      { name: 'inhaber_nummer', titel: 'Mitgliedsnr. des Inhabers', typ: 'text', hilfe: 'Leer, wenn der Zahler kein Mitglied ist' },
+      { name: 'zahlweg', titel: 'Zahlweg', typ: 'auswahl', pflicht: true, liste: A.startdaten.listen.zahlweg || ['Lastschrift', 'Überweisung', 'bar'] },
+      { name: 'iban', titel: k ? 'Neue IBAN (leer = unverändert)' : 'IBAN', typ: 'text', hilfe: k ? 'Aktuell: ' + (k.iban_maskiert || '–') : 'Pflicht bei Lastschrift' },
+      { name: 'bic', titel: 'BIC', typ: 'text', hilfe: 'Bei deutschen IBANs nicht nötig' },
+      { name: 'mandatsreferenz', titel: 'Mandatsreferenz', typ: 'text', hilfe: 'Eindeutig, nie wiederverwenden' },
+      { name: 'mandatsdatum', titel: 'Mandatsdatum (Unterschrift)', typ: 'datum' },
+      { name: 'abw_strasse', titel: 'Abweichende Rechnungsanschrift: Straße', typ: 'text' },
+      { name: 'abw_hausnummer', titel: 'Hausnummer', typ: 'text' },
+      { name: 'abw_plz', titel: 'PLZ', typ: 'text' },
+      { name: 'abw_ort', titel: 'Ort', typ: 'text' },
+      { name: 'abw_land', titel: 'Land (ISO, z. B. DE)', typ: 'text' },
+      { name: 'bemerkung', titel: 'Bemerkung', typ: 'langtext' }
+    ], Object.assign({}, werte, { iban: '' }));
+    var ibanStatus = A.el('p', '', { className: 'leise', aria: { live: 'polite' } });
+    var feldIban = form.feld('iban');
+    feldIban.addEventListener('input', function () {
+      var v = feldIban.value.trim();
+      ibanStatus.textContent = !v ? '' : ibanGueltig(v) ? '✓ IBAN-Prüfziffer stimmt' : '✗ IBAN ungültig (Prüfziffer oder Länge)';
+      ibanStatus.className = !v ? 'leise' : ibanGueltig(v) ? 'fin-ok' : 'fin-schlecht';
+    });
+    var inhalt = A.el('div', null, null, [form.element, ibanStatus]);
+    if (vorschlag) {
+      inhalt.appendChild(A.knopf('Mandatsreferenz-Vorschlag: ' + vorschlag, function () { form.feld('mandatsreferenz').value = vorschlag; }, 'zweit klein'));
+    }
+    A.dialog(k ? 'Konto ' + k.beitragskonto_id + ' bearbeiten' : 'Konto anlegen', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: '', aktion: function (schliessen) {
+        var w = form.werte();
+        var nr = w.inhaber_nummer; delete w.inhaber_nummer;
+        if (nr) {
+          var m = mitgliedNachNummer(nr);
+          if (!m) { form.setzeFehler([{ feld: 'inhaber_nummer', meldung: 'Keine Person mit dieser Mitgliedsnummer gefunden.' }]); return; }
+          w.kontoinhaber_mitglied_id = m.mitglied_id;
+        } else w.kontoinhaber_mitglied_id = null;
+        if (k && !w.iban) delete w.iban;
+        if (w.iban && !ibanGueltig(w.iban)) { form.setzeFehler([{ feld: 'iban', meldung: 'Die IBAN ist ungültig (Prüfziffer oder Länge).' }]); return; }
+        A.rufe('apiFinanzenKontoSpeichern', k ? k.beitragskonto_id : null, k ? k.version : null, w).then(function (d) {
+          A.daten.uebernehme(d); infoVerwerfen(); schliessen();
+          A.zeige('konto', { id: d.konto_id }, !!k);
+          if (d.hinweise && d.hinweise.length) A.meldung('Gespeichert. ' + d.hinweise.join(' '), 'hinweis'); else A.meldung('Gespeichert.', 'ok');
+        }, function (err) {
+          if (err.felder) form.setzeFehler(err.felder.map(function (f) { return f.feld === 'kontoinhaber_mitglied_id' ? { feld: 'inhaber_nummer', meldung: f.meldung } : f; }));
+          if (err.art === 'konflikt') { schliessen(); A.ladeNeu(); }
+        });
+      } }
+    ]);
+  }
+
+  // ------------------------------------------------------------------ Ansicht „konto“
+
+  A.registriere('konto', {
+    titel: 'Konto', aktion: 'konto_lesen', versteckt: true, gehoertZu: 'finanzen',
+    zeichne: function (ziel, param) {
+      var id = param && Number(param.id);
+      ziel.appendChild(A.knopf('← Zurück', A.zurueck, 'zweit klein'));
+      var huelle = A.el('div');
+      ziel.appendChild(huelle);
+      laedt(huelle);
+      A.daten.lade('finanzen').then(function () {
+        var k = A.daten.hole('konten', id);
+        A.leere(huelle);
+        if (!k) { huelle.appendChild(A.el('p', 'Dieses Konto ist nicht (mehr) vorhanden.', { className: 'leise' })); return; }
+        zeichneKonto(huelle, k);
+      }).catch(function () { A.leere(huelle); });
+    }
+  });
+
+  function zeichneKonto(ziel, k) {
+    var knoepfe = [];
+    var detail = null;
+    if (A.darf('konto_bearbeiten')) {
+      knoepfe.push(A.knopf('Bearbeiten', function () { kontoFormular(k, detail && detail.mandatsvorschlag); }));
+      if (k.aktiv !== false) knoepfe.push(A.knopf('Stilllegen', function () {
+        A.bestaetige('Konto stilllegen', 'Konto ' + k.beitragskonto_id + ' stilllegen? Das geht nur, wenn keine aktive Person mehr darüber zahlt.', 'Stilllegen').then(function (ja) {
+          if (!ja) return;
+          A.rufe('apiFinanzenKontoStilllegen', k.beitragskonto_id, k.version).then(function (d) { A.daten.uebernehme(d); infoVerwerfen(); fertig('Konto stillgelegt.'); }, function () {});
+        });
+      }, 'zweit'));
+    }
+    ziel.appendChild(A.abschnitt('Konto ' + k.beitragskonto_id + ' · ' + k.kontoinhaber_name, knoepfe, 'h1'));
+    if (k.aktiv === false) ziel.appendChild(A.el('p', 'Dieses Konto ist stillgelegt.', { className: 'fin-hinweis' }));
+
+    var ibanZelle = A.el('span', k.iban_maskiert || '–', { className: 'fin-iban' });
+    var ibanBox = A.el('span', null, null, [ibanZelle]);
+    if (k.iban_maskiert && A.darf('iban_aufdecken')) {
+      var auf = A.knopf('aufdecken', function () {
+        auf.disabled = true;
+        A.rufe('apiFinanzenIbanAufdecken', k.beitragskonto_id).then(function (d) {
+          ibanZelle.textContent = d.iban + (d.bic ? ' · BIC ' + d.bic : '');
+          setTimeout(function () { ibanZelle.textContent = k.iban_maskiert; auf.disabled = false; }, 60000);
+        }, function () { auf.disabled = false; });
+      }, 'zweit klein');
+      ibanBox.appendChild(document.createTextNode(' '));
+      ibanBox.appendChild(auf);
+    }
+    var inhaber = k.kontoinhaber_mitglied_id ? A.daten.hole('mitglieder', k.kontoinhaber_mitglied_id) : null;
+    var mandatZelle = A.el('span', '…');
+    ziel.appendChild(A.details([
+      ['Inhaber', k.kontoinhaber_name], ['Inhaber ist Mitglied', inhaber ? personLink(inhaber) : 'nein / nicht sichtbar'],
+      ['Zahlweg', k.zahlweg], ['IBAN', ibanBox], ['IBAN-Prüfziffer', k.iban_maskiert ? (k.iban_ok === false ? 'ungültig' : 'in Ordnung') : '–'],
+      ['Mandatsreferenz', k.mandatsreferenz], ['Mandatsdatum', A.datum(k.mandatsdatum)], ['Mandat', mandatZelle],
+      ['Rechnungsanschrift', k.abw_strasse || k.abw_ort ? [k.abw_strasse, k.abw_hausnummer].filter(Boolean).join(' ') + ', ' + [k.abw_plz, k.abw_ort].filter(Boolean).join(' ') + (k.abw_land && k.abw_land !== 'DE' ? ' (' + k.abw_land + ')' : '') : 'wie Anschrift des Inhabers'],
+      ['Bemerkung', k.bemerkung]
+    ]));
+
+    var zus = A.el('div');
+    ziel.appendChild(A.abschnitt('Beitrag ' + jahr()));
+    ziel.appendChild(zus);
+    laedt(zus);
+    A.rufe('apiFinanzenKonto', k.beitragskonto_id, jahr()).then(function (d) {
+      detail = d;
+      A.leere(zus);
+      mandatZelle.textContent = d.mandat.text + (d.mandat.letzte ? ' · zuletzt genutzt ' + A.datum(d.mandat.letzte) : '') + (d.mandat.verfaelltAm && d.mandat.status !== 'kein' ? ' · verfällt ' + A.datum(d.mandat.verfaelltAm) : '');
+      mandatZelle.className = d.mandat.status === 'verfallen' || d.mandat.status === 'fehlt' ? 'fin-schlecht' : '';
+      var ul = A.el('ul', null, { className: 'liste' });
+      d.soll.positionen.forEach(function (p) { ul.appendChild(A.el('li', (p.art === 'gemeinschaft' ? 'Beitragsgemeinschaft „' + p.bezeichnung + '“ (pauschal, einmal gezogen)' : p.bezeichnung) + ': ' + A.betrag(p.betrag))); });
+      if (!d.soll.positionen.length) ul.appendChild(A.el('li', 'Kein beitragspflichtiges Mitglied in ' + d.jahr + '.'));
+      zus.appendChild(ul);
+      zus.appendChild(A.el('p', 'Summe ' + d.jahr + ': ' + A.betrag(d.soll.betrag), { className: 'fin-summe' }));
+      d.soll.hinweise.forEach(function (h) { zus.appendChild(A.el('p', h, { className: 'fin-hinweis' })); });
+      if (d.pruefung.length) {
+        var box = A.el('div', null, { className: 'fin-fehlerbox' }, [A.el('strong', 'Klärfälle')]);
+        var l = A.el('ul');
+        d.pruefung.forEach(function (e) { l.appendChild(A.el('li', e.text)); });
+        box.appendChild(l);
+        zus.appendChild(box);
+      }
+    }).catch(function () { A.leere(zus); });
+
+    // Personen
+    var personen = personenJeKonto()[k.beitragskonto_id] || [];
+    ziel.appendChild(A.abschnitt('Personen an diesem Konto (' + personen.length + ')'));
+    ziel.appendChild(A.tabelle([
+      { feld: 'name', titel: 'Name', wert: personLink, sort: A.name },
+      { feld: 'mitgliedsnummer', titel: 'Nr.' },
+      { feld: 'status_abgeleitet', titel: 'Status' },
+      { feld: 'gem', titel: 'Gemeinschaft', wert: function (m) { var g = m.beitragsgemeinschaft_id && A.daten.hole('gemeinschaften', m.beitragsgemeinschaft_id); return g ? g.bezeichnung : '–'; } },
+      { feld: 'art', titel: 'Beitragsart', wert: function (m) { var b = m.beitragsart_id && A.daten.hole('beitragsarten', m.beitragsart_id); return b ? b.bezeichnung : '–'; } },
+      { feld: 'aktion', titel: '', sortierbar: false, wert: function (m) {
+        return A.darf('konto_bearbeiten') ? A.knopf('umhängen', function (e) { e.stopPropagation(); umhaengenDialog(m); }, 'zweit klein') : '';
+      } }
+    ], personen, { sortiere: 'name', leer: 'Keine Personen zugeordnet.' }));
+
+    // Sollstellungen
+    var soll = A.daten.liste('sollstellungen').filter(function (s) { return s.beitragskonto_id === k.beitragskonto_id; });
+    ziel.appendChild(A.abschnitt('Sollstellungen'));
+    ziel.appendChild(sollTabelle(soll, { ohneKonto: true }));
+  }
+
+  function umhaengenDialog(m) {
+    var form = A.formular([
+      { name: 'konto', titel: 'Neues Konto (Nummer)', typ: 'zahl', pflicht: true },
+      { name: 'gemeinsam', titel: 'Ganze Beitragsgemeinschaft mit umhängen', typ: 'janein', hilfe: m.beitragsgemeinschaft_id ? 'Pflicht, wenn die Person zu einer Gemeinschaft gehört' : 'Person gehört zu keiner Gemeinschaft' }
+    ], { gemeinsam: !!m.beitragsgemeinschaft_id });
+    A.dialog(A.name(m) + ' einem anderen Konto zuordnen', form.element, [
+      { text: 'Abbrechen' },
+      { text: 'Umhängen', art: '', aktion: function (schliessen) {
+        var w = form.werte();
+        if (!w.konto || !A.daten.hole('konten', w.konto)) { form.setzeFehler([{ feld: 'konto', meldung: 'Dieses Konto gibt es nicht.' }]); return; }
+        A.rufe('apiFinanzenPersonZuordnen', m.mitglied_id, m.version, w.konto, w.gemeinsam === true).then(function (d) {
+          A.daten.uebernehme(d); infoVerwerfen(); schliessen(); fertig('Zugeordnet.', d);
+        }, function () {});
+      } }
+    ]);
+  }
+
+  // ------------------------------------------------------------------ Gemeinschaften
+
+  function zeigeGemeinschaften(ziel) {
+    var knoepfe = [];
+    if (A.darf('konto_bearbeiten')) knoepfe.push(A.knopf('Gemeinschaft anlegen', function () { gemeinschaftFormular(null); }));
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, knoepfe));
+    ziel.appendChild(A.el('p', 'Eine Beitragsgemeinschaft ist ein gedeckelter Familien- oder Ehegattenverbund: Der Festbetrag wird je Gemeinschaft einmal gezogen. Alle Mitglieder einer Gemeinschaft hängen am selben Konto.', { className: 'leise' }));
+    var mitglieder = {};
+    A.daten.liste('mitglieder').forEach(function (m) { if (m.beitragsgemeinschaft_id) (mitglieder[m.beitragsgemeinschaft_id] = mitglieder[m.beitragsgemeinschaft_id] || []).push(m); });
+    var leiste = A.filterleiste([{ name: 'aktiv', titel: 'Status', start: 'ja', liste: [{ wert: 'ja', text: 'aktiv' }, { wert: 'nein', text: 'aufgelöst' }] }], filtern, 'Bezeichnung oder Person …');
+    ziel.appendChild(leiste);
+    function zeilen(z) {
+      var such = A.falte(z.suche || '');
+      return A.daten.liste('gemeinschaften').filter(function (g) {
+        if (z.aktiv === 'ja' && g.aktiv === false) return false;
+        if (z.aktiv === 'nein' && g.aktiv !== false) return false;
+        return !such || A.falte(g.bezeichnung + ' ' + (mitglieder[g.beitragsgemeinschaft_id] || []).map(A.name).join(' ')).indexOf(such) >= 0;
+      });
+    }
+    var tab = A.tabelle([
+      { feld: 'bezeichnung', titel: 'Bezeichnung' },
+      { feld: 'festbetrag', titel: 'Festbetrag', zahl: true, wert: function (g) { return g.festbetrag === undefined ? 'Einzeltarife' : A.betrag(g.festbetrag); } },
+      { feld: 'mitglieder', titel: 'Mitglieder', wert: function (g) { return (mitglieder[g.beitragsgemeinschaft_id] || []).map(function (m) { return m.vorname; }).join(', '); } },
+      { feld: 'konto', titel: 'Konto', wert: function (g) { var m = (mitglieder[g.beitragsgemeinschaft_id] || [])[0]; return m ? m.beitragskonto_id : '–'; } }
+    ], zeilen(leiste.zustand), { sortiere: 'bezeichnung', beiKlick: function (g) { gemeinschaftDialog(g, mitglieder[g.beitragsgemeinschaft_id] || []); }, leer: 'Keine Gemeinschaften.' });
+    ziel.appendChild(tab);
+    function filtern(z) { tab.aktualisiere(zeilen(z)); }
+  }
+
+  function gemeinschaftDialog(g, mitglieder) {
+    var inhalt = A.el('div');
+    inhalt.appendChild(A.details([['Festbetrag', g.festbetrag === undefined ? 'Einzeltarife' : A.betrag(g.festbetrag)], ['Status', g.aktiv === false ? 'aufgelöst' : 'aktiv'], ['Bemerkung', g.bemerkung]]));
+    var darf = A.darf('konto_bearbeiten') && g.aktiv !== false;
+    var ul = A.el('ul', null, { className: 'liste' });
+    mitglieder.forEach(function (m) {
+      var li = A.el('li', null, null, [personLink(m), document.createTextNode(' · Konto ' + (m.beitragskonto_id || '–') + ' ')]);
+      if (darf) li.appendChild(A.knopf('herausnehmen', function () { gemeinschaftAktion(g, m, 'entfernen', d.schliessen); }, 'zweit klein'));
+      ul.appendChild(li);
+    });
+    if (!mitglieder.length) ul.appendChild(A.el('li', 'Keine Mitglieder.'));
+    inhalt.appendChild(ul);
+    var aufnehmen = null;
+    if (darf) {
+      aufnehmen = A.formular([{ name: 'nummer', titel: 'Person aufnehmen (Mitgliedsnummer)', typ: 'text' }], {});
+      inhalt.appendChild(aufnehmen.element);
+    }
+    var knoepfe = [{ text: 'Schließen' }];
+    if (darf) {
+      knoepfe.push({ text: 'Aufnehmen', art: 'zweit', aktion: function () {
+        var m = mitgliedNachNummer(aufnehmen.werte().nummer);
+        if (!m) { aufnehmen.setzeFehler([{ feld: 'nummer', meldung: 'Keine Person mit dieser Mitgliedsnummer gefunden.' }]); return; }
+        gemeinschaftAktion(g, m, 'hinzu', d.schliessen);
+      } });
+      knoepfe.push({ text: 'Bearbeiten', art: 'zweit', aktion: function (s) { s(); gemeinschaftFormular(g); } });
+      knoepfe.push({ text: 'Auflösen', art: 'gefahr', aktion: function (s) {
+        A.bestaetige('Gemeinschaft auflösen', '„' + g.bezeichnung + '“ auflösen? Alle Mitglieder werden herausgenommen und zahlen danach ihre eigene Beitragsart.', 'Auflösen').then(function (ja) {
+          if (!ja) return;
+          A.rufe('apiFinanzenGemeinschaftAufloesen', g.beitragsgemeinschaft_id, g.version).then(function (r) { A.daten.uebernehme(r); infoVerwerfen(); s(); fertig('Gemeinschaft aufgelöst.', r); }, function () {});
+        });
+      } });
+    }
+    var d = A.dialog(g.bezeichnung, inhalt, knoepfe);
+  }
+
+  function gemeinschaftAktion(g, m, aktion, schliessen) {
+    A.rufe('apiFinanzenGemeinschaftMitglied', g.beitragsgemeinschaft_id, m.mitglied_id, m.version, aktion).then(function (r) {
+      A.daten.uebernehme(r); infoVerwerfen(); schliessen(); fertig('Gespeichert.', r);
+    }, function () {});
+  }
+
+  function gemeinschaftFormular(g) {
+    var form = A.formular([
+      { name: 'bezeichnung', titel: 'Bezeichnung', typ: 'text', pflicht: true, hilfe: 'z. B. „Familie Wagner“' },
+      { name: 'festbetrag', titel: 'Festbetrag (€)', typ: 'betrag', hilfe: 'Leer = Mitglieder zahlen Einzeltarife' },
+      { name: 'bemerkung', titel: 'Bemerkung', typ: 'langtext' }
+    ], g || {});
+    A.dialog(g ? 'Gemeinschaft bearbeiten' : 'Gemeinschaft anlegen', form.element, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: '', aktion: function (s) {
+        var w = form.werte();
+        A.rufe('apiFinanzenGemeinschaftSpeichern', g ? g.beitragsgemeinschaft_id : null, g ? g.version : null, w).then(function (r) {
+          A.daten.uebernehme(r); infoVerwerfen(); s(); fertig('Gespeichert.');
+        }, function (err) { if (err.felder) form.setzeFehler(err.felder); });
+      } }
+    ]);
+  }
+
+  // ------------------------------------------------------------------ Sollstellungen
+
+  function zeigeSollstellungen(ziel) {
+    var knoepfe = [jahrAuswahl(A.neuZeichnen)];
+    if (A.darf('sollstellung_bearbeiten')) {
+      knoepfe.push(A.knopf('Jahreslauf planen …', function () { laufDialog(); }));
+      knoepfe.push(A.knopf('Eingezogene als bezahlt buchen', sammelBuchen, 'zweit'));
+    }
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, knoepfe));
+    var j = jahr();
+    var leiste = A.filterleiste([
+      { name: 'status', titel: 'Status', liste: Object.keys(STATUSTEXT).map(function (s) { return { wert: s, text: STATUSTEXT[s] }; }) },
+      { name: 'sequenz', titel: 'Einzug', liste: [{ wert: 'mit', text: 'in SEPA-Datei' }, { wert: 'ohne', text: 'noch nicht eingezogen' }] }
+    ], filtern, 'Konto oder Inhaber …');
+    ziel.appendChild(leiste);
+    function zeilen(z) {
+      var such = A.falte(z.suche || '');
+      return A.daten.liste('sollstellungen').filter(function (s) {
+        if (s.jahr !== j) return false;
+        if (z.status && s.status !== z.status) return false;
+        if (z.sequenz === 'mit' && !s.sepa_sequenz) return false;
+        if (z.sequenz === 'ohne' && s.sepa_sequenz) return false;
+        if (!such) return true;
+        var k = A.daten.hole('konten', s.beitragskonto_id);
+        return A.falte(s.beitragskonto_id + ' ' + (k ? k.kontoinhaber_name : '')).indexOf(such) >= 0;
+      });
+    }
+    var summe = A.el('p', '', { className: 'fin-summe' });
+    ziel.appendChild(summe);
+    var tab = sollTabelle(zeilen(leiste.zustand));
+    ziel.appendChild(tab);
+    function zeigeSumme(liste) {
+      var s = liste.reduce(function (n, x) { return n + (x.status === 'storniert' ? 0 : Number(x.soll_betrag || 0)); }, 0);
+      summe.textContent = liste.length + ' Sollstellungen · Soll ' + A.betrag(s);
+    }
+    zeigeSumme(zeilen(leiste.zustand));
+    function filtern(z) { var l = zeilen(z); tab.aktualisiere(l); zeigeSumme(l); }
+    if (!A.daten.liste('sollstellungen').some(function (s) { return s.jahr === j; })) {
+      ziel.appendChild(A.el('p', 'Für ' + j + ' sind noch keine Sollstellungen angelegt. Ältere Jahre als die letzten drei sind hier nicht geladen (Buchhaltungs-Export nutzen).', { className: 'leise' }));
+    }
+  }
+
+  function laufDialog() {
+    var j = jahr();
+    var inhalt = A.el('div');
+    laedt(inhalt);
+    var plan = null;
+    var d = A.dialog('Sollstellungen ' + j + ' – Probelauf', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Sollstellungen anlegen', art: '', aktion: function (schliessen) {
+        if (!plan || !plan.anzahl) { schliessen(); return; }
+        A.rufe('apiFinanzenSollstellungAnlegen', j, plan.anzahl).then(function (r) {
+          A.daten.uebernehme(r); infoVerwerfen(); schliessen();
+          fertig(r.anzahl + ' Sollstellungen für ' + j + ' angelegt (' + A.betrag(r.summe) + ').');
+        }, function () {});
+      } }
+    ]);
+    A.rufe('apiFinanzenSollstellungPlanen', j).then(function (p) {
+      plan = p;
+      A.leere(inhalt);
+      inhalt.appendChild(A.el('div', null, { className: 'kacheln' }, [
+        A.kachel(A.zahl(p.anzahl), 'neue Sollstellungen'), A.kachel(A.betrag(p.summe), 'Summe'),
+        A.kachel(A.zahl(p.vorhanden), 'bereits vorhanden'), A.kachel(A.zahl(p.uebersprungen.length), 'übersprungen / Hinweise', p.uebersprungen.length ? 'warnung' : '')
+      ]));
+      inhalt.appendChild(A.el('p', 'Einzugsdatum (vorläufig): ' + A.datum(p.einzugsdatum) + '. Jede Sollstellung ist ein Schnappschuss und wird später nicht nachgerechnet.', { className: 'leise' }));
+      if (p.uebersprungen.length) {
+        inhalt.appendChild(A.el('h3', 'Übersprungen / Hinweise'));
+        inhalt.appendChild(A.tabelle([{ feld: 'konto_id', titel: 'Konto', zahl: true }, { feld: 'name', titel: 'Inhaber' }, { feld: 'grund', titel: 'Grund' }], p.uebersprungen, { block: 20 }));
+      }
+      if (p.neu.length) {
+        inhalt.appendChild(A.el('h3', 'Neue Sollstellungen'));
+        inhalt.appendChild(A.tabelle([
+          { feld: 'konto_id', titel: 'Konto', zahl: true }, { feld: 'name', titel: 'Inhaber' }, { feld: 'zahlweg', titel: 'Zahlweg' },
+          { feld: 'betrag', titel: 'Betrag', zahl: true, wert: function (z) { return A.betrag(z.betrag); } }, { feld: 'zusammensetzung', titel: 'Zusammensetzung' }
+        ], p.neu, { block: 20, sortiere: 'konto_id' }));
+      } else {
+        inhalt.appendChild(A.el('p', 'Es gibt nichts Neues anzulegen.', { className: 'leise' }));
+      }
+    }).catch(function () { d.schliessen(); });
+  }
+
+  function sammelBuchen() {
+    var j = jahr();
+    var kandidaten = A.daten.liste('sollstellungen').filter(function (s) { return s.jahr === j && s.status === 'offen' && s.sepa_sequenz; });
+    if (!kandidaten.length) { A.meldung('Es gibt keine offenen eingezogenen Sollstellungen für ' + j + '.', 'hinweis'); return; }
+    var summe = kandidaten.reduce(function (n, s) { return n + Number(s.soll_betrag || 0); }, 0);
+    var form = A.formular([{ name: 'datum', titel: 'Buchungsdatum', typ: 'datum', pflicht: true }], { datum: A.heute() });
+    var inhalt = A.el('div', null, null, [
+      A.el('p', kandidaten.length + ' offene Lastschriften aus der SEPA-Datei ' + j + ' (' + A.betrag(summe) + ') als bezahlt buchen? Rücklastschriften bitte vorher einzeln erfassen.'),
+      form.element
+    ]);
+    A.dialog('Eingezogene als bezahlt buchen', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Buchen', art: '', aktion: function (s) {
+        A.rufe('apiFinanzenSammelBezahlt', j, kandidaten.map(function (x) { return x.sollstellung_id; }), form.werte().datum).then(function (r) {
+          A.daten.uebernehme(r); infoVerwerfen(); s(); fertig(r.anzahl + ' Sollstellungen als bezahlt gebucht.');
+        }, function (err) { if (err.felder) form.setzeFehler(err.felder); });
+      } }
+    ]);
+  }
+
+  // ------------------------------------------------------------------ SEPA
+
+  function zeigeSepa(ziel) {
+    var datum = A.el('input', null, { type: 'text', placeholder: 'Einzugsdatum TT.MM.JJJJ (leer = laut Sollstellung)', inputMode: 'numeric' });
+    datum.setAttribute('aria-label', 'Einzugsdatum');
+    var ergebnis = A.el('div');
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen), datum, A.knopf('Probelauf', probelauf)]));
+    ziel.appendChild(A.el('p', 'Format pain.008.001.08 mit strukturierten Adressen (Pflicht ab 15.11.2026). Vor dem ersten echten Einsatz eine Datei aus dem Testsystem bei der Hausbank als Test einreichen.', { className: 'fin-hinweis' }));
+    ziel.appendChild(ergebnis);
+
+    function einzug() {
+      var t = datum.value.trim();
+      if (!t) return null;
+      var iso = A.isoDatum(t);
+      if (!iso) { A.meldung('Bitte das Einzugsdatum als TT.MM.JJJJ angeben.', 'fehler'); throw new Error('datum'); }
+      return iso;
+    }
+    function probelauf() {
+      var e;
+      try { e = einzug(); } catch (x) { return; }
+      A.leere(ergebnis); laedt(ergebnis);
+      A.rufe('apiFinanzenSepaProbelauf', jahr(), e).then(function (p) { zeigeProbelauf(p, e); }, function () { A.leere(ergebnis); });
+    }
+    function zeigeProbelauf(p, e) {
+      A.leere(ergebnis);
+      var kacheln = [A.kachel(A.zahl(p.anzahl), 'Lastschriften'), A.kachel(A.betrag(p.summe), 'Summe')];
+      Object.keys(p.je_sequenz).sort().forEach(function (s) { kacheln.push(A.kachel(A.zahl(p.je_sequenz[s].anzahl), s + ' · ' + A.betrag(p.je_sequenz[s].summe))); });
+      kacheln.push(A.kachel(A.zahl(p.ausgeschlossen.length), 'ausgeschlossen', p.ausgeschlossen.some(function (a) { return a.art === 'fehler'; }) ? 'fehler' : ''));
+      ergebnis.appendChild(A.el('div', null, { className: 'kacheln' }, kacheln));
+      if (p.glaeubiger_fehler.length) {
+        var box = A.el('div', null, { className: 'fin-fehlerbox' }, [A.el('strong', 'Vereinsdaten unvollständig – keine Datei möglich')]);
+        var ul = A.el('ul');
+        p.glaeubiger_fehler.forEach(function (t) { ul.appendChild(A.el('li', t)); });
+        ul.appendChild(A.el('li', 'Einzutragen in den Einstellungen (_Konfig): verein_name, verein_glaeubiger_id, verein_iban, optional verein_bic und Vereinsanschrift (verein_strasse, verein_hausnummer, verein_plz, verein_ort).'));
+        box.appendChild(ul);
+        ergebnis.appendChild(box);
+      }
+      p.warnungen.forEach(function (w) { ergebnis.appendChild(A.el('p', w, { className: 'fin-hinweis' })); });
+      var knoepfe = [];
+      if (p.vier_augen) {
+        var f = p.freigabe || {};
+        ergebnis.appendChild(A.el('p', f.freigegeben ? 'Vier-Augen-Prinzip: freigegeben von ' + f.von + '.' : 'Vier-Augen-Prinzip: Der Probelauf muss noch von einer zweiten Person freigegeben werden.', { className: f.freigegeben ? 'leise' : 'fin-hinweis' }));
+        knoepfe.push(A.knopf('Probelauf freigeben', function () {
+          A.rufe('apiFinanzenSepaFreigeben', jahr()).then(function () { probelauf(); A.meldung('Freigegeben.', 'ok'); }, function () {});
+        }, 'zweit'));
+      }
+      if (p.anzahl && !p.glaeubiger_fehler.length) knoepfe.push(A.knopf('SEPA-Datei erzeugen', function () { xmlErzeugen(p, e); }));
+      if (p.anzahl && A.darf('export')) knoepfe.push(A.knopf('Kontrollliste CSV', function () {
+        A.csv('SEPA-Kontrollliste_' + p.jahr + '.csv', [
+          { titel: 'Konto', feld: 'konto' }, { titel: 'Name', feld: 'name' }, { titel: 'IBAN', feld: 'iban' }, { titel: 'Mandat', feld: 'mandat' },
+          { titel: 'Sequenz', feld: 'sequenz' }, { titel: 'Einzug', wert: function (z) { return A.datum(z.einzug); } },
+          { titel: 'Betrag', wert: function (z) { return String(z.betrag).replace('.', ','); } }, { titel: 'Verwendungszweck', feld: 'zweck' }
+        ], p.posten);
+        exportVermerken('SEPA-Kontrollliste ' + p.jahr, p.posten.length);
+      }, 'zweit'));
+      ergebnis.appendChild(A.el('div', null, { className: 'fin-zeile' }, knoepfe));
+      if (p.ausgeschlossen.length) {
+        ergebnis.appendChild(A.el('h2', 'Nicht im Lauf'));
+        ergebnis.appendChild(A.tabelle([
+          { feld: 'konto_id', titel: 'Konto', zahl: true, wert: function (a) { return kontoLink(a.konto_id); }, sort: function (a) { return a.konto_id; } },
+          { feld: 'name', titel: 'Inhaber' }, { feld: 'grund', titel: 'Grund' },
+          { feld: 'art', titel: 'Art', wert: function (a) { return a.art === 'fehler' ? A.ampel('rot', 'klären') : A.ampel('grau', 'Info'); } }
+        ], p.ausgeschlossen, { block: 25, sortiere: 'konto_id' }));
+      }
+      ergebnis.appendChild(A.el('h2', 'Posten'));
+      ergebnis.appendChild(A.tabelle([
+        { feld: 'konto', titel: 'Konto', zahl: true }, { feld: 'name', titel: 'Name' }, { feld: 'iban', titel: 'IBAN', klasse: function () { return 'fin-iban'; } },
+        { feld: 'sequenz', titel: 'Seq.' }, { feld: 'einzug', titel: 'Einzug', wert: function (z) { return A.datum(z.einzug); } },
+        { feld: 'betrag', titel: 'Betrag', zahl: true, wert: function (z) { return A.betrag(z.betrag); } }
+      ], p.posten, { block: 25, sortiere: 'konto' }));
+    }
+    function xmlErzeugen(p, e) {
+      A.bestaetige('SEPA-Datei erzeugen', p.anzahl + ' Lastschriften über ' + A.betrag(p.summe) + ' in eine Datei schreiben? Die Sollstellungen werden als „eingezogen“ (Sequenz und Einzugsdatum) vermerkt.', 'Datei erzeugen').then(function (ja) {
+        if (!ja) return;
+        A.rufe('apiFinanzenSepaXml', jahr(), e).then(function (r) {
+          A.herunterladen(r.dateiname, r.xml, 'application/xml');
+          var x = Object.assign({}, r); delete x.xml;
+          A.daten.uebernehme(x); infoVerwerfen();
+          A.meldung('SEPA-Datei ' + r.dateiname + ' erzeugt: ' + r.anzahl + ' Lastschriften, ' + A.betrag(r.summe) + '.', 'ok');
+        }, function () {});
+      });
+    }
+  }
+
+  // ------------------------------------------------------------------ Klärliste
+
+  var KLAERTEXT = {
+    waise: 'ohne gültiges Konto', inhaber_ausgetreten: 'Inhaber ausgetreten', gemeinschaft_konto: 'Gemeinschaft auf mehreren Konten',
+    ohne_beitrag: 'ohne Beitrag', lastschrift_unvollstaendig: 'Lastschrift unvollständig', iban_ungueltig: 'IBAN ungültig',
+    mandat_verfallen: 'Mandat verfallen', mandat_doppelt: 'Mandat doppelt', adresse_unvollstaendig: 'Anschrift unvollständig',
+    hausnummer_fehlt: 'Hausnummer fehlt', tarif_alter: 'Tarif passt nicht zum Alter'
+  };
+
+  function zeigeKlaerliste(ziel) {
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen)]));
+    var huelle = A.el('div');
+    ziel.appendChild(huelle);
+    laedt(huelle);
+    A.rufe('apiFinanzenKlaerliste', jahr()).then(function (liste) {
+      A.leere(huelle);
+      var arten = {};
+      liste.forEach(function (e) { arten[e.art] = (arten[e.art] || 0) + 1; });
+      var leiste = A.filterleiste([
+        { name: 'schwere', titel: 'Schwere', liste: [{ wert: 'fehler', text: 'Fehler' }, { wert: 'warnung', text: 'Warnung' }] },
+        { name: 'art', titel: 'Art', liste: Object.keys(arten).map(function (a) { return { wert: a, text: (KLAERTEXT[a] || a) + ' (' + arten[a] + ')' }; }) }
+      ], filtern, 'Name, Konto …');
+      huelle.appendChild(leiste);
+      function zeilen(z) {
+        var such = A.falte(z.suche || '');
+        return liste.filter(function (e) {
+          return (!z.schwere || e.schwere === z.schwere) && (!z.art || e.art === z.art) && (!such || A.falte(e.text).indexOf(such) >= 0);
+        });
+      }
+      var tab = A.tabelle([
+        { feld: 'schwere', titel: '', wert: function (e) { return e.schwere === 'fehler' ? A.ampel('rot', 'Fehler') : A.ampel('gelb', 'Warnung'); } },
+        { feld: 'art', titel: 'Art', wert: function (e) { return KLAERTEXT[e.art] || e.art; } },
+        { feld: 'text', titel: 'Beschreibung' },
+        { feld: 'konto_id', titel: 'Konto', wert: function (e) { return kontoLink(e.konto_id); }, sort: function (e) { return e.konto_id; } },
+        { feld: 'mitglied_id', titel: 'Person', wert: function (e) { var m = e.mitglied_id && A.daten.hole('mitglieder', e.mitglied_id); return m ? personLink(m) : (e.mitglied_name || '–'); }, sort: function (e) { return e.mitglied_name; } }
+      ], zeilen(leiste.zustand), { sortiere: 'schwere', leer: 'Keine Klärfälle – alles in Ordnung.' });
+      huelle.appendChild(tab);
+      function filtern(z) { tab.aktualisiere(zeilen(z)); }
+    }).catch(function () { A.leere(huelle); });
+  }
+
+  // ------------------------------------------------------------------ Tarifwechsel
+
+  function zeigeTarifwechsel(ziel) {
+    // eigener Jahreswert: Tarifwechsel betreffen meist das kommende Beitragsjahr
+    if (!zustand.twJahr) zustand.twJahr = jahrStandard() + 1;
+    var sel = A.el('select', null, { aria: { label: 'Stichtagsjahr' } });
+    [jahrStandard(), jahrStandard() + 1].forEach(function (j) { sel.appendChild(A.el('option', 'Stichtag 01.01.' + j, { value: String(j) })); });
+    sel.value = String(zustand.twJahr);
+    sel.addEventListener('change', function () { zustand.twJahr = Number(sel.value); A.neuZeichnen(); });
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [sel]));
+    ziel.appendChild(A.el('p', 'Vorschläge, wenn das Alter zum Stichtag nicht mehr zur Beitragsart passt (Altersgrenzen der Beitragsarten). Übernehmen ändert die Beitragsart der ausgewählten Personen.', { className: 'leise' }));
+    var huelle = A.el('div');
+    ziel.appendChild(huelle);
+    laedt(huelle);
+    A.rufe('apiFinanzenTarifwechsel', zustand.twJahr).then(function (liste) {
+      A.leere(huelle);
+      var gewaehlt = {};
+      liste.forEach(function (v) { if (v.nach) gewaehlt[v.mitglied_id] = true; });
+      var spalten = [];
+      if (A.darf('mitglied_bearbeiten')) spalten.push({ feld: 'wahl', titel: '', sortierbar: false, wert: function (v) {
+        if (!v.nach) return '';
+        var c = A.el('input', null, { type: 'checkbox', className: 'fin-check', checked: !!gewaehlt[v.mitglied_id] });
+        c.setAttribute('aria-label', 'Übernehmen: ' + v.name);
+        c.addEventListener('click', function (e) { e.stopPropagation(); gewaehlt[v.mitglied_id] = c.checked; });
+        return c;
+      } });
+      spalten = spalten.concat([
+        { feld: 'name', titel: 'Name', wert: function (v) { var m = A.daten.hole('mitglieder', v.mitglied_id); return m ? personLink(m) : v.name; }, sort: function (v) { return v.name; } },
+        { feld: 'alter', titel: 'Alter', zahl: true },
+        { feld: 'von_bezeichnung', titel: 'bisher' },
+        { feld: 'nach_bezeichnung', titel: 'neu', wert: function (v) { return v.nach_bezeichnung || 'keine passende Beitragsart'; } }
+      ]);
+      huelle.appendChild(A.tabelle(spalten, liste, { sortiere: 'name', leer: 'Keine Tarifwechsel nötig.' }));
+      if (liste.length && A.darf('mitglied_bearbeiten')) {
+        huelle.appendChild(A.knopf('Ausgewählte übernehmen', function () {
+          var ids = Object.keys(gewaehlt).filter(function (k) { return gewaehlt[k]; }).map(Number);
+          if (!ids.length) { A.meldung('Bitte mindestens einen Vorschlag auswählen.', 'hinweis'); return; }
+          A.rufe('apiFinanzenTarifwechselUebernehmen', zustand.twJahr, ids).then(function (r) {
+            A.daten.uebernehme(r); infoVerwerfen(); fertig(r.anzahl + ' Tarifwechsel übernommen.');
+          }, function () {});
+        }));
+      }
+    }).catch(function () { A.leere(huelle); });
+  }
 })();
 </script>
