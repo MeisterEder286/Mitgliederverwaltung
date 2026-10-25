@@ -1,13 +1,546 @@
 <!--
-  ansicht_korrespondenz – Dokumente und Anschreiben
+  ansicht_korrespondenz – Dokumente und Anschreiben („Schreiben“).
 
-  Zweck:      Links zu Mitgliedsantrag/SEPA-Mandat, Anschreiben je Person, Serienbriefe, Vorlagen.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   anschreiben_erstellen / dokumente_verwalten – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Briefe aus Vorlagen erstellen und drucken (einzeln oder als Serienbrief: Aufnahme- und Austritts-
+              bestätigung, Rechnung, Mahnung, SEPA-Vorabinformation, Umstellung auf Einzelbeitrag …), erstellte Schreiben
+              ansehen/nachdrucken, Vorlagen pflegen, Serienbrief-Export für Word. Dazu Links auf Aufnahmeantrag und
+              SEPA-Mandat: als Reiter „Dokumente & Schreiben“ im Mitglied-Detail und als Abschnitt im Konto-Detail
+              (über die Erweiterungspunkte App.erweitere, ohne die anderen Ansichtsdateien zu ändern).
+  Datenquelle: App.daten (Kern: vorlagen ohne Text; Bereich „korrespondenz“: dokumente, anschreiben ohne Inhalt) und
+              apiKorrespondenz…-Funktionen (src/api/Korrespondenz.js).
+  Wer darf:   anschreiben_erstellen (Schreiben, Export), dokumente_verwalten (Links), stammdaten_bearbeiten (Vorlagen
+              pflegen) – serverseitig erzwungen; App.darf blendet nur aus.
+  Besonderheiten:
+    - Andere Ansichten öffnen „Schreiben“ mit Vorauswahl: App.zeige('korrespondenz', { anlass, mitglied_ids |
+      beitragskonto_ids | sollstellung_ids, jahr }).
+    - Briefe werden in einem eigenen Druckfenster gesetzt (A4, Anschriftfeld für Fensterumschlag nach DIN 5008),
+      alle Texte per textContent – Vorlagen können kein HTML einschleusen.
+    - E-Mail ohne Versandberechtigung der WebApp: mailto:-Link, der Text geht über das eigene Mailprogramm.
 -->
+<style>
+  .ko-brief { white-space: pre-wrap; border: 1px solid var(--rand); border-radius: var(--radius); padding: 12px; margin: 0 0 12px; background: #fff; }
+  .ko-brief .ko-adr { color: var(--text-leise); margin: 0 0 8px; white-space: pre-line; }
+  .ko-brief .ko-betreff { font-weight: 600; margin: 0 0 8px; }
+  .ko-warnung { background: #fff6dc; color: #5c4400; padding: 8px 12px; border-radius: var(--radius); margin: 0 0 12px; }
+  .ko-doks { list-style: none; padding: 0; margin: 0 0 12px; }
+  .ko-doks li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--flaeche); }
+  .ko-doks a { min-height: 44px; display: inline-flex; align-items: center; overflow-wrap: anywhere; }
+  .ko-platzhalter { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
+  .ko-platzhalter button { min-height: 36px; font: inherit; font-size: 0.85rem; padding: 2px 8px; border: 1px solid var(--rand); border-radius: 999px; background: var(--flaeche); cursor: pointer; }
+  .ko-auswahl input[type="checkbox"] { width: 20px; height: 20px; }
+  .ko-mail a { display: inline-flex; min-height: 44px; align-items: center; }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+  var vorlagenSpeicher = null;   // { vorlagen (mit Text), katalog, anlaesse } – einmal je Sitzung
+
+  // ------------------------------------------------------------------ Hilfen
+
+  function laedt(ziel, bereich, weiter) {
+    if (A.daten.geladen(bereich)) { weiter(); return; }
+    var p = A.el('p', 'Lädt …', { className: 'laedt' });
+    ziel.appendChild(p);
+    A.daten.lade(bereich).then(function () { if (p.parentNode) { p.remove(); weiter(); } })
+      .catch(function () { p.textContent = 'Konnte nicht geladen werden.'; });
+  }
+  function ladeVorlagen(neu) {
+    if (vorlagenSpeicher && !neu) return Promise.resolve(vorlagenSpeicher);
+    return A.rufe('apiKorrespondenzVorlagen').then(function (d) { vorlagenSpeicher = d; return d; });
+  }
+  function mitglied(id) { return A.daten.hole('mitglieder', id); }
+  function linkEl(text, url) {
+    var a = A.el('a', text, { href: url, target: '_blank', rel: 'noopener noreferrer' });
+    return a;
+  }
+  /** Nach dem Speichern neu zeichnen – im Mitglied-Detail auf dem Reiter „Dokumente & Schreiben“ bleiben. */
+  function neuZeichnen() {
+    var a = A.aktuell();
+    if (a.schluessel === 'mitglied') A.zeige('mitglied', Object.assign({}, a.param || {}, { reiter: 'dokumente' }), true);
+    else A.neuZeichnen();
+  }
+
+  function anlassVorschlag(m) {
+    if (!m) return null;
+    var s = m.status_abgeleitet || m.status;
+    if (s === 'ausgetreten' || m.gekuendigt_zum) return 'Austrittsbestätigung';
+    if (m.mitglied_seit) {
+      var tage = (new Date(A.heute()) - new Date(m.mitglied_seit)) / 86400000;
+      if (tage >= 0 && tage < 60) return 'Aufnahmebestätigung';
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------------ Druck
+
+  /** Briefe im eigenen Fenster setzen und drucken. briefe: [{ absender, empfaenger:[…], ort_datum, betreff, text, gruss }] */
+  function drucke(briefe, titel) {
+    var w = window.open('', '_blank');
+    if (!w) { A.meldung('Das Druckfenster wurde blockiert. Bitte Pop-ups für diese Seite erlauben.', 'fehler'); return; }
+    var doc = w.document;
+    doc.title = titel || 'Schreiben';
+    var st = doc.createElement('style');
+    st.textContent = '@page{size:A4;margin:0}body{margin:0;font-family:system-ui,Arial,sans-serif;font-size:11pt;color:#000}' +
+      '.seite{position:relative;width:210mm;min-height:297mm;box-sizing:border-box;padding:20mm 20mm 20mm 25mm;page-break-after:always}' +
+      '.seite:last-child{page-break-after:auto}' +
+      '.abs{position:absolute;top:45mm;left:25mm;width:85mm;font-size:7pt;border-bottom:0.3pt solid #000;padding-bottom:1mm}' +
+      '.an{position:absolute;top:51mm;left:25mm;width:85mm;height:34mm;white-space:pre-line;line-height:1.3}' +
+      '.datum{margin-top:85mm;text-align:right}.betreff{font-weight:bold;margin:8mm 0 6mm}' +
+      '.text{white-space:pre-wrap;line-height:1.45}.gruss{margin-top:8mm;white-space:pre-line}' +
+      '@media screen{body{background:#ddd}.seite{background:#fff;margin:8px auto;box-shadow:0 0 4px #999}}';
+    doc.head.appendChild(st);
+    briefe.forEach(function (b) {
+      var s = doc.createElement('div'); s.className = 'seite';
+      [['abs', b.absender], ['an', (b.empfaenger || []).join('\n')], ['datum', b.ort_datum], ['betreff', b.betreff],
+        ['text', b.text], ['gruss', b.gruss]].forEach(function (p) {
+        var d = doc.createElement('div'); d.className = p[0]; d.textContent = p[1] || ''; s.appendChild(d);
+      });
+      doc.body.appendChild(s);
+    });
+    w.focus();
+    setTimeout(function () { try { w.print(); } catch (e) { /* manche Browser drucken erst nach Klick */ } }, 300);
+  }
+
+  /** Vorschau-Karte eines Briefs (Text per textContent, Zeilenumbrüche über CSS). */
+  function briefKarte(b) {
+    return A.el('div', null, { className: 'ko-brief' }, [
+      A.el('p', (b.empfaenger || []).join('\n'), { className: 'ko-adr' }),
+      A.el('p', b.betreff, { className: 'ko-betreff' }),
+      A.el('div', b.text)
+    ]);
+  }
+
+  function mailtoLinks(briefe) {
+    var mit = briefe.filter(function (b) { return b.versandart === 'E-Mail' && b.email; });
+    if (!mit.length) return null;
+    var box = A.el('div', null, { className: 'karte ko-mail' }, [
+      A.el('p', 'Per E-Mail (öffnet Ihr Mailprogramm; der Text wird dort versendet, nicht von der Mitgliederverwaltung):', { className: 'leise' })
+    ]);
+    mit.forEach(function (b) {
+      var url = 'mailto:' + encodeURIComponent(b.email) + '?subject=' + encodeURIComponent(b.betreff) + '&body=' + encodeURIComponent((b.text || '').slice(0, 1800));
+      box.appendChild(A.el('div', null, null, [linkEl(b.name + ' – ' + b.email, url)]));
+    });
+    return box;
+  }
+
+  // ------------------------------------------------------------------ Empfängerauswahl
+
+  /**
+   * Auswahl aus der Mitgliederliste (Suche/Filter, Kontrollkästchen). vorgabe: { mitglied_ids|beitragskonto_ids|sollstellung_ids }.
+   * Liefert { element, auswahl() }.
+   */
+  function empfaengerWahl(vorgabe) {
+    vorgabe = vorgabe || {};
+    var huelle = A.el('div', null, { className: 'ko-auswahl' });
+    var feste = ['beitragskonto_ids', 'sollstellung_ids'].filter(function (k) { return (vorgabe[k] || []).length; })[0];
+    if (feste) {
+      var n = vorgabe[feste].length;
+      huelle.appendChild(A.el('p', n + (feste === 'sollstellung_ids' ? ' Sollstellung(en)' : ' Konto/Konten') + ' aus der vorherigen Ansicht ausgewählt.', { className: 'karte' }));
+      return { element: huelle, auswahl: function () { var o = {}; o[feste] = vorgabe[feste].slice(); return o; } };
+    }
+    var gewaehlt = {};
+    (vorgabe.mitglied_ids || []).forEach(function (id) { gewaehlt[id] = true; });
+    var info = A.el('p', '', { className: 'leise' });
+    function zaehle() { info.textContent = Object.keys(gewaehlt).length + ' Empfänger ausgewählt'; }
+    var liste = A.daten.liste('mitglieder');
+    var abt = A.daten.liste('abteilungen').map(function (a) { return { wert: a.abteilung_id, text: a.bezeichnung }; });
+    var zustand = { suche: '' };
+    function gefiltert() {
+      var q = A.falte(zustand.suche);
+      return liste.filter(function (m) {
+        if (zustand.status && (m.status_abgeleitet || m.status) !== zustand.status) return false;
+        if (zustand.abteilung && (m.abteilungen || []).indexOf(Number(zustand.abteilung)) < 0) return false;
+        if (zustand.nur === 'gewaehlt' && !gewaehlt[m.mitglied_id]) return false;
+        return !q || A.falte([m.nachname, m.vorname, m.mitgliedsnummer, m.ort].join(' ')).indexOf(q) >= 0;
+      });
+    }
+    var leiste = A.filterleiste([
+      { name: 'status', titel: 'Status', liste: ['aktiv', 'ausgetreten', 'verstorben'].map(function (s) { return { wert: s, text: s }; }), start: (vorgabe.mitglied_ids || []).length ? '' : 'aktiv' },
+      { name: 'abteilung', titel: 'Abteilung', liste: abt },
+      { name: 'nur', titel: 'Anzeige', liste: [{ wert: 'gewaehlt', text: 'nur ausgewählte' }], start: (vorgabe.mitglied_ids || []).length ? 'gewaehlt' : '' }
+    ], function (z) { zustand = z; tab.aktualisiere(gefiltert()); }, 'Name, Nummer, Ort …');
+    zustand = leiste.zustand;
+    var tab = A.tabelle([
+      { feld: 'wahl', titel: '✓', sortierbar: false, wert: function (m) {
+        var c = A.el('input', null, { type: 'checkbox', checked: !!gewaehlt[m.mitglied_id] });
+        c.setAttribute('aria-label', 'auswählen: ' + A.name(m));
+        c.addEventListener('click', function (e) { e.stopPropagation(); });
+        c.addEventListener('change', function () { if (c.checked) gewaehlt[m.mitglied_id] = true; else delete gewaehlt[m.mitglied_id]; zaehle(); });
+        return c;
+      } },
+      { feld: 'nachname', titel: 'Name', wert: function (m) { return A.name(m); }, sort: function (m) { return A.name(m); } },
+      { feld: 'mitgliedsnummer', titel: 'Nr.' },
+      { feld: 'ort', titel: 'Ort' }
+    ], gefiltert(), { sortiere: 'nachname', block: 30, leer: 'Keine Mitglieder für diese Auswahl.' });
+    var knoepfe = A.el('div', null, { className: 'knopfleiste' }, [
+      A.knopf('Alle angezeigten auswählen', function () { gefiltert().forEach(function (m) { gewaehlt[m.mitglied_id] = true; }); zaehle(); tab.aktualisiere(gefiltert()); }, 'zweit klein'),
+      A.knopf('Auswahl leeren', function () { gewaehlt = {}; zaehle(); tab.aktualisiere(gefiltert()); }, 'zweit klein')
+    ]);
+    huelle.appendChild(leiste); huelle.appendChild(knoepfe); huelle.appendChild(info); huelle.appendChild(tab);
+    zaehle();
+    return { element: huelle, auswahl: function () { return { mitglied_ids: Object.keys(gewaehlt).map(Number) }; } };
+  }
+
+  // ------------------------------------------------------------------ Reiter: Neues Schreiben
+
+  function reiterNeu(z, param) {
+    param = param || {};
+    var p = A.el('p', 'Lädt Vorlagen …', { className: 'laedt' });
+    z.appendChild(p);
+    ladeVorlagen().then(function (d) {
+      p.remove();
+      var aktiv = d.vorlagen.filter(function (v) { return v.aktiv !== false; });
+      if (!aktiv.length) { z.appendChild(A.el('p', 'Es gibt noch keine Vorlagen. Bitte unter „Vorlagen“ anlegen.', { className: 'leise' })); return; }
+      var start = param.anlass ? aktiv.filter(function (v) { return v.anlass === param.anlass; })[0] : null;
+      var f = A.formular([
+        { name: 'vorlage_id', titel: 'Vorlage', typ: 'auswahl', zahl: true, pflicht: true, liste: aktiv.map(function (v) { return { wert: v.vorlage_id, text: v.bezeichnung + ' (' + v.anlass + ')' }; }) },
+        { name: 'jahr', titel: 'Beitragsjahr', typ: 'zahl' },
+        { name: 'faellig_am', titel: 'Zahlungsziel', typ: 'datum', hilfe: 'Nur für Rechnung/Mahnung; leer = Briefdatum + 14 Tage' }
+      ], { vorlage_id: start ? start.vorlage_id : aktiv[0].vorlage_id, jahr: param.jahr || (A.startdaten.konfig || {}).beitragsjahr || A.startdaten.beitragsjahr });
+      z.appendChild(f.element);
+      z.appendChild(A.el('h2', 'Empfänger'));
+      var wahl = empfaengerWahl(param);
+      z.appendChild(wahl.element);
+      var ergebnis = A.el('div');
+      function eingaben() {
+        var w = f.werte();
+        if (!w.vorlage_id) { f.setzeFehler([{ feld: 'vorlage_id', meldung: 'Bitte eine Vorlage wählen.' }]); return null; }
+        return { vorlage: w.vorlage_id, auswahl: wahl.auswahl(), zusatz: { jahr: w.jahr, faellig_am: w.faellig_am } };
+      }
+      var vorschauKnopf = A.knopf('Vorschau', function () {
+        var e = eingaben(); if (!e) return;
+        vorschauKnopf.disabled = true; A.leere(ergebnis);
+        A.rufe('apiKorrespondenzVorschau', e.vorlage, e.auswahl, e.zusatz).then(function (v) {
+          if (v.unbekannt.length) ergebnis.appendChild(A.el('p', 'Unbekannte Platzhalter in der Vorlage: ' + v.unbekannt.join(', ') + ' – bitte Vorlage korrigieren.', { className: 'ko-warnung' }));
+          var leerNamen = Object.keys(v.leer || {});
+          if (leerNamen.length) ergebnis.appendChild(A.el('p', 'Hinweis: Diese Angaben sind bei einigen Empfängern leer: ' + leerNamen.join(', '), { className: 'ko-warnung' }));
+          ergebnis.appendChild(A.el('p', v.briefe.length + ' Schreiben. Vorschau der ersten ' + Math.min(3, v.briefe.length) + ':', { className: 'leise' }));
+          v.briefe.slice(0, 3).forEach(function (b) { ergebnis.appendChild(briefKarte(b)); });
+        }, function () {}).then(function () { vorschauKnopf.disabled = false; });
+      }, 'zweit');
+      var erstellenKnopf = A.knopf('Erstellen & drucken', function () {
+        var e = eingaben(); if (!e) return;
+        erstellenKnopf.disabled = true;
+        A.rufe('apiKorrespondenzErstellen', e.vorlage, e.auswahl, e.zusatz).then(function (d2) {
+          A.daten.uebernehme(d2);
+          A.leere(ergebnis);
+          ergebnis.appendChild(A.el('p', d2.briefe.length + ' Schreiben erstellt und unter „Erstellte Schreiben“ abgelegt.', { className: 'karte' }));
+          var mail = mailtoLinks(d2.briefe);
+          if (mail) ergebnis.appendChild(mail);
+          ergebnis.appendChild(A.knopf('Erneut drucken', function () { drucke(d2.briefe, 'Schreiben'); }, 'zweit'));
+          drucke(d2.briefe, 'Schreiben');
+        }, function () {}).then(function () { erstellenKnopf.disabled = false; });
+      });
+      z.appendChild(A.el('div', null, { className: 'knopfleiste' }, [vorschauKnopf, erstellenKnopf]));
+      z.appendChild(ergebnis);
+    }, function () { p.textContent = 'Vorlagen konnten nicht geladen werden.'; });
+  }
+
+  // ------------------------------------------------------------------ Nachdruck
+
+  function nachdruck(id) {
+    A.rufe('apiKorrespondenzAnschreiben', id).then(function (a) {
+      var inhalt = A.el('div');
+      var b = { absender: a.absender, empfaenger: a.empfaenger, betreff: a.betreff, text: a.inhalt, ort_datum: '', gruss: '' };
+      if (a.bereinigt) inhalt.appendChild(A.el('p', 'Der Inhalt wurde nach Ablauf der Aufbewahrungsfrist gelöscht.', { className: 'ko-warnung' }));
+      else inhalt.appendChild(briefKarte(b));
+      if (a.dokument_link) inhalt.appendChild(A.el('p', null, null, [linkEl('Abgelegte Datei öffnen', a.dokument_link)]));
+      var knoepfe = [];
+      if (!a.bereinigt) knoepfe.push({ text: 'Drucken', art: '', aktion: function (s) { drucke([b], a.betreff); s(); } });
+      knoepfe.push({ text: 'Ablage-Link …', aktion: function (s) {
+        s();
+        var f = A.formular([{ name: 'dokument_link', titel: 'Link zur PDF im Drive-Ordner', typ: 'text', hilfe: 'https://drive.google.com/… – Ordner nicht „jeder mit dem Link“ freigeben' }], { dokument_link: a.dokument_link });
+        A.dialog('Ablage-Link', f.element, [
+          { text: 'Abbrechen' },
+          { text: 'Speichern', art: '', aktion: function (s2) {
+            A.rufe('apiKorrespondenzAnschreibenLink', a.anschreiben_id, a.version, f.werte().dokument_link || '').then(function (d) {
+              A.daten.uebernehme(d); s2(); neuZeichnen(); A.meldung('Gespeichert.', 'ok');
+            }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
+          } }
+        ]);
+      } });
+      knoepfe.push({ text: 'Schließen' });
+      A.dialog(a.betreff + ' (' + A.datum(a.datum) + ')', inhalt, knoepfe);
+    }, function () {});
+  }
+
+  // ------------------------------------------------------------------ Reiter: Erstellte Schreiben
+
+  function anschreibenTabelle(liste, ohneEmpfaenger) {
+    var spalten = [
+      { feld: 'datum', titel: 'Datum', wert: function (a) { return A.datum(a.datum); }, sort: function (a) { return a.datum; } },
+      { feld: 'anlass', titel: 'Anlass' },
+      { feld: 'betreff', titel: 'Betreff' }
+    ];
+    if (!ohneEmpfaenger) spalten.splice(1, 0, { feld: 'empf', titel: 'Empfänger', wert: function (a) {
+      var m = a.mitglied_id ? mitglied(a.mitglied_id) : null;
+      return m ? A.name(m) : (a.beitragskonto_id ? 'Konto ' + a.beitragskonto_id : '–');
+    } });
+    spalten.push({ feld: 'versandart', titel: 'Versand' });
+    spalten.push({ feld: 'ablage', titel: 'Ablage', sortierbar: false, wert: function (a) { return a.dokument_link ? '✓' : ''; } });
+    return A.tabelle(spalten, liste, { sortiere: 'datum', absteigend: true, leer: 'Noch keine Schreiben.', beiKlick: function (a) { nachdruck(a.anschreiben_id); } });
+  }
+
+  function reiterErstellt(z) {
+    laedt(z, 'korrespondenz', function () {
+      var alle = A.daten.liste('anschreiben');
+      var anlaesse = {};
+      alle.forEach(function (a) { anlaesse[a.anlass] = true; });
+      var zustand = { suche: '' };
+      function gefiltert() {
+        var q = A.falte(zustand.suche);
+        return alle.filter(function (a) {
+          if (zustand.anlass && a.anlass !== zustand.anlass) return false;
+          if (zustand.jahr && String(a.datum).slice(0, 4) !== zustand.jahr) return false;
+          if (!q) return true;
+          var m = a.mitglied_id ? mitglied(a.mitglied_id) : null;
+          return A.falte([a.betreff, a.serie, m ? A.name(m) : ''].join(' ')).indexOf(q) >= 0;
+        });
+      }
+      var jahre = {};
+      alle.forEach(function (a) { jahre[String(a.datum).slice(0, 4)] = true; });
+      var leiste = A.filterleiste([
+        { name: 'anlass', titel: 'Anlass', liste: Object.keys(anlaesse).sort().map(function (x) { return { wert: x, text: x }; }) },
+        { name: 'jahr', titel: 'Jahr', liste: Object.keys(jahre).sort().reverse().map(function (x) { return { wert: x, text: x }; }) }
+      ], function (zu) { zustand = zu; tab.aktualisiere(gefiltert()); }, 'Betreff, Name, Serie …');
+      var tab = anschreibenTabelle(gefiltert());
+      z.appendChild(leiste);
+      z.appendChild(tab);
+    });
+  }
+
+  // ------------------------------------------------------------------ Reiter: Vorlagen
+
+  /** Einfache Vorschau im Browser mit Beispielwerten (die verbindliche Prüfung macht der Server). */
+  function lokaleVorschau(text, werte) {
+    return String(text || '').replace(/\{\{#wenn\s+([a-z_]+)\s*\}\}([\s\S]*?)\{\{\/wenn\}\}/g, function (_, f, inhalt) { return werte[f] ? inhalt : ''; })
+      .replace(/\{\{\s*([a-z_]+)\s*\}\}/g, function (_, f) { return werte[f] !== undefined ? werte[f] : '{{' + f + '}}'; });
+  }
+
+  function vorlageFormular(d, v) {
+    var neu = !v;
+    v = v || { aktiv: true, anlass: 'Allgemein' };
+    var f = A.formular([
+      { name: 'bezeichnung', titel: 'Bezeichnung', typ: 'text', pflicht: true },
+      { name: 'anlass', titel: 'Anlass', typ: 'auswahl', pflicht: true, liste: d.anlaesse },
+      { name: 'betreff', titel: 'Betreff', typ: 'text', pflicht: true, breit: true },
+      { name: 'text', titel: 'Text', typ: 'langtext', pflicht: true },
+      { name: 'aktiv', titel: 'Aktiv', typ: 'janein' },
+      { name: 'bemerkung', titel: 'Bemerkung', typ: 'langtext' }
+    ], v);
+    var ta = f.feld('text');
+    ta.rows = 14;
+    var hilfe = A.el('div', null, { className: 'ko-platzhalter' });
+    d.katalog.forEach(function (k) {
+      var b = A.el('button', '{{' + k.name + '}}', { type: 'button', title: k.beschreibung });
+      b.addEventListener('click', function () {
+        var pos = ta.selectionStart || ta.value.length;
+        ta.value = ta.value.slice(0, pos) + '{{' + k.name + '}}' + ta.value.slice(ta.selectionEnd || pos);
+        ta.focus(); zeigeVorschau();
+      });
+      hilfe.appendChild(b);
+    });
+    var vorschau = A.el('div');
+    var beispiel = A.daten.liste('mitglieder').filter(function (m) { return (m.status_abgeleitet || m.status) === 'aktiv'; })[0] || {};
+    var werte = {
+      briefanrede: beispiel.briefanrede || 'Sehr geehrte Frau Muster', vorname: beispiel.vorname || 'Erika', nachname: beispiel.nachname || 'Muster',
+      name: [beispiel.vorname, beispiel.nachname].filter(Boolean).join(' ') || 'Erika Muster', mitgliedsnummer: beispiel.mitgliedsnummer || '0001',
+      eintrittsdatum: A.datum(beispiel.mitglied_seit), jahr: String((A.startdaten.konfig || {}).beitragsjahr || ''), betrag: '100,00 €',
+      beitrag: '100,00 €', offen: '105,00 €', gebuehr: '5,00 €', mahnstufe: '1', datum: A.datum(A.heute()), verein_name: 'TSV Ergoldsbach e. V.'
+    };
+    function zeigeVorschau() {
+      A.leere(vorschau);
+      vorschau.appendChild(A.el('p', 'Vorschau mit Beispielwerten (nicht ersetzte Platzhalter bleiben sichtbar):', { className: 'leise' }));
+      vorschau.appendChild(briefKarte({ empfaenger: [werte.name], betreff: lokaleVorschau(f.feld('betreff').value, werte), text: lokaleVorschau(ta.value, werte) }));
+    }
+    ta.addEventListener('input', A.verzoegert(zeigeVorschau, 200));
+    var inhalt = A.el('div', null, null, [f.element, A.el('p', 'Platzhalter einfügen:', { className: 'leise' }), hilfe, vorschau]);
+    zeigeVorschau();
+    A.dialog(neu ? 'Neue Vorlage' : 'Vorlage bearbeiten', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: '', aktion: function (s) {
+        var w = f.werte();
+        if (!neu) { w.vorlage_id = v.vorlage_id; w.version = v.version; }
+        A.rufe('apiKorrespondenzVorlageSpeichern', w).then(function (r) {
+          A.daten.uebernehme(r); s(); A.meldung('Vorlage gespeichert.', 'ok');
+          return ladeVorlagen(true).then(function () { A.neuZeichnen(); });
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
+      } }
+    ]);
+  }
+
+  function reiterVorlagen(z) {
+    var p = A.el('p', 'Lädt Vorlagen …', { className: 'laedt' });
+    z.appendChild(p);
+    ladeVorlagen().then(function (d) {
+      p.remove();
+      var darf = A.darf('stammdaten_bearbeiten');
+      if (darf) z.appendChild(A.el('div', null, { className: 'knopfleiste' }, [A.knopf('Neue Vorlage', function () { vorlageFormular(d, null); })]));
+      z.appendChild(A.tabelle([
+        { feld: 'bezeichnung', titel: 'Vorlage' }, { feld: 'anlass', titel: 'Anlass' },
+        { feld: 'aktiv', titel: 'Aktiv', wert: function (v) { return A.janein(v.aktiv); } }
+      ], d.vorlagen, { sortiere: 'bezeichnung', beiKlick: darf ? function (v) { vorlageFormular(d, v); } : function (v) {
+        A.dialog(v.bezeichnung, briefKarte({ betreff: v.betreff, text: v.text }), [{ text: 'Schließen' }]);
+      } }));
+      z.appendChild(A.el('p', 'Platzhalter wie {{briefanrede}} werden beim Erstellen ersetzt. Die IBAN gibt es nur maskiert.', { className: 'leise' }));
+    }, function () { p.textContent = 'Vorlagen konnten nicht geladen werden.'; });
+  }
+
+  // ------------------------------------------------------------------ Reiter: Serienbrief-Export
+
+  function reiterExport(z) {
+    z.appendChild(A.el('p', 'Adressliste für den Seriendruck in Word (früher „Word starten“ in Access). Der Export wird protokolliert.', { className: 'leise' }));
+    var wahl = empfaengerWahl({});
+    z.appendChild(wahl.element);
+    var knopf = A.knopf('CSV für Word herunterladen', function () {
+      var a = wahl.auswahl();
+      if (!a.mitglied_ids || !a.mitglied_ids.length) { A.meldung('Bitte mindestens einen Empfänger auswählen.', 'fehler'); return; }
+      knopf.disabled = true;
+      A.rufe('apiKorrespondenzSerienExport', a, {}).then(function (d) {
+        var felder = ['mitgliedsnummer', 'anrede', 'briefanrede', 'titel', 'vorname', 'nachname', 'anschrift1', 'anschrift2', 'anschrift3', 'anschrift4',
+          'strasse', 'plz', 'ort', 'email', 'versandart', 'beitrag', 'betrag', 'offen'];
+        A.csv('serienbrief_' + A.heute() + '.csv', felder.map(function (x) { return { feld: x, titel: x }; }), d.zeilen);
+      }, function () {}).then(function () { knopf.disabled = false; });
+    });
+    z.appendChild(A.el('div', null, { className: 'knopfleiste' }, [knopf]));
+  }
+
+  // ------------------------------------------------------------------ Ansicht „Schreiben“
+
+  A.registriere('korrespondenz', {
+    titel: 'Schreiben', aktion: 'anschreiben_erstellen', reihenfolge: 45,
+    zeichne: function (ziel, param) {
+      ziel.appendChild(A.el('h1', 'Schreiben'));
+      var reiter = [
+        { id: 'neu', titel: 'Neues Schreiben', zeichne: function (z) { reiterNeu(z, param); } },
+        { id: 'erstellt', titel: 'Erstellte Schreiben', zeichne: reiterErstellt },
+        { id: 'vorlagen', titel: 'Vorlagen', zeichne: reiterVorlagen },
+        { id: 'export', titel: 'Serienbrief-Export', zeichne: reiterExport }
+      ];
+      var leiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
+      var inhalt = A.el('div', null, { role: 'tabpanel' });
+      function waehle(id) {
+        Array.prototype.forEach.call(leiste.children, function (b) { b.setAttribute('aria-selected', b.dataset.id === id ? 'true' : 'false'); });
+        A.leere(inhalt);
+        reiter.filter(function (r) { return r.id === id; })[0].zeichne(inhalt);
+      }
+      reiter.forEach(function (r) {
+        var b = A.el('button', r.titel, { type: 'button', role: 'tab', dataset: { id: r.id } });
+        b.addEventListener('click', function () { waehle(r.id); });
+        leiste.appendChild(b);
+      });
+      ziel.appendChild(leiste);
+      ziel.appendChild(inhalt);
+      waehle((param && param.reiter) || 'neu');
+    }
+  });
+
+  // ------------------------------------------------------------------ Dokument-Links (Dialog)
+
+  function dokumentDialog(vorgabe) {
+    var arten = (A.startdaten.listen || {}).dokument_art || ['Aufnahmeantrag', 'SEPA-Mandat', 'Sonstiges'];
+    var f = A.formular([
+      { name: 'art', titel: 'Art', typ: 'auswahl', pflicht: true, liste: arten },
+      { name: 'titel', titel: 'Titel', typ: 'text', pflicht: true },
+      { name: 'link', titel: 'Link (Google Drive)', typ: 'text', pflicht: true, breit: true, hilfe: 'https://drive.google.com/… – Der Drive-Ordner darf NICHT „jeder mit dem Link“ freigegeben sein.' },
+      { name: 'datum', titel: 'Datum des Dokuments', typ: 'datum' },
+      { name: 'bemerkung', titel: 'Bemerkung', typ: 'langtext' }
+    ], vorgabe);
+    A.dialog('Dokument verknüpfen', f.element, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: '', aktion: function (s) {
+        var w = f.werte();
+        w.mitglied_id = vorgabe.mitglied_id || null;
+        w.beitragskonto_id = vorgabe.beitragskonto_id || null;
+        A.rufe('apiKorrespondenzDokumentSpeichern', w).then(function (d) {
+          A.daten.uebernehme(d); s(); neuZeichnen(); A.meldung('Gespeichert.', 'ok');
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
+      } }
+    ]);
+  }
+
+  function dokumentListe(doks) {
+    var ul = A.el('ul', null, { className: 'ko-doks' });
+    doks.forEach(function (d) {
+      var li = A.el('li', null, null, [A.el('span', d.art, { className: 'marke' }), linkEl(d.titel + (d.datum ? ' (' + A.datum(d.datum) + ')' : ''), d.link)]);
+      if (A.darf('dokumente_verwalten') && d.dokument_id) {
+        li.appendChild(A.knopf('entfernen', function () {
+          A.bestaetige('Link entfernen', 'Den Link „' + d.titel + '“ entfernen? Die Datei im Drive-Ordner bleibt unverändert.', 'Entfernen').then(function (ja) {
+            if (!ja) return;
+            A.rufe('apiKorrespondenzDokumentEntfernen', d.dokument_id, d.version).then(function (r) { A.daten.uebernehme(r); neuZeichnen(); }, function () {});
+          });
+        }, 'zweit klein'));
+      }
+      ul.appendChild(li);
+    });
+    return ul;
+  }
+
+  // ------------------------------------------------------------------ Erweiterungen in anderen Ansichten
+
+  A.erweitere('mitglied.reiter', {
+    id: 'dokumente', titel: 'Dokumente & Schreiben', sicht: 'finanz', aktion: 'dokumente_verwalten',
+    zeichne: function (z, m) {
+      laedt(z, 'korrespondenz', function () {
+        var doks = A.daten.liste('dokumente').filter(function (d) {
+          return d.mitglied_id === m.mitglied_id || (m.beitragskonto_id && d.beitragskonto_id === m.beitragskonto_id && !d.mitglied_id);
+        });
+        var knoepfe = [];
+        if (A.darf('dokumente_verwalten')) knoepfe.push(A.knopf('Dokument verknüpfen', function () { dokumentDialog({ mitglied_id: m.mitglied_id, art: 'Aufnahmeantrag' }); }, 'zweit klein'));
+        z.appendChild(A.abschnitt('Dokumente', knoepfe));
+        if (doks.length) z.appendChild(dokumentListe(doks));
+        else z.appendChild(A.el('p', 'Keine Dokumente verknüpft (z. B. unterschriebener Aufnahmeantrag, SEPA-Mandat).', { className: 'leise' }));
+        var archiv = A.el('div');
+        z.appendChild(archiv);
+        A.rufe('apiKorrespondenzAntragsLinks', m.mitglied_id, A.still).then(function (links) {
+          if (links && links.length) {
+            archiv.appendChild(A.el('p', 'Aus dem Aufnahmeantrag-Archiv:', { className: 'leise' }));
+            archiv.appendChild(dokumentListe(links.map(function (l) { return { art: 'Aufnahmeantrag', titel: l.titel, link: l.link }; })));
+          }
+        }, function () {});
+        var briefe = A.daten.liste('anschreiben').filter(function (a) { return a.mitglied_id === m.mitglied_id; });
+        var k2 = [];
+        if (A.darf('anschreiben_erstellen')) k2.push(A.knopf('Neues Schreiben', function () { A.zeige('korrespondenz', { mitglied_ids: [m.mitglied_id], anlass: anlassVorschlag(m) }); }, 'zweit klein'));
+        z.appendChild(A.abschnitt('Anschreiben', k2));
+        z.appendChild(anschreibenTabelle(briefe, true));
+      });
+    }
+  });
+
+  A.erweitere('mitglied.knoepfe', function (m) {
+    if (!A.darf('anschreiben_erstellen')) return null;
+    var anlass = anlassVorschlag(m);
+    return A.knopf(anlass ? anlass + ' schreiben' : 'Schreiben …', function () {
+      A.zeige('korrespondenz', { mitglied_ids: [m.mitglied_id], anlass: anlass });
+    }, 'zweit');
+  });
+
+  A.erweitere('konto.abschnitt', function (ziel, k) {
+    if (!A.darf('dokumente_verwalten')) return null;
+    var box = A.el('div');
+    ziel.appendChild(box);
+    laedt(box, 'korrespondenz', function () {
+      var doks = A.daten.liste('dokumente').filter(function (d) { return d.beitragskonto_id === k.beitragskonto_id; });
+      var mandat = doks.filter(function (d) { return d.art === 'SEPA-Mandat'; });
+      box.appendChild(A.abschnitt('SEPA-Mandat & Dokumente', [A.knopf('Dokument verknüpfen', function () {
+        dokumentDialog({ beitragskonto_id: k.beitragskonto_id, mitglied_id: k.kontoinhaber_mitglied_id || null, art: 'SEPA-Mandat', titel: 'SEPA-Mandat ' + (k.mandatsreferenz || '') });
+      }, 'zweit klein')]));
+      if (k.zahlweg === 'Lastschrift' && !mandat.length) {
+        box.appendChild(A.el('p', 'Zu diesem Lastschrift-Konto ist kein unterschriebenes SEPA-Mandat verknüpft. Bei einem Widerspruch ist das Mandat der Nachweis.', { className: 'ko-warnung' }));
+      }
+      if (doks.length) box.appendChild(dokumentListe(mandat.concat(doks.filter(function (d) { return d.art !== 'SEPA-Mandat'; }))));
+      var briefe = A.daten.liste('anschreiben').filter(function (a) { return a.beitragskonto_id === k.beitragskonto_id; });
+      if (briefe.length) { box.appendChild(A.el('h3', 'Schreiben zu diesem Konto')); box.appendChild(anschreibenTabelle(briefe, true)); }
+      if (A.darf('anschreiben_erstellen')) {
+        box.appendChild(A.el('div', null, { className: 'knopfleiste' }, [
+          A.knopf('Rechnung', function () { A.zeige('korrespondenz', { beitragskonto_ids: [k.beitragskonto_id], anlass: 'Rechnung' }); }, 'zweit klein'),
+          A.knopf('Mahnung', function () { A.zeige('korrespondenz', { beitragskonto_ids: [k.beitragskonto_id], anlass: 'Mahnung' }); }, 'zweit klein'),
+          A.knopf('SEPA-Vorabinformation', function () { A.zeige('korrespondenz', { beitragskonto_ids: [k.beitragskonto_id], anlass: 'SEPA-Vorabinformation' }); }, 'zweit klein')
+        ]));
+      }
+    });
+    return null;
+  });
 })();
 </script>

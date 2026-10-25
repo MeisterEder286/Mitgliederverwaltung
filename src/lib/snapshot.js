@@ -47,10 +47,17 @@ var SnapshotKern = (function () {
     Qualifikation: 'qualifikationen',
     Ehrungsregel: 'ehrungsregeln',
     Ehrung: 'ehrungen',
-    Einwilligung: 'einwilligungen'
+    Einwilligung: 'einwilligungen',
+    Vorlage: 'vorlagen',
+    Dokument: 'dokumente',
+    Anschreiben: 'anschreiben'
   };
   var TABS = Object.keys(LISTEN);
-  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel'];
+  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel', 'Vorlage'];
+  // Schriftverkehr: nur mit Sichtklasse „finanz“; Zeilen nur zu sichtbaren Personen/Konten.
+  var KORRESPONDENZ = ['Dokument', 'Anschreiben'];
+  // Große Textfelder bleiben aus Basis und Snapshot heraus; sie werden bei Bedarf einzeln geladen.
+  var OHNE_FELDER = { Anschreiben: ['inhalt'], Vorlage: ['text'] };
   var FINANZ = ['Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung'];
 
   /**
@@ -60,7 +67,8 @@ var SnapshotKern = (function () {
    */
   var BEREICHE = {
     finanzen: ['gemeinschaften', 'konten', 'sollstellungen'],
-    historie: ['zeitraeume', 'einwilligungen']
+    historie: ['zeitraeume', 'einwilligungen'],
+    korrespondenz: ['dokumente', 'anschreiben']
   };
   function bereichVon(liste) {
     for (var b in BEREICHE) if (BEREICHE[b].indexOf(liste) >= 0) return b;
@@ -126,9 +134,17 @@ var SnapshotKern = (function () {
     var basis = { tabs: {}, konfig: konfig || {} };
     TABS.forEach(function (tab) {
       var zeilen = (tabs && tabs[tab]) || [];
-      basis.tabs[tab] = tab === 'Beitragskonto' ? zeilen.map(kontoOhneIban) : zeilen.slice();
+      basis.tabs[tab] = tab === 'Beitragskonto' ? zeilen.map(kontoOhneIban) : OHNE_FELDER[tab] ? zeilen.map(ohneGrosseFelder(tab)) : zeilen.slice();
     });
     return basis;
+  }
+
+  function ohneGrosseFelder(tab) {
+    return function (z) {
+      var o = {};
+      Object.keys(z).forEach(function (f) { if (OHNE_FELDER[tab].indexOf(f) < 0) o[f] = z[f]; });
+      return o;
+    };
   }
 
   function kontoOhneIban(k) {
@@ -268,6 +284,17 @@ var SnapshotKern = (function () {
         return;
       }
       if (tab === 'Mitglied') return;   // unten mit abgeleiteten Feldern
+      if (hat(KORRESPONDENZ, tab)) {
+        if (!hat(sicht, 'finanz')) return;
+        var kontenSichtbar = {};
+        if (!kreis.sicht.alle) finanzZeilen(basis, 'Beitragskonto', kreis).forEach(function (k) { kontenSichtbar[k.beitragskonto_id] = true; });
+        aus[liste] = (zeilen || []).filter(function (z) {
+          if (kreis.sicht.alle) return true;
+          if (z.mitglied_id !== null && z.mitglied_id !== undefined) return !!kreis.ids[z.mitglied_id];
+          return !!kontenSichtbar[z.beitragskonto_id];
+        }).map(function (z) { return schnitt(ktx, tab, z); });
+        return;
+      }
       if (tab === 'Beitragskonto' || tab === 'Beitragsgemeinschaft' || tab === 'Sollstellung') {
         var ab = abJahr(ix.konfig, heute);
         aus[liste] = finanzZeilen(basis, tab, kreis).filter(function (z) {
@@ -348,7 +375,7 @@ var SnapshotKern = (function () {
       var feld = idSpalte(a.tab);
       var liste = neu.tabs[a.tab] = neu.tabs[a.tab].slice();
       if (a.neu) {
-        var zeile = a.tab === 'Beitragskonto' ? kontoOhneIban(a.neu) : a.neu;
+        var zeile = a.tab === 'Beitragskonto' ? kontoOhneIban(a.neu) : OHNE_FELDER[a.tab] ? ohneGrosseFelder(a.tab)(a.neu) : a.neu;
         var i = -1;
         for (var j = 0; j < liste.length; j++) if (String(liste[j][feld]) === String(zeile[feld])) { i = j; break; }
         if (i >= 0) liste[i] = zeile; else liste.push(zeile);

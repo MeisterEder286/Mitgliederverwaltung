@@ -13,7 +13,7 @@ const { erzeugeFakes, beispielTabs } = require('./hilfe/gas-fakes');
 const HEUTE = '2026-10-25';
 const TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
   'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
-  'Ehrungsregel', 'Ehrung', 'Einwilligung', '_Konfig', 'Benutzer', '_Protokoll', '_Messung'];
+  'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Vorlage', 'Dokument', 'Anschreiben', '_Konfig', 'Benutzer', '_Protokoll', '_Messung'];
 
 function aufbau(email) {
   const f = erzeugeFakes({ tabs: beispielTabs(TABS), email: email || 'verwaltung@tsv-ergoldsbach.de' });

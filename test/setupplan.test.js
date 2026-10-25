@@ -78,7 +78,7 @@ test('leeres Sheet: alle Tabs, Köpfe, Formate, Startbelegung, ID-Zähler', () =
   assert.deepStrictEqual(auswahl.find(a => a.name === 'ehrenmitglied').werte, ['ja', 'nein']);
 
   const seeds = plan.schritte.filter(s => s.art === 'startbelegung').map(s => s.tab).sort();
-  assert.deepStrictEqual(seeds, ['Abteilung', 'Aufbewahrungsfrist', 'Beitragsart', 'Ehrungsregel', 'Funktionsart', 'Qualifikationsart']);
+  assert.deepStrictEqual(seeds, ['Abteilung', 'Aufbewahrungsfrist', 'Beitragsart', 'Ehrungsregel', 'Funktionsart', 'Qualifikationsart', 'Vorlage']);
 
   // Startbelegung typgerecht und in Kopf-Reihenfolge, version = 1
   const ba = plan.schritte.find(s => s.art === 'startbelegung' && s.tab === 'Beitragsart');

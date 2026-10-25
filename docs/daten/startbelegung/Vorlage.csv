@@ -1,0 +1,88 @@
+vorlage_id,bezeichnung,anlass,betreff,text,aktiv,bemerkung
+1,Aufnahmebestätigung,Aufnahmebestätigung,Willkommen im TSV Ergoldsbach – Ihre Mitgliedschaft,"{{briefanrede}},
+
+herzlich willkommen im TSV Ergoldsbach e. V.! Wir freuen uns, dass Sie dabei sind.
+
+Ihre Mitgliedschaft beginnt am {{eintrittsdatum}}. Ihre Mitgliedsnummer lautet {{mitgliedsnummer}}.{{#wenn abteilungen}} Sie sind folgenden Abteilungen zugeordnet: {{abteilungen}}.{{/wenn}}
+
+{{#wenn beitrag}}Ihr Jahresbeitrag beträgt {{beitrag}} ({{beitragsart}}).{{/wenn}}{{#wenn mandatsreferenz}} Der Beitrag wird per SEPA-Lastschrift unter der Mandatsreferenz {{mandatsreferenz}} eingezogen (Gläubiger-ID {{glaeubiger_id}}).{{/wenn}}
+
+Bitte teilen Sie uns Änderungen Ihrer Anschrift oder Bankverbindung rechtzeitig mit.
+
+Mit sportlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+2,Austrittsbestätigung,Austrittsbestätigung,Bestätigung Ihres Austritts,"{{briefanrede}},
+
+wir bestätigen den Eingang Ihrer Kündigung{{#wenn kuendigung_eingang}} vom {{kuendigung_eingang}}{{/wenn}}. Ihre Mitgliedschaft im TSV Ergoldsbach e. V. endet zum {{austritt_wirksam}}.
+
+Bis zu diesem Tag bleiben Ihre Rechte und Pflichten als Mitglied bestehen. Ein bereits erteiltes SEPA-Mandat verwenden wir nach dem Austritt nicht mehr.
+
+Wir bedanken uns für Ihre Treue und würden uns freuen, Sie wieder einmal bei uns begrüßen zu dürfen.
+
+Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+3,Rechnung Mitgliedsbeitrag,Rechnung,Mitgliedsbeitrag {{jahr}} – Rechnung,"{{briefanrede}},
+
+für das Beitragsjahr {{jahr}} stellen wir Ihnen den Mitgliedsbeitrag in Höhe von {{betrag}} in Rechnung.
+
+Bitte überweisen Sie den Betrag bis zum {{faellig_am}} auf das Vereinskonto (siehe Briefkopf) unter Angabe Ihrer Mitgliedsnummer {{mitgliedsnummer}}.
+
+Bequemer geht es per Lastschrift: Ein SEPA-Mandat erhalten Sie gerne bei der Mitgliederverwaltung.
+
+Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+4,Mahnung Mitgliedsbeitrag,Mahnung,{{mahnstufe}}. Mahnung – Mitgliedsbeitrag {{jahr}},"{{briefanrede}},
+
+sicher ist es Ihrer Aufmerksamkeit entgangen: Der Mitgliedsbeitrag für {{jahr}} ist noch offen.{{#wenn gebuehr}} Bei der Lastschrift ist eine Rücklastschrift entstanden; die Bankgebühr von {{gebuehr}} ist im offenen Betrag enthalten.{{/wenn}}
+
+Offener Betrag: {{offen}}
+
+Bitte überweisen Sie den Betrag bis zum {{faellig_am}} auf das Vereinskonto unter Angabe Ihrer Mitgliedsnummer {{mitgliedsnummer}}. Sollte sich Ihre Zahlung mit diesem Schreiben überschnitten haben, betrachten Sie es bitte als gegenstandslos.
+
+Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+5,SEPA-Vorabinformation,SEPA-Vorabinformation,Vorabinformation zum Lastschrifteinzug {{jahr}},"{{briefanrede}},
+
+wir ziehen den Mitgliedsbeitrag für {{jahr}} in Höhe von {{betrag}} am {{einzugsdatum}} von Ihrem Konto {{iban_maskiert}} (Kontoinhaber: {{kontoinhaber}}) ein.
+
+Mandatsreferenz: {{mandatsreferenz}}
+Gläubiger-Identifikationsnummer: {{glaeubiger_id}}
+
+Bitte sorgen Sie für ausreichende Deckung. Fällt der Einzugstag auf ein Wochenende oder einen Feiertag, erfolgt die Belastung am nächsten Bankarbeitstag.
+
+Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+6,Beitragsänderung,Beitragsänderung,Änderung Ihres Mitgliedsbeitrags ab {{jahr}},"{{briefanrede}},
+
+ab dem Beitragsjahr {{jahr}} gilt für Sie die Beitragsart „{{beitragsart}}“ mit einem Jahresbeitrag von {{beitrag}}.
+
+{{#wenn mandatsreferenz}}Der Beitrag wird wie gewohnt per Lastschrift (Mandatsreferenz {{mandatsreferenz}}) eingezogen.{{/wenn}}
+
+Bei Fragen wenden Sie sich gerne an die Mitgliederverwaltung.
+
+Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+7,Umstellung auf Einzelbeitrag,Umstellung Einzelbeitrag,Ihr Mitgliedsbeitrag ab {{jahr}},"{{briefanrede}},
+
+bisher waren Sie über den Familienbeitrag beim TSV Ergoldsbach e. V. versichert. Da die Voraussetzungen dafür ab {{jahr}} nicht mehr vorliegen, führen wir Sie ab dann mit einem eigenen Beitrag: „{{beitragsart}}“, {{beitrag}} im Jahr.
+
+{{#wenn mandatsreferenz}}Der Beitrag wird weiterhin vom bisherigen Konto (Kontoinhaber {{kontoinhaber}}) eingezogen. Wenn Sie den Beitrag künftig selbst zahlen möchten, senden Sie uns bitte ein eigenes SEPA-Mandat.{{/wenn}}
+
+Befinden Sie sich noch in Schule, Studium oder Ausbildung, senden Sie uns bitte einen Nachweis – dann prüfen wir eine Verlängerung des Familienbeitrags.
+
+Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+8,Ausbildungsnachweis anfordern,Ausbildungsnachweis anfordern,"Nachweis über Schule, Studium oder Ausbildung","{{briefanrede}},
+
+Sie sind bis zum {{ausbildung_bis}} über den Familienbeitrag beim TSV Ergoldsbach e. V. geführt, weil Sie sich in Schule, Studium oder Ausbildung befinden.
+
+Damit das auch danach so bleiben kann, benötigen wir einen aktuellen Nachweis (z. B. Immatrikulations- oder Schulbescheinigung, Ausbildungsvertrag). Ohne Nachweis stellen wir ab dem folgenden Beitragsjahr auf einen eigenen Beitrag um.
+
+Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+9,Ehrung – Einladung,Ehrung,Einladung zur Ehrung – {{ehrung}},"{{briefanrede}},
+
+im Namen der Vorstandschaft dürfen wir Ihnen herzlich gratulieren: Sie werden für „{{ehrung}}“ geehrt.
+
+Wir laden Sie herzlich zur Ehrung ein und freuen uns auf Ihr Kommen. Den Termin teilen wir Ihnen gesondert mit.
+
+Mit sportlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
+10,Glückwunsch zum Geburtstag,Geburtstag,Herzlichen Glückwunsch zum {{alter}}. Geburtstag,"{{briefanrede}},
+
+zu Ihrem {{alter}}. Geburtstag gratulieren wir Ihnen im Namen des ganzen Vereins sehr herzlich und wünschen Ihnen Gesundheit, Glück und Freude.
+
+Vielen Dank für Ihre langjährige Treue zum TSV Ergoldsbach e. V.
+
+Mit sportlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
