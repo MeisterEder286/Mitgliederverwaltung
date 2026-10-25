@@ -57,10 +57,9 @@ test('V2/V3/V4/V6/V9 umgesetzt', () => {
   assert.ok(T._Messung);
 });
 
-test('sensible Tabs: keine Spalte mit Sichtklasse intern/kontakt in Beitragskonto, Sollstellung, Qualifikation', () => {
+test('sensible Tabs: keine Spalte (auch nicht version/geaendert_*) mit Sichtklasse intern/kontakt in Beitragskonto, Sollstellung, Qualifikation', () => {
   ['Beitragskonto', 'Sollstellung', 'Qualifikation'].forEach(tab =>
-    T[tab].spalten.filter(s => !['version', 'geaendert_am', 'geaendert_von'].includes(s.name))
-      .forEach(s => assert.ok(['finanz', 'hochsensibel'].includes(s.sicht), tab + '.' + s.name)));
+    T[tab].spalten.forEach(s => assert.ok(['finanz', 'hochsensibel'].includes(s.sicht), tab + '.' + s.name)));
 });
 
 test('Startbelegung: Köpfe passen zum Schema, Ehrungen ab letztem Eintritt', () => {

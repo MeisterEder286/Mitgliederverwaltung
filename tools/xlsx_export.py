@@ -42,7 +42,7 @@ FELD_KLASSE = {
     },
     'Aufnahmeantrag': {'finanz': ['kontoinhaber_name', 'zahlweg_wunsch']},
 }
-TECHNISCH = ['version', 'geaendert_am', 'geaendert_von']   # Sichtklasse intern (Client braucht version)
+TECHNISCH = ['version', 'geaendert_am', 'geaendert_von']   # Sichtklasse des Tabs (Client braucht version, wo er den Tab sieht)
 
 NICHT_VERSIONIERT = ['_Konfig', '_Protokoll', '_Messung', 'Statistik_Jahr']
 
@@ -98,7 +98,7 @@ def schreibe(pfad, kopf, zeilen):
 
 def klasse(tab, spalte):
     if spalte in TECHNISCH:
-        return 'intern'
+        return TAB_KLASSE.get(tab, 'intern')
     for k, felder in FELD_KLASSE.get(tab, {}).items():
         if spalte in felder:
             return k

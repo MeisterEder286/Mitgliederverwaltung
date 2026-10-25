@@ -52,9 +52,9 @@ var Schema = (function () {
         {"name":"uebernommen_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"verwaltung"},
         {"name":"mitglied_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"verwaltung"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"verwaltung"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"verwaltung"}
       ]
     },
     "Mitglied": {
@@ -210,9 +210,9 @@ var Schema = (function () {
         {"name":"festbetrag","typ":"Dezimal","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"aktiv","typ":"ja/nein","pflicht":"ja","liste":"ja_nein","sicht":"finanz"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"finanz"}
       ]
     },
     "Beitragskonto": {
@@ -233,9 +233,9 @@ var Schema = (function () {
         {"name":"abw_land","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"aktiv","typ":"ja/nein","pflicht":"ja","liste":"ja_nein","sicht":"finanz"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"finanz"}
       ]
     },
     "Sollstellung": {
@@ -254,9 +254,9 @@ var Schema = (function () {
         {"name":"mahnstufe","typ":"Ganzzahl","pflicht":"ja","liste":null,"sicht":"finanz"},
         {"name":"ruecklastschrift_grund","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"finanz"}
       ]
     },
     "Qualifikationsart": {
@@ -291,9 +291,9 @@ var Schema = (function () {
         {"name":"zu_loeschen_ab","typ":"Datum","pflicht":"nein","liste":null,"sicht":"hochsensibel"},
         {"name":"geloescht_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"hochsensibel"},
         {"name":"bemerkung","typ":"Text","pflicht":"nein","liste":null,"sicht":"hochsensibel"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"hochsensibel"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"hochsensibel"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"hochsensibel"}
       ]
     },
     "Ehrungsregel": {
@@ -340,9 +340,9 @@ var Schema = (function () {
         {"name":"aktiv","typ":"ja/nein","pflicht":"ja","liste":"ja_nein","sicht":"verwaltung"},
         {"name":"angelegt_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"verwaltung"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"verwaltung"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"verwaltung"}
       ]
     },
     "Einwilligung": {
@@ -358,9 +358,9 @@ var Schema = (function () {
         {"name":"widerrufen_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"kontakt"},
         {"name":"nachweis_ort","typ":"Text","pflicht":"nein","liste":null,"sicht":"kontakt"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"kontakt"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"kontakt"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"kontakt"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"kontakt"}
       ]
     },
     "Aufbewahrungsfrist": {
@@ -374,9 +374,9 @@ var Schema = (function () {
         {"name":"rechtsgrundlage","typ":"Text","pflicht":"nein","liste":null,"sicht":"verwaltung"},
         {"name":"aktiv","typ":"ja/nein","pflicht":"ja","liste":"ja_nein","sicht":"verwaltung"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"verwaltung"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"verwaltung"}
       ]
     },
     "Betroffenenanfrage": {
@@ -397,9 +397,9 @@ var Schema = (function () {
         {"name":"rueckmeldung_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"verwaltung"},
         {"name":"restdaten_bis","typ":"Datum","pflicht":"nein","liste":null,"sicht":"verwaltung"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"verwaltung"},
-        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
-        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"verwaltung"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"verwaltung"}
       ]
     },
     "Statistik_Jahr": {

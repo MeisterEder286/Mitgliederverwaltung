@@ -40,9 +40,9 @@ Aufnahmeantrag,ablehnungsgrund,Text,nein,,verwaltung,—
 Aufnahmeantrag,uebernommen_am,Datum,nein,,verwaltung,Wann daraus Mitgliedsdaten wurden.
 Aufnahmeantrag,mitglied_id,FK,nein,,verwaltung,→ Mitglied. Erst nach der Übernahme gefüllt.
 Aufnahmeantrag,bemerkung,Langtext,nein,,verwaltung,—
-Aufnahmeantrag,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Aufnahmeantrag,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Aufnahmeantrag,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Aufnahmeantrag,version,Ganzzahl,auto,,verwaltung,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Aufnahmeantrag,geaendert_am,Zeitpunkt,auto,,verwaltung,Letzte Änderung. Nur vom Skript. (V1)
+Aufnahmeantrag,geaendert_von,Text,auto,,verwaltung,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Mitglied,mitglied_id,Ganzzahl,PK,,intern,"Vom Skript vergeben, nie ändern, nie wiederverwenden."
 Mitglied,mitgliedsnummer,Text,ja,,intern,"Externe Nummer aus dem Altbestand, eindeutig."
 Mitglied,anrede,Auswahl,nein,anrede,intern,Für Serienbriefe.
@@ -158,9 +158,9 @@ Beitragsgemeinschaft,bezeichnung,Text,ja,,finanz,z. B. „Familie Wagner“.
 Beitragsgemeinschaft,festbetrag,Dezimal,nein,,finanz,"Pauschale, EINMAL je Gemeinschaft gezogen. Leer = Mitglieder zahlen Einzeltarife."
 Beitragsgemeinschaft,aktiv,ja/nein,ja,ja_nein,finanz,—
 Beitragsgemeinschaft,bemerkung,Langtext,nein,,finanz,—
-Beitragsgemeinschaft,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Beitragsgemeinschaft,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Beitragsgemeinschaft,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Beitragsgemeinschaft,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Beitragsgemeinschaft,geaendert_am,Zeitpunkt,auto,,finanz,Letzte Änderung. Nur vom Skript. (V1)
+Beitragsgemeinschaft,geaendert_von,Text,auto,,finanz,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Beitragskonto,beitragskonto_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
 Beitragskonto,kontoinhaber_name,Text,ja,,finanz,"Auch bei externem Zahler, der nicht Mitglied ist."
 Beitragskonto,kontoinhaber_mitglied_id,FK,nein,,finanz,"→ Mitglied, falls der Zahler selbst Mitglied ist."
@@ -176,9 +176,9 @@ Beitragskonto,abw_ort,Text,nein,,finanz,—
 Beitragskonto,abw_land,Text,nein,,finanz,—
 Beitragskonto,aktiv,ja/nein,ja,ja_nein,finanz,—
 Beitragskonto,bemerkung,Langtext,nein,,finanz,—
-Beitragskonto,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Beitragskonto,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Beitragskonto,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Beitragskonto,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Beitragskonto,geaendert_am,Zeitpunkt,auto,,finanz,Letzte Änderung. Nur vom Skript. (V1)
+Beitragskonto,geaendert_von,Text,auto,,finanz,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Sollstellung,sollstellung_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
 Sollstellung,beitragskonto_id,FK,ja,,finanz,"→ Beitragskonto. Eindeutig je (beitragskonto_id, jahr)."
 Sollstellung,jahr,Ganzzahl,ja,,finanz,Beitragsjahr.
@@ -192,9 +192,9 @@ Sollstellung,buchungsdatum,Datum,nein,,finanz,Tatsächliche Buchung.
 Sollstellung,mahnstufe,Ganzzahl,ja,,finanz,Standard 0.
 Sollstellung,ruecklastschrift_grund,Text,nein,,finanz,"z. B. Konto erloschen, keine Deckung, Widerspruch."
 Sollstellung,bemerkung,Langtext,nein,,finanz,—
-Sollstellung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Sollstellung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Sollstellung,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Sollstellung,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Sollstellung,geaendert_am,Zeitpunkt,auto,,finanz,Letzte Änderung. Nur vom Skript. (V1)
+Sollstellung,geaendert_von,Text,auto,,finanz,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Qualifikationsart,qualifikationsart_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
 Qualifikationsart,bezeichnung,Text,ja,,intern,"z. B. Erweitertes Führungszeugnis, Trainer-C-Lizenz."
 Qualifikationsart,kategorie,Auswahl,ja,qual_kategorie,intern,"Steuert, welche Felder gefüllt werden."
@@ -219,9 +219,9 @@ Qualifikation,wiedervorlage_am,Datum,nein,,hochsensibel,Beim Führungszeugnis: e
 Qualifikation,zu_loeschen_ab,Datum,nein,,hochsensibel,Ende der Funktion + loeschfrist_monate. Danach Zeile leeren.
 Qualifikation,geloescht_am,Datum,nein,,hochsensibel,Wann der Vermerk tatsächlich gelöscht wurde.
 Qualifikation,bemerkung,Text,nein,,hochsensibel,Niemals Inhalte des Führungszeugnisses.
-Qualifikation,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Qualifikation,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Qualifikation,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Qualifikation,version,Ganzzahl,auto,,hochsensibel,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Qualifikation,geaendert_am,Zeitpunkt,auto,,hochsensibel,Letzte Änderung. Nur vom Skript. (V1)
+Qualifikation,geaendert_von,Text,auto,,hochsensibel,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Ehrungsregel,ehrungsregel_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
 Ehrungsregel,typ,Auswahl,ja,ehrungstyp,intern,—
 Ehrungsregel,schwelle,Ganzzahl,ja,,intern,"Jahre Mitgliedschaft, Lebensalter oder Jahre im Amt."
@@ -253,9 +253,9 @@ Benutzer,mitglied_id,FK,nein,,verwaltung,"→ Mitglied, falls der Benutzer selbs
 Benutzer,aktiv,ja/nein,ja,ja_nein,verwaltung,"Zugang entziehen heißt „nein“ setzen, nicht löschen."
 Benutzer,angelegt_am,Datum,nein,,verwaltung,—
 Benutzer,bemerkung,Langtext,nein,,verwaltung,—
-Benutzer,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Benutzer,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Benutzer,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Benutzer,version,Ganzzahl,auto,,verwaltung,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Benutzer,geaendert_am,Zeitpunkt,auto,,verwaltung,Letzte Änderung. Nur vom Skript. (V1)
+Benutzer,geaendert_von,Text,auto,,verwaltung,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Einwilligung,einwilligung_id,Ganzzahl,PK,,kontakt,Vom Skript vergeben.
 Einwilligung,mitglied_id,FK,ja,,kontakt,→ Mitglied.
 Einwilligung,art,Auswahl,ja,einwilligung_art,kontakt,Wofür die Einwilligung gilt.
@@ -266,9 +266,9 @@ Einwilligung,erteilt_durch,Text,nein,,kontakt,Bei Minderjährigen die gesetzlich
 Einwilligung,widerrufen_am,Datum,nein,,kontakt,"Widerruf beendet die Einwilligung, löscht sie aber nicht — der Nachweis bleibt."
 Einwilligung,nachweis_ort,Text,nein,,kontakt,"Wo der Beleg liegt, z. B. „Ordner Aufnahmeanträge 2018“."
 Einwilligung,bemerkung,Langtext,nein,,kontakt,—
-Einwilligung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Einwilligung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Einwilligung,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Einwilligung,version,Ganzzahl,auto,,kontakt,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Einwilligung,geaendert_am,Zeitpunkt,auto,,kontakt,Letzte Änderung. Nur vom Skript. (V1)
+Einwilligung,geaendert_von,Text,auto,,kontakt,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Aufbewahrungsfrist,aufbewahrungsfrist_id,Ganzzahl,PK,,verwaltung,Vom Skript vergeben.
 Aufbewahrungsfrist,datenkategorie,Text,ja,,verwaltung,Welche Art von Daten die Frist betrifft.
 Aufbewahrungsfrist,betrifft_tab,Text,ja,,verwaltung,"Tab bzw. Feldgruppe, für die die Frist gilt."
@@ -277,9 +277,9 @@ Aufbewahrungsfrist,bezugspunkt,Auswahl,ja,bezugspunkt,verwaltung,Woran die Frist
 Aufbewahrungsfrist,rechtsgrundlage,Text,nein,,verwaltung,VORSCHLAG — vom Vorstand bzw. Datenschutzbeauftragten zu bestätigen.
 Aufbewahrungsfrist,aktiv,ja/nein,ja,ja_nein,verwaltung,—
 Aufbewahrungsfrist,bemerkung,Langtext,nein,,verwaltung,—
-Aufbewahrungsfrist,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Aufbewahrungsfrist,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Aufbewahrungsfrist,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Aufbewahrungsfrist,version,Ganzzahl,auto,,verwaltung,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Aufbewahrungsfrist,geaendert_am,Zeitpunkt,auto,,verwaltung,Letzte Änderung. Nur vom Skript. (V1)
+Aufbewahrungsfrist,geaendert_von,Text,auto,,verwaltung,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Betroffenenanfrage,anfrage_id,Ganzzahl,PK,,verwaltung,Vom Skript vergeben.
 Betroffenenanfrage,mitglied_id,FK,ja,,verwaltung,→ Mitglied.
 Betroffenenanfrage,art,Auswahl,ja,anfrage_art,verwaltung,Welches Recht geltend gemacht wird.
@@ -295,9 +295,9 @@ Betroffenenanfrage,umgesetzt_am,Datum,nein,,verwaltung,—
 Betroffenenanfrage,rueckmeldung_am,Datum,nein,,verwaltung,Wann die betroffene Person Antwort bekam.
 Betroffenenanfrage,restdaten_bis,Datum,nein,,verwaltung,Bis wann gesperrte Restdaten noch bestehen. Danach erneut vorlegen.
 Betroffenenanfrage,bemerkung,Langtext,nein,,verwaltung,—
-Betroffenenanfrage,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Betroffenenanfrage,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Betroffenenanfrage,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Betroffenenanfrage,version,Ganzzahl,auto,,verwaltung,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Betroffenenanfrage,geaendert_am,Zeitpunkt,auto,,verwaltung,Letzte Änderung. Nur vom Skript. (V1)
+Betroffenenanfrage,geaendert_von,Text,auto,,verwaltung,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Statistik_Jahr,statistik_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
 Statistik_Jahr,jahr,Ganzzahl,ja,,intern,Berichtsjahr.
 Statistik_Jahr,stichtag,Datum,ja,,intern,Meist 01.01. — gleicher Stichtag wie die BLSV-Bestandserhebung.
