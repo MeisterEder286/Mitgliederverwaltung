@@ -9,6 +9,7 @@
  *  3. <script>-Blöcke der HTML-Dateien unter src/client/ auf Syntax prüfen.
  *  4. Kopfkommentar in jeder Code-Datei (Sicherheitsregel C7).
  *  5. appsscript.json: gültiges JSON, nur erlaubte OAuth-Scopes (Sicherheitsregel A5).
+ *  6. Getrenntes Backup-Projekt backup/: Syntax, Kopfkommentar, eigene Scope-Liste, KEINE Web-App.
  */
 'use strict';
 const fs = require('fs');
@@ -78,6 +79,30 @@ try {
   if (manifest.webapp && manifest.webapp.executeAs !== 'USER_DEPLOYING') fehler.push('appsscript.json: webapp.executeAs muss USER_DEPLOYING sein (A1)');
   if (manifest.webapp && manifest.webapp.access !== 'DOMAIN') fehler.push('appsscript.json: webapp.access muss DOMAIN sein (A1)');
 } catch (e) { fehler.push('appsscript.json: ' + e.message); }
+
+// 6 – Backup-Projekt (eigenes Apps-Script-Projekt mit Drive-Scope; wird nie in src/ gepusht)
+const BACKUP = path.join(__dirname, '..', 'backup');
+const BACKUP_SCOPES = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/script.scriptapp',
+  'https://www.googleapis.com/auth/script.send_mail'
+];
+if (fs.existsSync(BACKUP)) {
+  const bjs = dateien(BACKUP, '.js');
+  const bctx = vm.createContext({ console });
+  bjs.forEach(p => {
+    const code = fs.readFileSync(p, 'utf8');
+    if (!/^\s*\/\*\*/.test(code)) fehler.push(rel(p) + ': Kopfkommentar /** … */ fehlt (C7)');
+    try { new vm.Script(code, { filename: rel(p) }).runInContext(bctx); } catch (e) { fehler.push(rel(p) + ': ' + e.message); }
+  });
+  try {
+    const bm = JSON.parse(fs.readFileSync(path.join(BACKUP, 'appsscript.json'), 'utf8'));
+    (bm.oauthScopes || []).forEach(s => { if (!BACKUP_SCOPES.includes(s)) fehler.push('backup/appsscript.json: nicht freigegebener Scope ' + s); });
+    if (!bm.oauthScopes) fehler.push('backup/appsscript.json: oauthScopes fehlen');
+    if (bm.webapp) fehler.push('backup/appsscript.json: das Backup-Projekt darf keine Web-App sein');
+  } catch (e) { fehler.push('backup/appsscript.json: ' + e.message); }
+}
 
 if (fehler.length) {
   console.error('npm run check: ' + fehler.length + ' Fehler\n  ' + fehler.join('\n  '));

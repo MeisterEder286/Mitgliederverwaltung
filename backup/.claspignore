@@ -1,0 +1,3 @@
+# Nur Code und Manifest des Backup-Projekts übertragen.
+**/*.md
+.clasp.json.beispiel
