@@ -26,7 +26,7 @@ var Datenschutz = (function () {
 
   var BASIS_TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
     'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
-    'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Anschreiben', 'Dokument'];
+    'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Anschreiben', 'Dokument', 'Notiz'];
   var KASSIER_TABELLEN = ['Beitragskonto', 'Sollstellung', 'Beitragsgemeinschaft', 'SEPA'];
   var ABGESCHLOSSEN = ['vollständig umgesetzt', 'teilweise umgesetzt', 'abgelehnt'];
   var SEITE = 50;

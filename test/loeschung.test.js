@@ -81,3 +81,16 @@ test('Anonymisierung leert Anschreiben-Inhalte und entfernt Dokument-Links (Mand
   assert.deepStrictEqual(plan.entfernen.Dokument, [1]);
   assert.ok((plan.aenderungen.Dokument || []).length === 1);
 });
+
+test('Interne Notizen: Teil der Auskunft, beim Anonymisieren entfernt (fremde Notizen bleiben)', () => {
+  const { g, daten, konfig } = ladeFachdaten();
+  daten.Notiz = [
+    { notiz_id: 1, mitglied_id: 5, art: 'Telefonat', text: 'Rückruf wegen Beitrag', sichtbar_fuer: 'Finanzen' },
+    { notiz_id: 2, mitglied_id: 1, art: 'Notiz', text: 'andere Person', sichtbar_fuer: 'Verwaltung' }
+  ];
+  const a = kopie(g.Loeschung.auskunft(5, daten));
+  const abschnitt = (a.abschnitte || a).find(x => x.titel === 'Interne Notizen');
+  assert.ok(abschnitt && JSON.stringify(abschnitt).includes('Rückruf wegen Beitrag') && !JSON.stringify(abschnitt).includes('andere Person'));
+  const p = kopie(g.Loeschung.anonymisierePlan(daten.Mitglied.find(m => m.mitglied_id === 5), daten, konfig, '2026-10-25'));
+  assert.deepStrictEqual(p.entfernen.Notiz, [1]);
+});

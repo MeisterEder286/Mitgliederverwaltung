@@ -34,7 +34,7 @@ test('wartungNachts: Status nachgezogen, Löschbarkeit gesetzt, alte Messwerte e
   const g = ladeProjekt(f.globale);
   const erg = rein(g.wartungNachts());
   assert.ok(erg && !erg.abgebrochen, JSON.stringify(erg));
-  assert.deepStrictEqual(Object.keys(erg.ergebnisse), ['status', 'fristen', 'loeschbarkeit', 'protokoll', 'messung', 'korrespondenz', 'snapshot']);
+  assert.deepStrictEqual(Object.keys(erg.ergebnisse), ['status', 'fristen', 'loeschbarkeit', 'protokoll', 'messung', 'korrespondenz', 'notizen', 'snapshot']);
   Object.values(erg.ergebnisse).forEach(v => assert.ok(!String(v).startsWith('Fehler'), JSON.stringify(erg.ergebnisse)));
   const m = objekte(f, 'Mitglied').find(x => x.mitglied_id === id);
   assert.strictEqual(m.status, 'ausgetreten');
@@ -72,7 +72,7 @@ test('Laufzeitschutz: Abbruch nach Zeitgrenze, Folge-Trigger, Fortsetzen erledig
   const uhr = () => (t += 2 * 60 * 1000);   // jeder Blick auf die Uhr: +2 Minuten
   const erst = rein(g.Wartung.ausfuehren({ email: EIG, jetztMs: uhr }));
   assert.strictEqual(erst.abgebrochen, true);
-  assert.ok(erst.offen.length > 0 && erst.offen.length < 6, JSON.stringify(erst));
+  assert.ok(erst.offen.length > 0 && erst.offen.length < 7, JSON.stringify(erst));
   assert.ok(f.trigger.some(x => x.funktion === 'wartungFortsetzen' && x.nachMs === 60000), 'Folge-Trigger fehlt');
   const rest = rein(g.wartungFortsetzen());
   assert.deepStrictEqual(Object.keys(rest.ergebnisse), erst.offen);

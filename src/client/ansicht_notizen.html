@@ -1,13 +1,323 @@
 <!--
   ansicht_notizen – Interne Notizen, Rückfragen und Wiedervorlagen
 
-  Zweck:      Notizen je Person/Konto mit Leserkreis, offene Rückfragen und Wiedervorlagen.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   notiz_lesen / notiz_schreiben – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Notizen je Person/Konto mit Leserkreis anlegen, bearbeiten, erledigen; offene Rückfragen (z. B. „Von
+              welchem Konto soll künftig abgebucht werden?“) beantworten; fällige Wiedervorlagen abarbeiten.
+              Hängt sich außerdem als Reiter „Notizen“ ins Mitglied-Detail, als Knopf „Notizen (n)“ in dessen Kopf
+              und als Abschnitt ins Konto-Detail (Erweiterungspunkte aus client/kern).
+  Datenquelle: App.daten.liste('notizen') (Snapshot, Bereich Kern – der Server liefert nur Notizen, deren
+              Leserkreis die Rolle umfasst und deren Person/Konto sie sieht); Schreiben über apiNotiz….
+  Wer darf:   notiz_lesen / notiz_schreiben (alle Rollen). Welche Leserkreise wählbar sind und wer ändern/löschen
+              darf, prüft der Server (src/lib/notizen.js) – die Oberfläche blendet nur aus.
+  Besonderheiten:
+    - Hinweis im Formular: nur sachliche Vermerke, keine besonders schützenswerten Angaben (Art. 9 DSGVO);
+      Betroffene haben ein Auskunftsrecht (Notizen sind Teil der Auskunft).
+    - Antwort auf eine Rückfrage ändert kein Konto (Mandat/Unterschrift nötig); bei Kontowechsel springt die
+      Ansicht zum Konto bzw. zu Finanzen und eine Folge-Wiedervorlage erinnert die Kasse.
+    - Texte nur über textContent.
 -->
+<style>
+  .linkknopf { background: none; border: 0; padding: 6px 0; font: inherit; color: var(--text); text-align: left; cursor: pointer; width: 100%; min-height: 44px; }
+  .linkknopf:hover strong, .linkknopf:focus strong { text-decoration: underline; }
+  .nz-karte { border: 1px solid var(--rand); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 8px; background: var(--grund); }
+  .nz-karte.offen { border-left: 4px solid #d39b00; }
+  .nz-karte.faellig { border-left: 4px solid var(--fehler-text); }
+  .nz-karte.erledigt { opacity: 0.8; }
+  .nz-kopf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.9rem; }
+  .nz-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; }
+  .nz-hinweis { background: #fff6dc; color: #5c4400; padding: 8px 10px; border-radius: var(--radius); font-size: 0.85rem; margin: 0 0 10px; }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+  var HINWEIS = 'Nur sachliche Vermerke – keine Gesundheitsdaten oder andere besonders schützenswerte Angaben (Art. 9 DSGVO). Betroffene haben ein Auskunftsrecht.';
+
+  function heute() { return (A.startdaten && A.startdaten.heute) || A.heute(); }
+  function ich() { return String(((A.startdaten || {}).benutzer || {}).email || '').toLowerCase(); }
+  function rollen() { return (((A.startdaten || {}).benutzer || {}).rollen) || []; }
+  function istVerwaltung() { return A.sieht('verwaltung'); }
+  function offen(n) { return !n.erledigt_am; }
+  function faellig(n) { return offen(n) && n.wiedervorlage_am && String(n.wiedervorlage_am) <= heute(); }
+  function darfAendern(n) { return A.darf('notiz_schreiben') && (istVerwaltung() || String(n.erstellt_von || '').toLowerCase() === ich()); }
+
+  /** Leserkreise, die der Benutzer wählen darf (Spiegel von NotizRegeln.erlaubteKreise; der Server prüft erneut). */
+  function kreise() {
+    var aus = [];
+    if (istVerwaltung()) aus.push('Verwaltung');
+    if (A.sieht('finanz')) aus.push('Finanzen');
+    if (istVerwaltung() || rollen().indexOf('Abteilungsleiter') >= 0) aus.push('Abteilung');
+    if (istVerwaltung() || rollen().indexOf('Jugendleiter') >= 0) aus.push('Jugendleitung');
+    return aus;
+  }
+  function abteilungsListe() {
+    var eigene = ((A.startdaten.benutzer || {}).abteilungen || []).map(Number);
+    return A.daten.liste('abteilungen').filter(function (a) {
+      return a.aktiv !== false && (istVerwaltung() || eigene.indexOf(Number(a.abteilung_id)) >= 0);
+    }).map(function (a) { return { wert: a.abteilung_id, text: a.bezeichnung }; });
+  }
+
+  function notizenZu(filter) {
+    return A.daten.liste('notizen').filter(filter).sort(function (a, b) {
+      if (offen(a) !== offen(b)) return offen(a) ? -1 : 1;
+      return Number(b.notiz_id) - Number(a.notiz_id);
+    });
+  }
+
+  function bezugText(n) {
+    var m = n.mitglied_id ? A.daten.hole('mitglieder', n.mitglied_id) : null;
+    if (m) return A.name(m);
+    if (n.mitglied_id) return 'Mitglied ' + n.mitglied_id;
+    return n.beitragskonto_id ? 'Konto ' + n.beitragskonto_id : '–';
+  }
+  function zumBezug(n) {
+    if (n.mitglied_id) A.zeige('mitglied', { id: n.mitglied_id, reiter: 'notizen' });
+    else if (n.beitragskonto_id) A.zeige('konto', { id: n.beitragskonto_id });
+  }
+  function kreisText(n) {
+    if (n.sichtbar_fuer === 'Abteilung') {
+      var a = A.daten.hole('abteilungen', n.abteilung_id);
+      return 'Abteilung ' + (a ? a.bezeichnung : n.abteilung_id || '');
+    }
+    return n.sichtbar_fuer || '';
+  }
+
+  /** Neu zeichnen – im Mitglied-Detail auf dem Reiter „Notizen“ bleiben. */
+  function neuZeichnen() {
+    var a = A.aktuell();
+    if (a.schluessel === 'mitglied') A.zeige('mitglied', Object.assign({}, a.param || {}, { reiter: 'notizen' }), true);
+    else A.neuZeichnen();
+  }
+
+  function nachSpeichern(d, meldung) {
+    A.daten.uebernehme(d);
+    neuZeichnen();
+    A.meldung(meldung || 'Gespeichert.', 'ok');
+    return d;
+  }
+
+  // ------------------------------------------------------------------ Dialoge
+
+  /** Notiz anlegen/bearbeiten. vorgabe: { mitglied_id?, beitragskonto_id? } oder bestehende Notiz. */
+  function formularDialog(vorgabe) {
+    var bestand = vorgabe && vorgabe.notiz_id ? vorgabe : null;
+    var ks = kreise();
+    var werte = bestand ? bestand : {
+      art: 'Notiz',
+      sichtbar_fuer: ks.indexOf('Verwaltung') >= 0 ? 'Verwaltung' : ks[0],
+      abteilung_id: (abteilungsListe()[0] || {}).wert || null
+    };
+    var felder = [
+      { name: 'art', titel: 'Art', typ: 'auswahl', liste: (A.startdaten.listen || {}).notiz_art || ['Notiz'], pflicht: true },
+      { name: 'text', titel: 'Text', typ: 'langtext', pflicht: true, breit: true },
+      { name: 'sichtbar_fuer', titel: 'Sichtbar für', typ: 'auswahl', liste: ks, pflicht: true },
+      { name: 'abteilung_id', titel: 'Abteilung (nur bei „Abteilung“)', typ: 'auswahl', liste: abteilungsListe(), zahl: true },
+      { name: 'wiedervorlage_am', titel: 'Wiedervorlage am', typ: 'datum', hilfe: 'Erscheint ab diesem Tag unter „Zu erledigen“.' }
+    ];
+    var f = A.formular(felder, werte);
+    var huelle = A.el('div', null, null, [A.el('p', HINWEIS, { className: 'nz-hinweis' }), f.element]);
+    A.dialog(bestand ? 'Notiz bearbeiten' : 'Notiz hinzufügen', huelle, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: '', aktion: function (schliessen) {
+        var w = f.werte();
+        if (w.sichtbar_fuer !== 'Abteilung') w.abteilung_id = null;
+        if (bestand) { w.notiz_id = bestand.notiz_id; w.version = bestand.version || 0; }
+        else { w.mitglied_id = vorgabe.mitglied_id || null; w.beitragskonto_id = vorgabe.beitragskonto_id || null; }
+        f.setzeFehler([]);
+        A.rufe('apiNotizSpeichern', w, A.still).then(function (d) { schliessen(); nachSpeichern(d); }, function (err) {
+          if (err.felder) f.setzeFehler(err.felder); else A.fehler({ meldung: err.message, nr: err.nr });
+          if (err.art === 'konflikt') { schliessen(); A.ladeNeu(); }
+        });
+      } }
+    ]);
+  }
+
+  function erledigenDialog(n) {
+    var f = A.formular([{ name: 'ergebnis', titel: 'Ergebnis (optional)', typ: 'text', breit: true }], {});
+    A.dialog('Erledigen', A.el('div', null, null, [A.el('p', String(n.text || '').slice(0, 200), { className: 'leise' }), f.element]), [
+      { text: 'Abbrechen' },
+      { text: 'Erledigt', art: '', aktion: function (schliessen) {
+        A.rufe('apiNotizErledigen', n.notiz_id, n.version || 0, f.werte().ergebnis).then(function (d) { schliessen(); nachSpeichern(d, 'Erledigt.'); }, function () {});
+      } }
+    ]);
+  }
+
+  /** Rückfrage „auf wen abbuchen?“ beantworten: drei Antworten. */
+  function antwortDialog(n) {
+    var f = A.formular([{ name: 'bemerkung', titel: 'Bemerkung (optional)', typ: 'text', breit: true }], {});
+    var inhalt = A.el('div', null, null, [
+      A.el('p', bezugText(n) + ': ' + String(n.text || '')),
+      A.el('p', 'Die Antwort ändert kein Konto. Ein neues Konto braucht ein unterschriebenes SEPA-Mandat – dafür öffnet sich anschließend das Konto bzw. Finanzen, und die Kasse bekommt eine Wiedervorlage.', { className: 'leise' }),
+      f.element
+    ]);
+    function antworte(entscheidung) {
+      return function (schliessen) {
+        A.rufe('apiNotizRueckfrageAntwort', n.notiz_id, n.version || 0, { entscheidung: entscheidung, bemerkung: f.werte().bemerkung })
+          .then(function (d) {
+            schliessen();
+            A.daten.uebernehme(d);
+            A.meldung('Antwort gespeichert.', 'ok');
+            if (d && d.sprung && A.ansichten[d.sprung.ansicht] && (!A.ansichten[d.sprung.ansicht].aktion || A.darf(A.ansichten[d.sprung.ansicht].aktion))) {
+              A.zeige(d.sprung.ansicht, d.sprung.param);
+            } else neuZeichnen();
+          }, function () {});
+      };
+    }
+    A.dialog('Rückfrage beantworten', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Bisheriges Konto', art: '', aktion: antworte('konto_bleibt') },
+      { text: 'Eigenes Konto', art: 'zweit', aktion: antworte('eigenes_konto') },
+      { text: 'Überweisung', art: 'zweit', aktion: antworte('ueberweisung') }
+    ]);
+  }
+
+  function loeschen(n) {
+    A.bestaetige('Notiz löschen', 'Diese Notiz endgültig löschen? (Offene Rückfragen und Wiedervorlagen bitte erledigen statt löschen.)', 'Löschen').then(function (ja) {
+      if (!ja) return;
+      A.rufe('apiNotizLoeschen', n.notiz_id, n.version || 0).then(function (d) { nachSpeichern(d, 'Gelöscht.'); }, function () {});
+    });
+  }
+
+  // ------------------------------------------------------------------ Darstellung
+
+  function karte(n, mitBezug) {
+    var k = A.el('div', null, { className: 'nz-karte ' + (faellig(n) ? 'faellig' : offen(n) && (n.art === 'Rückfrage' || n.wiedervorlage_am) ? 'offen' : offen(n) ? '' : 'erledigt') });
+    var kopf = A.el('div', null, { className: 'nz-kopf' });
+    kopf.appendChild(A.el('strong', n.art));
+    kopf.appendChild(A.el('span', kreisText(n), { className: 'marke' }));
+    if (mitBezug) {
+      var b = A.el('button', bezugText(n), { type: 'button', className: 'knopf zweit klein' });
+      b.addEventListener('click', function () { zumBezug(n); });
+      kopf.appendChild(b);
+    }
+    if (n.wiedervorlage_am && offen(n)) kopf.appendChild(A.el('span', (faellig(n) ? 'fällig seit ' : 'Wiedervorlage ') + A.datum(n.wiedervorlage_am), { className: faellig(n) ? 'ampel rot' : 'leise' }));
+    if (!offen(n)) kopf.appendChild(A.el('span', 'erledigt ' + A.datum(n.erledigt_am), { className: 'ampel gruen' }));
+    k.appendChild(kopf);
+    k.appendChild(A.el('p', n.text || '', { className: 'nz-text' }));
+    if (n.ergebnis) k.appendChild(A.el('p', 'Ergebnis: ' + n.ergebnis, { className: 'leise' }));
+    k.appendChild(A.el('p', 'von ' + (n.erstellt_von || '–') + (n.geaendert_am ? ' · ' + A.datum(n.geaendert_am, true) : ''), { className: 'leise' }));
+    var knoepfe = A.el('div', null, { className: 'knopfleiste' });
+    if (offen(n) && n.art === 'Rückfrage' && A.darf('notiz_schreiben')) knoepfe.appendChild(A.knopf('Antwort erfassen', function () { antwortDialog(n); }, 'klein'));
+    if (offen(n) && darfAendern(n)) knoepfe.appendChild(A.knopf('Erledigen', function () { erledigenDialog(n); }, 'zweit klein'));
+    if (darfAendern(n)) knoepfe.appendChild(A.knopf('Bearbeiten', function () { formularDialog(n); }, 'zweit klein'));
+    if (istVerwaltung() && !(offen(n) && (n.art === 'Rückfrage' || n.art === 'Wiedervorlage' || n.wiedervorlage_am))) {
+      knoepfe.appendChild(A.knopf('Löschen', function () { loeschen(n); }, 'zweit klein'));
+    }
+    if (knoepfe.childNodes.length) k.appendChild(knoepfe);
+    return k;
+  }
+
+  function liste(ziel, notizen, mitBezug, leerText) {
+    if (!notizen.length) { ziel.appendChild(A.el('p', leerText || 'Keine Notizen.', { className: 'leise' })); return; }
+    notizen.forEach(function (n) { ziel.appendChild(karte(n, mitBezug)); });
+  }
+
+  // ------------------------------------------------------------------ Erweiterungen Mitglied/Konto
+
+  A.erweitere('mitglied.reiter', {
+    id: 'notizen', titel: 'Notizen', aktion: 'notiz_lesen',
+    zeichne: function (z, m) {
+      var knoepfe = [];
+      if (A.darf('notiz_schreiben') && kreise().length) knoepfe.push(A.knopf('Notiz hinzufügen', function () { formularDialog({ mitglied_id: m.mitglied_id }); }, 'zweit klein'));
+      z.appendChild(A.abschnitt('Notizen', knoepfe, 'h2'));
+      liste(z, notizenZu(function (n) { return n.mitglied_id === m.mitglied_id; }), false, 'Keine Notizen zu dieser Person.');
+    }
+  });
+
+  A.erweitere('mitglied.knoepfe', function (m) {
+    if (!A.darf('notiz_lesen')) return null;
+    var n = A.daten.liste('notizen').filter(function (x) { return x.mitglied_id === m.mitglied_id && offen(x); }).length;
+    return A.knopf('Notizen' + (n ? ' (' + n + ')' : ''), function () { A.zeige('mitglied', { id: m.mitglied_id, reiter: 'notizen' }); }, 'zweit');
+  });
+
+  A.erweitere('konto.abschnitt', function (ziel, k) {
+    if (!A.darf('notiz_lesen')) return null;
+    var knoepfe = [];
+    if (A.darf('notiz_schreiben') && kreise().length) knoepfe.push(A.knopf('Notiz hinzufügen', function () { formularDialog({ beitragskonto_id: k.beitragskonto_id }); }, 'zweit klein'));
+    ziel.appendChild(A.abschnitt('Notizen zum Konto', knoepfe));
+    liste(ziel, notizenZu(function (n) { return n.beitragskonto_id === k.beitragskonto_id; }), true, 'Keine Notizen zu diesem Konto.');
+  });
+
+  // ------------------------------------------------------------------ Ansicht „Notizen“
+
+  A.registriere('notizen', {
+    titel: 'Notizen', aktion: 'notiz_lesen', reihenfolge: 75,
+    zeichne: function (ziel, param) {
+      ziel.appendChild(A.el('h1', 'Notizen'));
+      var reiterLeiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
+      var inhalt = A.el('div', null, { role: 'tabpanel' });
+      var reiter = [{ id: 'erledigen', titel: 'Zu erledigen' }, { id: 'alle', titel: 'Alle Notizen' }];
+      function waehle(id) {
+        Array.prototype.forEach.call(reiterLeiste.children, function (b) { b.setAttribute('aria-selected', b.dataset.id === id ? 'true' : 'false'); });
+        A.leere(inhalt);
+        if (id === 'erledigen') zeichneErledigen(inhalt); else zeichneAlle(inhalt);
+      }
+      reiter.forEach(function (r) {
+        var b = A.el('button', r.titel, { type: 'button', role: 'tab', dataset: { id: r.id } });
+        b.addEventListener('click', function () { waehle(r.id); });
+        reiterLeiste.appendChild(b);
+      });
+      ziel.appendChild(reiterLeiste);
+      ziel.appendChild(inhalt);
+      waehle((param && param.reiter) || 'erledigen');
+    }
+  });
+
+  function zeichneErledigen(z) {
+    var l = A.daten.liste('notizen').filter(function (n) { return offen(n) && (n.art === 'Rückfrage' || n.wiedervorlage_am); })
+      .sort(function (a, b) {
+        var x = a.wiedervorlage_am || '9999-99-99', y = b.wiedervorlage_am || '9999-99-99';
+        return x === y ? Number(b.notiz_id) - Number(a.notiz_id) : (x < y ? -1 : 1);
+      });
+    var f = l.filter(faellig).length;
+    z.appendChild(A.el('div', null, { className: 'kacheln' }, [
+      A.kachel(A.zahl(f), 'fällig bis heute', f ? 'fehler' : ''),
+      A.kachel(A.zahl(l.filter(function (n) { return n.art === 'Rückfrage'; }).length), 'offene Rückfragen', ''),
+      A.kachel(A.zahl(l.length), 'offen insgesamt', '')
+    ]));
+    liste(z, l, true, 'Nichts zu erledigen.');
+  }
+
+  function zeichneAlle(z) {
+    var leiste = A.filterleiste([
+      { name: 'art', titel: 'Art', liste: ((A.startdaten.listen || {}).notiz_art || []).map(function (x) { return { wert: x, text: x }; }) },
+      { name: 'kreis', titel: 'Leserkreis', liste: ((A.startdaten.listen || {}).notiz_sichtbarkeit || []).map(function (x) { return { wert: x, text: x }; }) },
+      { name: 'status', titel: 'Status', liste: [{ wert: 'offen', text: 'offen' }, { wert: 'erledigt', text: 'erledigt' }] }
+    ], function () { zeichne(); }, 'Text oder Name suchen …');
+    z.appendChild(leiste);
+    var knoepfe = [];
+    if (istVerwaltung()) knoepfe.push(A.knopf('CSV', function () {
+      var l = gefiltert();
+      A.rufe('apiNotizenExportVermerken', l.length).then(function () {
+        A.csv('notizen.csv', [
+          { titel: 'Art', feld: 'art' }, { titel: 'Bezug', wert: bezugText }, { titel: 'Leserkreis', wert: kreisText },
+          { titel: 'Text', feld: 'text' }, { titel: 'Wiedervorlage', wert: function (n) { return n.wiedervorlage_am ? A.datum(n.wiedervorlage_am) : ''; } },
+          { titel: 'Erledigt', wert: function (n) { return n.erledigt_am ? A.datum(n.erledigt_am) : ''; } }, { titel: 'Ergebnis', feld: 'ergebnis' },
+          { titel: 'Verfasser', feld: 'erstellt_von' }
+        ], l);
+      }, function () {});
+    }, 'zweit klein'));
+    z.appendChild(A.el('div', null, { className: 'knopfleiste' }, knoepfe));
+    var bereich = A.el('div');
+    z.appendChild(bereich);
+    function gefiltert() {
+      var st = leiste.zustand, q = A.falte(st.suche || '');
+      return notizenZu(function (n) {
+        if (st.art && n.art !== st.art) return false;
+        if (st.kreis && n.sichtbar_fuer !== st.kreis) return false;
+        if (st.status === 'offen' && !offen(n)) return false;
+        if (st.status === 'erledigt' && offen(n)) return false;
+        return !q || A.falte(String(n.text || '') + ' ' + bezugText(n) + ' ' + (n.ergebnis || '')).indexOf(q) >= 0;
+      });
+    }
+    function zeichne() {
+      A.leere(bereich);
+      var l = gefiltert();
+      bereich.appendChild(A.el('p', l.length + ' Notiz(en)', { className: 'leise' }));
+      liste(bereich, l.slice(0, 100), true, 'Keine Notizen für diese Auswahl.');
+      if (l.length > 100) bereich.appendChild(A.el('p', 'Es werden die ersten 100 angezeigt – bitte Suche/Filter nutzen.', { className: 'leise' }));
+    }
+    zeichne();
+  }
 })();
 </script>

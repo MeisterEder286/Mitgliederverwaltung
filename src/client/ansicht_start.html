@@ -198,6 +198,30 @@
         }).catch(function () {});
       }
 
+      // Wiedervorlagen aus den internen Notizen (Leserkreis schneidet der Server; hier nur fällige bis heute)
+      if (A.darf('notiz_lesen')) {
+        var faellig = A.daten.liste('notizen').filter(function (n) {
+          return !n.erledigt_am && n.wiedervorlage_am && String(n.wiedervorlage_am) <= heute();
+        }).sort(function (a, b) { return String(a.wiedervorlage_am).localeCompare(String(b.wiedervorlage_am)); });
+        if (faellig.length) {
+          var wv = A.el('div', null, { className: 'start-wiedervorlagen' });
+          wv.appendChild(A.abschnitt('Wiedervorlagen (' + faellig.length + ')', [A.knopf('alle anzeigen', function () { A.zeige('notizen'); }, 'zweit klein')]));
+          var ul = A.el('ul', null, { className: 'liste' });
+          faellig.slice(0, 5).forEach(function (n) {
+            var m = n.mitglied_id ? A.daten.hole('mitglieder', n.mitglied_id) : null;
+            var b = A.el('button', null, { type: 'button', className: 'linkknopf' });
+            b.appendChild(A.el('strong', n.art + (m ? ': ' + A.name(m) : n.beitragskonto_id ? ': Konto ' + n.beitragskonto_id : '')));
+            b.appendChild(A.el('span', ' · fällig ' + A.datum(n.wiedervorlage_am) + ' · ' + String(n.text || '').slice(0, 80), { className: 'leise' }));
+            b.addEventListener('click', function () {
+              if (n.mitglied_id) A.zeige('mitglied', { id: n.mitglied_id, reiter: 'notizen' }); else A.zeige('notizen');
+            });
+            ul.appendChild(A.el('li', null, null, [b]));
+          });
+          wv.appendChild(ul);
+          ziel.appendChild(wv);
+        }
+      }
+
       if (z.geburtstage.length) {
         ziel.appendChild(A.el('h2', 'Geburtstage in den nächsten 7 Tagen'));
         ziel.appendChild(A.tabelle([

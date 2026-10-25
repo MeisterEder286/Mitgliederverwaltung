@@ -50,7 +50,8 @@ var SnapshotKern = (function () {
     Einwilligung: 'einwilligungen',
     Vorlage: 'vorlagen',
     Dokument: 'dokumente',
-    Anschreiben: 'anschreiben'
+    Anschreiben: 'anschreiben',
+    Notiz: 'notizen'
   };
   var TABS = Object.keys(LISTEN);
   var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel', 'Vorlage'];
@@ -284,6 +285,18 @@ var SnapshotKern = (function () {
         return;
       }
       if (tab === 'Mitglied') return;   // unten mit abgeleiteten Feldern
+      if (tab === 'Notiz') {
+        // Interne Notizen: Zeilenregel nach Leserkreis (NotizRegeln.sichtbar) UND Personen-/Konto-Sichtkreis.
+        var kontenSicht = {};
+        if (!kreis.sicht.alle) finanzZeilen(basis, 'Beitragskonto', kreis).forEach(function (k) { kontenSicht[k.beitragskonto_id] = true; });
+        aus[liste] = (zeilen || []).filter(function (z) {
+          if (!NotizRegeln.sichtbar(ktx, z)) return false;
+          if (z.mitglied_id !== null && z.mitglied_id !== undefined) return !!kreis.ids[z.mitglied_id];
+          if (z.beitragskonto_id !== null && z.beitragskonto_id !== undefined) return kreis.sicht.alle || !!kontenSicht[z.beitragskonto_id];
+          return true;
+        }).map(function (z) { return schnitt(ktx, tab, z); });
+        return;
+      }
       if (hat(KORRESPONDENZ, tab)) {
         if (!hat(sicht, 'finanz')) return;
         var kontenSichtbar = {};

@@ -202,6 +202,8 @@ var Loeschung = (function () {
     liste(daten, 'Abteilungszugehoerigkeit').forEach(function (z) { if (z.mitglied_id === id) entferne('Abteilungszugehoerigkeit', z.zugehoerigkeit_id); });
     liste(daten, 'Einwilligung').forEach(function (e) { if (e.mitglied_id === id) entferne('Einwilligung', e.einwilligung_id); });
     liste(daten, 'Qualifikation').forEach(function (q) { if (q.mitglied_id === id) entferne('Qualifikation', q.qualifikation_id); });
+    // Interne Notizen zur Person: vollständig entfernen (Freitext, kein Nachweiszweck)
+    liste(daten, 'Notiz').forEach(function (n) { if (n.mitglied_id === id) entferne('Notiz', n.notiz_id); });
     // Anschreiben: Datum/Anlass bleiben als Nachweis, Inhalt und Anschrift werden geleert
     liste(daten, 'Anschreiben').forEach(function (a) {
       if (a.mitglied_id === id) aendere('Anschreiben', a.anschreiben_id, { inhalt: null, empfaenger: null, betreff: 'Schreiben (anonymisiert)', dokument_link: null, bemerkung: null });
@@ -333,6 +335,7 @@ var Loeschung = (function () {
       { titel: 'Nachweise (Führungszeugnis, Lizenzen)', eintraege: von('Qualifikation').map(function (r) { return lesbar('Qualifikation', r, aufloesen); }) },
       { titel: 'Ehrungen', eintraege: von('Ehrung').map(function (r) { return lesbar('Ehrung', r, aufloesen); }) },
       { titel: 'Einwilligungen', eintraege: von('Einwilligung').map(function (r) { return lesbar('Einwilligung', r, aufloesen); }) },
+      { titel: 'Interne Notizen', eintraege: von('Notiz').map(function (r) { return lesbar('Notiz', r, aufloesen); }) },
       { titel: 'Anfragen nach DSGVO', eintraege: von('Betroffenenanfrage').map(function (r) { return lesbar('Betroffenenanfrage', r, aufloesen); }) }
     ];
     return { abschnitte: abschnitte.filter(function (a) { return a.eintraege.length; }) };
