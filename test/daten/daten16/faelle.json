@@ -1,0 +1,130 @@
+[
+  {
+    "art": "wagner",
+    "mitglnr": "0101",
+    "id": "1",
+    "info": {
+      "felix": "0106"
+    }
+  },
+  {
+    "art": "zahler_ausgetreten",
+    "mitglnr": "0108",
+    "id": "5",
+    "info": null
+  },
+  {
+    "art": "zahler_unbekannt",
+    "mitglnr": "0112",
+    "id": "8",
+    "info": null
+  },
+  {
+    "art": "iban_abweichend",
+    "mitglnr": "0116",
+    "id": "10",
+    "info": null
+  },
+  {
+    "art": "hausnummer",
+    "mitglnr": "0123",
+    "id": "14",
+    "info": null
+  },
+  {
+    "art": "plz",
+    "mitglnr": "0125",
+    "id": "15",
+    "info": null
+  },
+  {
+    "art": "geschlecht",
+    "mitglnr": "0127",
+    "id": "16",
+    "info": null
+  },
+  {
+    "art": "ng",
+    "mitglnr": "0128",
+    "id": "17",
+    "info": null
+  },
+  {
+    "art": "ng",
+    "mitglnr": "0129",
+    "id": "18",
+    "info": null
+  },
+  {
+    "art": "dublette",
+    "mitglnr": "0134",
+    "id": "21",
+    "info": {
+      "erste": "0133"
+    }
+  },
+  {
+    "art": "abteilung_unbekannt",
+    "mitglnr": "0138",
+    "id": "23",
+    "info": null
+  },
+  {
+    "art": "iban_aus_blz",
+    "mitglnr": "0140",
+    "id": "24",
+    "info": null
+  },
+  {
+    "art": "iban_ungueltig",
+    "mitglnr": "0141",
+    "id": "25",
+    "info": null
+  },
+  {
+    "art": "cluster_mischfall",
+    "mitglnr": "0143",
+    "id": "26",
+    "info": {
+      "grund": "zwei Pauschalen"
+    }
+  },
+  {
+    "art": "cluster_mischfall",
+    "mitglnr": "0147",
+    "id": "28",
+    "info": {
+      "grund": "ohne Beitrag, keine Pauschale"
+    }
+  },
+  {
+    "art": "beitrag_unbekannt",
+    "mitglnr": "0150",
+    "id": "30",
+    "info": null
+  },
+  {
+    "art": "eintritt_fehlt",
+    "mitglnr": "0152",
+    "id": "31",
+    "info": null
+  },
+  {
+    "art": "zahlung_unbekannt",
+    "mitglnr": "0153",
+    "id": "32",
+    "info": null
+  },
+  {
+    "art": "wiedereintritt",
+    "mitglnr": "0155",
+    "id": "33",
+    "info": null
+  },
+  {
+    "art": "zeitraum_ueberlappt",
+    "mitglnr": "0157",
+    "id": "34",
+    "info": null
+  }
+]
