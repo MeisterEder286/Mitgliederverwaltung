@@ -44,6 +44,12 @@ var Protokoll = (function () {
    */
   function schreibe(ktx, eintraege) {
     if (!eintraege || !eintraege.length) return 0;
+    // Fortlaufende protokoll_id = Zeilennummer → nur unter der Sperre korrekt. Aufrufer ohne Sperre (z. B. reine
+    // Lese-/Exportvermerke) bekommen sie hier (Befund M2; DB.mitSperre ist wiedereintrittsfähig).
+    return DB.mitSperre(function () { return schreibeGesperrt(ktx, eintraege); });
+  }
+
+  function schreibeGesperrt(ktx, eintraege) {
     var sh = blatt();
     var letzte = sh.getLastRow();
     var kopf = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);

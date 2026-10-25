@@ -131,7 +131,7 @@
 
   /**
    * Ruft eine öffentliche Server-Funktion auf → Promise mit antwort.daten.
-   * Abgelehnt mit Error (err.art, err.nr, err.aktuell, err.felder) bei ok:false oder Verbindungsfehler.
+   * Abgelehnt mit Error (err.art, err.nr, err.felder) bei ok:false oder Verbindungsfehler.
    * optionen.still = true: keine automatische Fehlermeldung (Aufrufer zeigt selbst an).
    */
   App.rufe = function (name) {
@@ -146,11 +146,14 @@
           if (antwort && antwort.ok) { resolve(antwort.daten); return; }
           var f = (antwort && antwort.fehler) || { art: 'intern', meldung: 'Unerwartete Antwort vom Server.' };
           if (!still) {
-            if (f.art === 'konflikt') App.meldung('Der Datensatz wurde inzwischen von jemand anderem geändert. Die aktuelle Fassung wurde geladen – bitte Änderung erneut vornehmen.', 'fehler');
+            if (f.art === 'konflikt') {
+              App.meldung('Der Datensatz wurde inzwischen von jemand anderem geändert. Die aktuelle Fassung wird geladen – bitte Änderung erneut vornehmen.', 'fehler');
+              App.ladeNeu();
+            }
             else App.fehler(f);
           }
           var err = new Error(f.meldung || 'Fehler');
-          err.art = f.art; err.nr = f.nr; err.aktuell = f.aktuell; err.felder = f.felder;
+          err.art = f.art; err.nr = f.nr; err.felder = f.felder;
           reject(err);
         })
         .withFailureHandler(function (fehler) {
@@ -518,8 +521,7 @@
       return daten;
     }, function (err) {
       if (err.felder) formular.setzeFehler(err.felder);
-      if (err.art === 'konflikt') App.ladeNeu();
-      throw err;
+      throw err;   // bei Konflikt lädt App.rufe den Snapshot bereits neu
     }).then(function (d) { knopf.disabled = false; return d; }, function (e) { knopf.disabled = false; throw e; });
   };
 

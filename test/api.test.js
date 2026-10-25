@@ -47,6 +47,7 @@ function umgebung({ email = 'al@tsv.de', effektiv = 'owner@tsv.de', benutzer } =
     zaehler: () => ({ sheets }),
     zaehlerZuruecksetzen: () => { sheets = 0; },
     zaehle: (n) => { sheets += n || 1; },
+    mitSperre: (fn) => fn(),
     anhaengen: (b, zeilen, letzte) => {
       if (letzte === undefined) letzte = b.getLastRow();
       b.getRange(letzte + 1, 1, zeilen.length, zeilen[0].length).setValues(zeilen); sheets++;
@@ -114,7 +115,7 @@ test('fachliche Fehler und Konflikte werden mit ihrer Meldung durchgereicht', ()
   assert.deepEqual(rein(f.fehler), { art: 'fachlich', meldung: 'Mitgliedsnummer ist schon vergeben.' });
   const k = g.Api.ausfuehren('x', 'start', () => { throw g.Fehler.konflikt({ mitglied_id: 1, version: 4 }); });
   assert.equal(k.fehler.art, 'konflikt');
-  assert.deepEqual(rein(k.fehler.aktuell), { mitglied_id: 1, version: 4 });
+  assert.strictEqual(k.fehler.aktuell, undefined, 'kein ungeschnittener Datensatz an den Browser (Befund H2)');
 });
 
 test('interne Fehler: generische Meldung mit Nr., keine Interna; Details nur im Log', () => {

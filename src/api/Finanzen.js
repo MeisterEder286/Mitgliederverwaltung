@@ -123,9 +123,15 @@ function apiFinanzenTarifwechselUebernehmen(jahr, mitgliedIds) {
   });
 }
 
-/** Buchhaltungs-Export eines Jahres (ohne IBAN). */
+/**
+ * Buchhaltungs-Export eines Jahres (ohne IBAN). Braucht Finanzsicht (konto_lesen) UND export –
+ * „export“ allein haben auch Abteilungs- und Jugendleiter (Befund K1 der Sicherheitsprüfung).
+ */
 function apiFinanzenBuchhaltung(jahr) {
-  return Api.ausfuehren('apiFinanzenBuchhaltung', 'export', function (ktx) { return Finanzen.buchhaltung(ktx, finanzenZahl_(jahr)); });
+  return Api.ausfuehren('apiFinanzenBuchhaltung', 'konto_lesen', function (ktx) {
+    if (!Rechte.darf(ktx, 'export')) throw Fehler.keinZugriff();
+    return Finanzen.buchhaltung(ktx, finanzenZahl_(jahr));
+  });
 }
 
 /** Im Browser erzeugten Export protokollieren (Liste, Anzahl). */
