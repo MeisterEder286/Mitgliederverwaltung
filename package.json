@@ -9,7 +9,8 @@
     "schema": "node tools/schema-erzeugen.js",
     "push": "npm run check && npm test && clasp push",
     "deploy:hinweis": "echo 'Deployment nur über bestehende Deployment-ID: clasp deploy -i <ID> -d \"Beschreibung\" (siehe docs/BETRIEB.md)'",
-    "vorschau": "node tools/vorschau.js"
+    "vorschau": "node tools/vorschau.js",
+    "test:ui": "node --test --test-concurrency=1 \"test/ui/**/*.ui.test.js\""
   },
   "engines": {
     "node": ">=20"

@@ -61,12 +61,8 @@ if (typeof g.apiSnapshot === 'function') antworten.apiSnapshot = g.apiSnapshot()
 g.apiPing();
 antworten.apiMessungen = g.apiMessungen();
 
-// 3. Template zusammensetzen
-const lies = n => fs.readFileSync(path.join(SRC, n + '.html'), 'utf8');
-const json = x => JSON.stringify(x).replace(/</g, '\\u003c').replace(new RegExp('\\u2028', 'g'), '\\u2028').replace(new RegExp('\\u2029', 'g'), '\\u2029');
-let html = lies('client/index')
-  .replace(/<\?!= include_\('([^']+)'\) \?>/g, (_, n) => lies(n))
-  .replace('<?!= startdatenJson ?>', json(start.daten));
+// 3. Seite zusammensetzen (gemeinsam mit den Oberflächentests, tools/seite.js)
+const { baueSeite, jsonEinbetten: json } = require('./seite');
 const stub = `<script>
 window.google = { script: { run: (function () {
   var antworten = ${json(antworten)};
@@ -83,6 +79,6 @@ window.google = { script: { run: (function () {
   return laeufer();
 })() } };
 </script>`;
-html = html.replace('<head>', '<head>\n<meta name="viewport" content="width=device-width, initial-scale=1">\n' + stub);
+const html = baueSeite(start.daten, stub);
 fs.writeFileSync(ziel, html);
 console.log('Vorschau geschrieben: ' + ziel + (gross ? ' (synthetischer Verein, Benutzer ' + nutzer + ')' : ''));
