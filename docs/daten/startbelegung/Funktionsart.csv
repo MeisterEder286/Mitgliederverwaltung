@@ -1,0 +1,14 @@
+funktionsart_id,bezeichnung,ebene,fz_pflichtig,bestellung,ehrungsfaehig,aktiv,bemerkung
+1,1. Vorsitzender,Verein,nein,Wahl JHV,ja,ja,
+2,2. Vorsitzender,Verein,nein,Wahl JHV,ja,ja,
+3,Kassier,Verein,nein,Wahl JHV,ja,ja,
+4,Schriftführer,Verein,nein,Wahl JHV,ja,ja,
+5,Beisitzer,Verein,nein,Wahl JHV,ja,ja,
+6,Jugendleiter,Verein,ja,Wahl JHV,ja,ja,Regelmäßiger Kontakt zu Minderjährigen
+7,Abteilungsleiter,Abteilung,ja,Wahl Abteilung,ja,ja,
+8,Trainer / Übungsleiter,Abteilung,ja,Berufung,ja,ja,
+9,Betreuer,Abteilung,ja,Berufung,ja,ja,
+10,Schiedsrichter,Abteilung,nein,Berufung,ja,ja,
+11,Platzwart / Zeugwart,Verein,nein,Berufung,ja,ja,
+12,Ehrenamtsbeauftragte(r),Verein,nein,Berufung,ja,ja,
+13,Kassenprüfer,Verein,nein,Wahl JHV,ja,ja,PRÜFEN: Liste gegen die Satzung abgleichen

@@ -1,0 +1,6 @@
+qualifikationsart_id,bezeichnung,kategorie,wiedervorlage_monate,max_alter_zeugnis_monate,loeschfrist_monate,aktiv,bemerkung
+1,Erweitertes Führungszeugnis,Führungszeugnis,60,3,3,ja,PRÜFEN: 60 Monate = 5 Jahre. Vereinbarung mit dem Jugendamt maßgeblich.
+2,Trainer-C-Lizenz,Lizenz,,,,ja,Gültigkeit steht am Dokument
+3,Übungsleiter-B-Lizenz,Lizenz,,,,ja,
+4,JuLeiCa,Lizenz,,,,ja,
+5,Erste-Hilfe-Kurs,Kurs,,,,ja,Üblich 24 Monate gültig

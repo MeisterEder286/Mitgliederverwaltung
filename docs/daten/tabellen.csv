@@ -1,0 +1,24 @@
+tabelle,gruppe,id_spalte,eindeutig,zweck
+Aufnahmeantrag,transaktional,antrag_id,,ARCHIV abgeschlossener Anträge. Offene Anträge stehen in der getrennten Datei Aufnahmeantraege_TSV_Ergoldsbach — dorthin schreibt der öffentliche Endpunkt. Erst bei Übernahme oder Ablehnung wandert die Zeile hierher und wird dort gelöscht.
+Mitglied,transaktional,mitglied_id,mitgliedsnummer,Die Person. Bleibt über alle Ein- und Austrittszyklen EINE Zeile mit EINER Nummer.
+Mitgliedschaftszeitraum,transaktional,zeitraum_id,,Eine Zeile je Beitritt-Austritt-Zyklus. Löst Wiedereintritt. „Mitglied seit“ und Status werden hieraus abgeleitet.
+Abteilung,Stammdaten,abteilung_id,,Sparten des Vereins.
+Abteilungszugehoerigkeit,transaktional,zugehoerigkeit_id,mitglied_id+abteilung_id,Wer ist in welcher Sparte. KEIN Funktionsfeld — Trainer und Funktionäre stehen im Tab Funktion.
+Funktionsart,Stammdaten,funktionsart_id,,Katalog der Ämter und Tätigkeiten. Steuert Nachweispflicht und Ehrungen.
+Funktion,transaktional,funktion_id,,Historie der Ämter und Tätigkeiten. Spieler und Teilnehmer bekommen KEINEN Eintrag.
+Beitragsart,Stammdaten,beitragsart_id,,Individuelle Tarife. WAS jemand zahlt.
+Beitragsgemeinschaft,Stammdaten,beitragsgemeinschaft_id,,Gedeckelter Familien- oder Ehegattenverbund. Alle Mitglieder einer Gemeinschaft müssen dasselbe Beitragskonto haben.
+Beitragskonto,transaktional / SENSIBEL,beitragskonto_id,mandatsreferenz,"Der Zahlweg, nicht die Person. Ein Konto kann mehrere Mitglieder tragen. Mandatssequenz FRST/RCUR wird NICHT gespeichert, sondern beim Lauf aus der Sollstellungs-Historie abgeleitet."
+Sollstellung,transaktional / SENSIBEL,sollstellung_id,beitragskonto_id+jahr,Zahlungshistorie je Konto und Jahr. Ersetzt das alte flache Feld Zahlung=NG und behält die Historie.
+Qualifikationsart,Stammdaten,qualifikationsart_id,,Katalog der Nachweisarten samt Fristenlogik.
+Qualifikation,transaktional / HOCHSENSIBEL,qualifikation_id,,"§ 72a SGB VIII: Nur festhalten, DASS eingesehen wurde und bis wann es gilt. Kein Inhalt, keine Kopie, kein Upload."
+Ehrungsregel,Stammdaten,ehrungsregel_id,,Konfiguration der Ehrungsstufen — datengetrieben statt in Formeln verdrahtet.
+Ehrung,transaktional,ehrung_id,mitglied_id+ehrungsregel_id+funktion_id,"Verleihungs-Log. Offene Fälle aus Vorjahren bleiben offen, dadurch keine Doppelehrung und kein Vergessen."
+Benutzer,Stammdaten / SENSIBEL,benutzer_id,email+rolle+abteilung_id,"Herz des Rechtekonzepts. Wer hier nicht steht, kommt nicht hinein."
+Einwilligung,transaktional,einwilligung_id,,"Eine Zeile je Einwilligung mit Verlauf. Ein einzelnes Ja/Nein-Feld am Mitglied kann „erteilt 2018, widerrufen 2021, neu erteilt 2023“ nicht abbilden."
+Aufbewahrungsfrist,Stammdaten,aufbewahrungsfrist_id,,"Löschkonzept in Tabellenform. Das Skript rechnet daraus loeschbar_ab und die Löschliste. Werte sind Vorschläge, keine Rechtsberatung."
+Betroffenenanfrage,transaktional,anfrage_id,,"Anfragen nach Kapitel III DSGVO — Auskunft, Berichtigung, Löschung, Einschränkung, Widerspruch. Selbst zu führen, weil der Verein nachweisen muss, wie und wie schnell er entschieden hat."
+Statistik_Jahr,technisch / anonym,statistik_id,,"Eingefrorene Jahreszahlen ohne jeden Personenbezug. Der Grund, warum Löschungen die Vereinsstatistik nicht mehr verfälschen können."
+_Konfig,technisch,,schluessel,"Laufendes Beitragsjahr, Vereinsdaten, Fristen und die ID-Zähler je Tabelle."
+_Protokoll,technisch,protokoll_id,,"Append-only. Nur anhängen, nie ändern, nie löschen."
+_Messung,technisch,,,Zeitmessung je Server-Aufruf (V9). Keine Personendaten.

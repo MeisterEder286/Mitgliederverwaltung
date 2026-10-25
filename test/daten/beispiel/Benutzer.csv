@@ -1,0 +1,6 @@
+benutzer_id,email,name,rolle,abteilung_id,mitglied_id,aktiv,angelegt_am,bemerkung
+1,verwaltung@tsv-ergoldsbach.de,Mitgliederverwaltung,Mitgliederverwalter,,,ja,2026-09-01,Administrator — sieht und pflegt alles
+2,vorstand@tsv-ergoldsbach.de,Franz Meier,Vorstand,,,ja,2026-09-01,
+3,kassier@tsv-ergoldsbach.de,Rita Sedlmeier,Kassier,,,ja,2026-09-01,"Einzug und Buchung, keine IBAN-Änderung"
+4,obermeier@tsv-ergoldsbach.de,Thomas Obermeier,Abteilungsleiter,1,8,ja,2026-09-01,Sichtbereich nur Abteilung 1
+5,huber@tsv-ergoldsbach.de,Anna Huber,Abteilungsleiter,2,6,ja,2026-09-01,Sichtbereich nur Abteilung 2

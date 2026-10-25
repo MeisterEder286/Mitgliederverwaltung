@@ -1,0 +1,58 @@
+schluessel,wert,beschreibung
+beitragsjahr,2026,Laufendes Beitragsjahr für Sollstellung und SEPA
+verein_name,TSV Ergoldsbach e. V.,Für Serienbriefe und SEPA-Datei
+verein_glaeubiger_id,DE00ZZZ00000000000,SEPA-Gläubiger-Identifikationsnummer — ECHTEN WERT EINTRAGEN
+sepa_format,pain.008.001.02,Ab 15.11.2026 zwingend pain.008.001.08 inkl. strukturierter Adressen
+sepa_faelligkeit,15.02.,Tag und Monat der jährlichen Fälligkeit
+mandat_verfall_monate,36,Ungenutztes Mandat verfällt nach dieser Frist
+fz_wiedervorlage_monate,60,"Standard, falls in Qualifikationsart nichts hinterlegt — PRÜFEN"
+ehrung_zaehlweise,letzter_eintritt,"Beschlossen 10/2026: ab letztem Eintritt, ein Austritt setzt die Zählung zurück. Alternative: gesamt (alle Zeiträume), falls die Satzung geändert wird."
+ehrung_stichtag,kalenderjahr,Alternative: exakter_tag
+funktionsjubilaeum_zaehlweise,je_funktion,"Alternativen: laengste_funktion, summe_aller. OFFENER PUNKT"
+beitrag_anteilig,nein,Voller Jahresbeitrag bei unterjährigem Ein- oder Austritt. OFFENER PUNKT
+next_id_Mitglied,15,ID-Zähler — nur vom Skript erhöhen
+next_id_Mitgliedschaftszeitraum,15,ID-Zähler
+next_id_Abteilung,6,ID-Zähler
+next_id_Abteilungszugehoerigkeit,16,ID-Zähler
+next_id_Funktionsart,14,ID-Zähler
+next_id_Funktion,16,ID-Zähler
+next_id_Beitragsart,4,ID-Zähler
+next_id_Beitragsgemeinschaft,2,ID-Zähler
+next_id_Beitragskonto,12,ID-Zähler
+next_id_Sollstellung,13,ID-Zähler
+next_id_Qualifikationsart,6,ID-Zähler
+next_id_Qualifikation,10,ID-Zähler
+next_id_Ehrungsregel,13,ID-Zähler
+next_id_Ehrung,8,ID-Zähler
+next_id_Benutzer,6,ID-Zähler
+antrag_eingangsdatei,DATEI-ID EINTRAGEN,Getrennte Tabelle Aufnahmeantraege_TSV_Ergoldsbach — einziges Ziel des öffentlichen Endpunkts
+antrag_abholung,stündlich,"Zeitgesteuerter Abruf: offene Anträge lesen, Dublettenprüfung, danach hier archivieren"
+antrag_drive_ordner,ORDNER-ID EINTRAGEN,"Drive-Ordner für unterschriebene Aufnahmeanträge. Freigabe: eingeschränkt, NICHT „jeder mit dem Link“."
+antrag_dateiname,JJJJ-MM-TT_Nachname_Vorname_Aufnahmeantrag.pdf,"Namensschema, damit der Ordner auch nach Jahren durchsuchbar bleibt"
+antrag_dublettenpruefung,nachname+geburtsdatum,Womit das Skript nach einem bestehenden Mitglied sucht
+antrag_erinnerung_tage,14,"Erinnerung, wenn das unterschriebene Formular ausbleibt"
+antrag_doppelte_bestaetigung,ja,"Bestätigungslink per E-Mail, bevor der Antrag bearbeitet wird"
+antrag_endpunkt_regel,"eigenes Skript, eigene Datei","Der öffentliche Endpunkt ist ein separates Skriptprojekt, das nur die Eingangsdatei kennt — die Mitglieder-Datei-ID steht dort nirgends"
+mitgliedsnummer_naechste,1503,Nächste freie Mitgliedsnummer — getrennt vom technischen Zähler next_id_Mitglied
+mitgliedsnummer_wiederverwendung,nein,Nummern ausgetretener Mitglieder werden nicht neu vergeben
+tarifwechsel_automatisch,ja,Beitragsart wechselt beim Erreichen der Altersgrenze aus Beitragsart.alter_bis
+tarifwechsel_stichtag,01.01.,"Zum Jahreswechsel, nicht am Geburtstag"
+ruecklastschrift_gebuehr,"5,00",BEISPIELWERT — Satzung bzw. Beschluss prüfen
+sheet_eigentuemer,verwaltung@tsv-ergoldsbach.de,"MUSS ein Vereinskonto sein, kein privates. Sonst hängt der Zugang an einer Person."
+backup_intervall,monatlich,Kopie des Sheets in einen Ordner mit Zugriff für zwei Personen
+loeschlauf_intervall,jährlich,Wann die Löschliste erzeugt wird — Vorschlag: nach dem Jahresabschluss
+loeschantwort_frist_tage,30,"Rückmeldung an die betroffene Person, Art. 12 Abs. 3 DSGVO"
+chronik_bei_anonymisierung,namen_entfernen,Alternative: vereinsaemter_behalten. OFFENER PUNKT — betrifft Funktion und Ehrung
+statistik_einfrieren_am,31.01.,Zeitgleich mit der BLSV-Bestandserhebung
+anonym_platzhalter,(anonymisiert),"Text, der in Namensfelder geschrieben wird"
+next_id_Aufbewahrungsfrist,8,ID-Zähler
+next_id_Betroffenenanfrage,2,ID-Zähler
+next_id_Statistik_Jahr,8,ID-Zähler
+next_id_Protokoll,4,ID-Zähler
+jugend_bis_alter,17,Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). OFFEN: bestätigen
+snapshot_einbetten,ja,"ja = Startdaten direkt in die Seite einbetten (spart einen Aufruf), nein = nachladen. Für Messvergleich."
+cache_warmhalten,nein,"Zeit-Trigger, der den Snapshot-Cache vor Ablauf neu baut. Standard aus."
+messung_puffer_max,500,"Wie viele Messwerte maximal im Cache gepuffert werden, bevor sie nach _Messung geschrieben werden."
+sperre_wartezeit_ms,10000,Wie lange ein Schreibvorgang höchstens auf die Sperre wartet.
+impressum_url,https://www.tsv-ergoldsbach.de/impressum,Link in der Fußzeile (D1). PRÜFEN
+datenschutz_url,https://www.tsv-ergoldsbach.de/datenschutz,Link in der Fußzeile (D1). PRÜFEN

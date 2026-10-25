@@ -1,0 +1,16 @@
+funktion_id,mitglied_id,funktionsart_id,abteilung_id,zusatz,von,bis,bestellt_am,beendigungsgrund,bemerkung
+1,8,7,1,,2016-04-01,,2016-03-25,,Laufend
+2,8,5,,,2012-04-01,2016-03-31,,nicht wiedergewählt,
+3,8,8,1,D-Jugend,2004-08-01,2010-06-30,,Rücktritt,
+4,6,7,2,,2011-04-01,,,,Laufend
+5,6,8,2,Kinderturnen,1998-09-01,,,,Laufend seit 27 Jahren
+6,6,4,,,2005-04-01,2009-03-31,,Wechsel ins Amt der Abteilungsleitung,
+7,5,11,,,1990-01-01,2014-12-31,,Ruhestand,
+8,9,7,4,,1988-04-01,2004-03-31,,Rücktritt Altersgründe,
+9,10,7,1,,2007-04-01,2016-03-31,,Übergabe an T. Obermeier,
+10,10,8,1,Herren II,1998-07-01,2007-06-30,,Rücktritt,
+11,11,8,1,Herren I,2022-07-01,,,,Laufend
+12,11,8,1,B-Jugend,2018-08-01,2022-06-30,,Wechsel zu Herren I,
+13,4,8,1,E-Jugend,2024-08-01,,,,Laufend
+14,12,8,1,C-Jugend,2026-03-01,,,,Laufend — Führungszeugnis fehlt
+15,13,9,1,D-Jugend,2023-09-01,,,,Laufend

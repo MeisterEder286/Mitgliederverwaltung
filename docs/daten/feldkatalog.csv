@@ -1,0 +1,346 @@
+tabelle,spalte,typ,pflicht,auswahlliste,sichtklasse,beschreibung
+Aufnahmeantrag,antrag_id,Ganzzahl,PK,,verwaltung,Vom Skript vergeben.
+Aufnahmeantrag,eingang_ref,Text,nein,,verwaltung,eingang_id aus der Eingangsdatei — Herkunftsnachweis nach dem Umzug.
+Aufnahmeantrag,eingang_am,Zeitpunkt,ja,,verwaltung,"Wird vom Endpunkt gesetzt, nicht vom Formular geschickt."
+Aufnahmeantrag,quelle,Auswahl,ja,antrag_quelle,verwaltung,Woher der Antrag kam.
+Aufnahmeantrag,status,Auswahl,ja,antrag_status,verwaltung,Steuert den Ablauf bis zur Übernahme.
+Aufnahmeantrag,anrede,Auswahl,nein,anrede,verwaltung,—
+Aufnahmeantrag,titel,Text,nein,,verwaltung,—
+Aufnahmeantrag,vorname,Text,ja,,verwaltung,—
+Aufnahmeantrag,nachname,Text,ja,,verwaltung,—
+Aufnahmeantrag,geburtsdatum,Datum,ja,,verwaltung,Pflicht im Formular — sonst stimmen Altersklasse und Tarif nicht.
+Aufnahmeantrag,geschlecht,Auswahl,nein,geschlecht,verwaltung,—
+Aufnahmeantrag,strasse,Text,ja,,verwaltung,—
+Aufnahmeantrag,hausnummer,Text,ja,,verwaltung,—
+Aufnahmeantrag,plz,Text,ja,,verwaltung,—
+Aufnahmeantrag,ort,Text,ja,,verwaltung,—
+Aufnahmeantrag,land,Text,nein,,verwaltung,Standard DE.
+Aufnahmeantrag,telefon,Text,nein,,verwaltung,—
+Aufnahmeantrag,email,Text,ja,,verwaltung,Für die Bestätigung und den Versand des Formulars.
+Aufnahmeantrag,vertreter_name,Text,bedingt,,verwaltung,Pflicht bei Minderjährigen — sie können weder Mitgliedschaft noch Mandat wirksam erteilen.
+Aufnahmeantrag,vertreter_kontakt,Text,bedingt,,verwaltung,—
+Aufnahmeantrag,abteilung_wunsch,Text,nein,,verwaltung,Freitext oder Mehrfachauswahl aus dem Formular. Wird bei der Übernahme aufgelöst.
+Aufnahmeantrag,eintritt_wunsch,Datum,nein,,verwaltung,Gewünschter Eintritt. Der tatsächliche folgt aus dem Beschluss.
+Aufnahmeantrag,familienverbund_hinweis,Text,nein,,verwaltung,z. B. „zusammen mit Familie Wagner“. Grundlage für Konto und Gemeinschaft.
+Aufnahmeantrag,zahlweg_wunsch,Auswahl,nein,zahlweg,finanz,—
+Aufnahmeantrag,kontoinhaber_name,Text,nein,,finanz,SENSIBEL.
+Aufnahmeantrag,ew_fotos,ja/nein,nein,ja_nein,verwaltung,Einwilligung aus dem Formular. Wird bei Übernahme zur Zeile in Einwilligung.
+Aufnahmeantrag,ew_newsletter,ja/nein,nein,ja_nein,verwaltung,—
+Aufnahmeantrag,ew_ehrungen,ja/nein,nein,ja_nein,verwaltung,Veröffentlichung von Ehrungen und Geburtstagen.
+Aufnahmeantrag,satzung_akzeptiert,ja/nein,ja,ja_nein,verwaltung,Im Formular bestätigt: Satzung und Beitragsordnung anerkannt.
+Aufnahmeantrag,datenschutz_gelesen,ja/nein,ja,ja_nein,verwaltung,Kenntnisnahme der Hinweise nach Art. 13 DSGVO.
+Aufnahmeantrag,email_bestaetigt_am,Datum,nein,,verwaltung,Doppelte Bestätigung — verhindert Anmeldungen im Namen Dritter.
+Aufnahmeantrag,formular_versendet_am,Datum,nein,,verwaltung,Vorausgefülltes PDF zur Unterschrift verschickt.
+Aufnahmeantrag,formular_eingang_am,Datum,nein,,verwaltung,Unterschriebenes Formular zurück.
+Aufnahmeantrag,formular_link,Text,nein,,verwaltung,Link auf die Datei im Drive-Ordner. Ordner darf NICHT über Link freigegeben sein.
+Aufnahmeantrag,dublette_mitglied_id,FK,nein,,verwaltung,"→ Mitglied. Verdacht auf Wiedereintritt oder Doppelanlage, vom Skript vorgeschlagen."
+Aufnahmeantrag,geprueft_von,Text,nein,,verwaltung,—
+Aufnahmeantrag,beschluss_am,Datum,nein,,verwaltung,Aufnahmebeschluss der Vorstandschaft.
+Aufnahmeantrag,ablehnungsgrund,Text,nein,,verwaltung,—
+Aufnahmeantrag,uebernommen_am,Datum,nein,,verwaltung,Wann daraus Mitgliedsdaten wurden.
+Aufnahmeantrag,mitglied_id,FK,nein,,verwaltung,→ Mitglied. Erst nach der Übernahme gefüllt.
+Aufnahmeantrag,bemerkung,Langtext,nein,,verwaltung,—
+Aufnahmeantrag,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Aufnahmeantrag,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Aufnahmeantrag,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Mitglied,mitglied_id,Ganzzahl,PK,,intern,"Vom Skript vergeben, nie ändern, nie wiederverwenden."
+Mitglied,mitgliedsnummer,Text,ja,,intern,"Externe Nummer aus dem Altbestand, eindeutig."
+Mitglied,anrede,Auswahl,nein,anrede,intern,Für Serienbriefe.
+Mitglied,briefanrede,Text,nein,,intern,"Vollständige Anrede, z. B. „Sehr geehrter Herr Bauer“ oder „Liebe Anna“."
+Mitglied,titel,Text,nein,,intern,Akademischer Titel.
+Mitglied,vorname,Text,ja,,intern,—
+Mitglied,nachname,Text,ja,,intern,—
+Mitglied,strasse,Text,nein,,kontakt,Ohne Hausnummer — getrennt wegen strukturierter Adressen ab pain.008.001.08.
+Mitglied,hausnummer,Text,nein,,kontakt,"Getrennt von der Straße, siehe oben."
+Mitglied,plz,Text,nein,,kontakt,"Als Text, sonst fällt die führende Null weg."
+Mitglied,ort,Text,nein,,kontakt,—
+Mitglied,land,Text,nein,,kontakt,"ISO-Code, Standard DE."
+Mitglied,geburtsdatum,Datum,nein,,kontakt,Grundlage für Altersklassen (BLSV) und Geburtstagsehrungen.
+Mitglied,geschlecht,Auswahl,nein,geschlecht,kontakt,Für die BLSV-Bestandserhebung.
+Mitglied,telefon,Text,nein,,kontakt,—
+Mitglied,handy,Text,nein,,kontakt,—
+Mitglied,email,Text,nein,,kontakt,—
+Mitglied,versandart,Auswahl,nein,versandart,kontakt,Wie das Mitglied Post bekommt.
+Mitglied,adresse_ungueltig,ja/nein,nein,ja_nein,kontakt,Post kam zurück. Ersetzt die alte Abfrage AdrUnbekanntA.
+Mitglied,adresse_ungueltig_am,Datum,nein,,kontakt,—
+Mitglied,ehrenmitglied,ja/nein,nein,ja_nein,intern,Merkmal ohne Beitragsbefreiung (so beim TSV geklärt).
+Mitglied,ehrenmitglied_seit,Datum,nein,,intern,—
+Mitglied,nur_funktionstraeger,ja/nein,nein,ja_nein,intern,Externe Person mit Funktion (z. B. Trainer mit FZ-Pflicht) ohne Mitgliedschaft. Zählt nicht für BLSV und Beitrag. (V6)
+Mitglied,sterbedatum,Datum,nein,,intern,Hat Vorrang: setzt den Status auf „verstorben“.
+Mitglied,status,Auswahl,auto,mitglied_status,intern,Vom Skript geschrieben. Quelle: Mitgliedschaftszeitraum + Sterbedatum. Nur Cache zum Filtern.
+Mitglied,beitragsart_id,FK,nein,,finanz,"→ Beitragsart. Leer, wenn das Mitglied in einer Gemeinschaft mit Festbetrag steckt."
+Mitglied,beitragskonto_id,FK,nein,,finanz,→ Beitragskonto. WER zahlt.
+Mitglied,beitragsgemeinschaft_id,FK,nein,,finanz,→ Beitragsgemeinschaft. Nur bei gedeckeltem Familien-/Ehegattenverbund.
+Mitglied,vertreter_mitglied_id,FK,nein,,kontakt,"→ Mitglied. Gesetzliche Vertretung, falls selbst Mitglied. OFFENER PUNKT."
+Mitglied,vertreter_name,Text,nein,,kontakt,"Gesetzliche Vertretung, falls nicht Mitglied. OFFENER PUNKT."
+Mitglied,vertreter_kontakt,Text,nein,,kontakt,Telefon/E-Mail der gesetzlichen Vertretung.
+Mitglied,bemerkung,Langtext,nein,,kontakt,—
+Mitglied,geaendert_am,Zeitpunkt,auto,,intern,Ersetzt das alte Feld Arbeitsdatum.
+Mitglied,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters.
+Mitglied,verarbeitung_eingeschraenkt,ja/nein,nein,ja_nein,verwaltung,Art. 18 DSGVO. Satz bleibt NUR wegen einer laufenden Aufbewahrungsfrist bestehen und wird in allen Ansichten ausgeblendet.
+Mitglied,sperre_grund,Text,nein,,verwaltung,"Warum noch nicht gelöscht, z. B. „§ 147 AO — Beitragsbuchungen bis 2036“."
+Mitglied,loeschbar_ab,Datum,auto,,verwaltung,Ende der längsten laufenden Frist. Ab hier erscheint der Satz in der Löschliste.
+Mitglied,anonymisiert,ja/nein,nein,ja_nein,verwaltung,Personenbezug unwiderruflich entfernt. Zeile bleibt nur als Anker für abhängige Datensätze.
+Mitglied,anonymisiert_am,Datum,nein,,verwaltung,—
+Mitglied,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Mitgliedschaftszeitraum,zeitraum_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Mitgliedschaftszeitraum,mitglied_id,FK,ja,,intern,→ Mitglied.
+Mitgliedschaftszeitraum,antrag_am,Datum,nein,,intern,Eingang des Aufnahmeantrags.
+Mitgliedschaftszeitraum,aufnahme_beschluss_am,Datum,nein,,intern,Beschluss der Vorstandschaft über die Aufnahme.
+Mitgliedschaftszeitraum,aufnahmeantrag_id,FK,nein,,intern,→ Aufnahmeantrag. Führt zum unterschriebenen Formular im Drive-Ordner.
+Mitgliedschaftszeitraum,eintrittsdatum,Datum,ja,,intern,—
+Mitgliedschaftszeitraum,austrittsdatum,Datum,nein,,intern,Leer = laufende Mitgliedschaft.
+Mitgliedschaftszeitraum,kuendigung_eingang,Datum,nein,,intern,Wann die Kündigung eingegangen ist.
+Mitgliedschaftszeitraum,austritt_wirksam,Datum,nein,,intern,"Nach Kündigungsfrist, meist 31.12."
+Mitgliedschaftszeitraum,austrittsgrund,Auswahl,nein,austrittsgrund,intern,—
+Mitgliedschaftszeitraum,bemerkung,Langtext,nein,,intern,—
+Mitgliedschaftszeitraum,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Mitgliedschaftszeitraum,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Mitgliedschaftszeitraum,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Abteilung,abteilung_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Abteilung,bezeichnung,Text,ja,,intern,Vereinsinterner Name.
+Abteilung,blsv_sportart,Text,nein,,intern,"Bezeichnung laut BLSV, kann abweichen (Stockschützen → Eisstocksport)."
+Abteilung,meldepflichtig,ja/nein,ja,ja_nein,intern,Geht in die Bestandserhebung ein.
+Abteilung,aktiv,ja/nein,ja,ja_nein,intern,"Ruhende Abteilungen auf „nein“ setzen, nicht löschen."
+Abteilung,bemerkung,Langtext,nein,,intern,—
+Abteilung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Abteilung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Abteilung,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Abteilungszugehoerigkeit,zugehoerigkeit_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Abteilungszugehoerigkeit,mitglied_id,FK,ja,,intern,→ Mitglied.
+Abteilungszugehoerigkeit,abteilung_id,FK,ja,,intern,"→ Abteilung. Eindeutig je (mitglied_id, abteilung_id)."
+Abteilungszugehoerigkeit,passnummer,Text,nein,,intern,"Verbands- oder Spielerpassnummer, falls die Sparte eine führt."
+Abteilungszugehoerigkeit,status,Auswahl,ja,zugehoerigkeit,intern,aktiv oder passiv. Standard aktiv.
+Abteilungszugehoerigkeit,eintrittsdatum,Datum,nein,,intern,Eintritt in die Sparte.
+Abteilungszugehoerigkeit,austrittsdatum,Datum,nein,,intern,Leer = laufend.
+Abteilungszugehoerigkeit,bemerkung,Langtext,nein,,intern,—
+Abteilungszugehoerigkeit,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Abteilungszugehoerigkeit,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Abteilungszugehoerigkeit,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Funktionsart,funktionsart_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Funktionsart,bezeichnung,Text,ja,,intern,"z. B. Trainer, Abteilungsleiter, Kassier."
+Funktionsart,ebene,Auswahl,ja,ebene,intern,"Verein = Amt der Vorstandschaft, Abteilung = Amt in einer Sparte."
+Funktionsart,fz_pflichtig,ja/nein,ja,ja_nein,intern,"Steuert, ob ein erweitertes Führungszeugnis verlangt wird."
+Funktionsart,bestellung,Auswahl,nein,bestellung,intern,Wie das Amt zustande kommt.
+Funktionsart,ehrungsfaehig,ja/nein,ja,ja_nein,intern,Zählt für Funktionsjubiläen.
+Funktionsart,aktiv,ja/nein,ja,ja_nein,intern,"Nicht mehr besetzte Arten auf „nein“, nicht löschen."
+Funktionsart,bemerkung,Langtext,nein,,intern,—
+Funktionsart,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Funktionsart,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Funktionsart,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Funktion,funktion_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Funktion,mitglied_id,FK,ja,,intern,→ Mitglied.
+Funktion,funktionsart_id,FK,ja,,intern,→ Funktionsart.
+Funktion,abteilung_id,FK,nein,,intern,→ Abteilung. Leer bei Vereinsämtern.
+Funktion,zusatz,Text,nein,,intern,"Mannschaft oder Gruppe, z. B. „E-Jugend“, „Herren I“."
+Funktion,von,Datum,ja,,intern,Beginn der Funktion.
+Funktion,bis,Datum,nein,,intern,"Leer = laufend. Zeilen werden NIE gelöscht, nur abgeschlossen."
+Funktion,bestellt_am,Datum,nein,,intern,"Datum der Wahl oder Berufung, falls abweichend."
+Funktion,beendigungsgrund,Text,nein,,intern,"z. B. Rücktritt, nicht wiedergewählt, beruflich."
+Funktion,bemerkung,Langtext,nein,,intern,—
+Funktion,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Funktion,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Funktion,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Beitragsart,beitragsart_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Beitragsart,bezeichnung,Text,ja,,intern,"z. B. Erwachsene, Jugendliche, Fördermitglied."
+Beitragsart,betrag,Dezimal,ja,,intern,Betrag je Intervall.
+Beitragsart,alter_von,Ganzzahl,nein,,intern,Untere Altersgrenze. Steuert den automatischen Tarifwechsel.
+Beitragsart,alter_bis,Ganzzahl,nein,,intern,"Obere Altersgrenze, leer = nach oben offen."
+Beitragsart,intervall,Auswahl,ja,intervall,intern,—
+Beitragsart,aktiv,ja/nein,ja,ja_nein,intern,"Alte Tarife auf „nein“, damit die Historie stimmt."
+Beitragsart,gueltig_ab,Datum,nein,,intern,Ab wann der Betrag gilt.
+Beitragsart,bemerkung,Langtext,nein,,intern,—
+Beitragsart,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Beitragsart,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Beitragsart,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Beitragsgemeinschaft,beitragsgemeinschaft_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
+Beitragsgemeinschaft,bezeichnung,Text,ja,,finanz,z. B. „Familie Wagner“.
+Beitragsgemeinschaft,festbetrag,Dezimal,nein,,finanz,"Pauschale, EINMAL je Gemeinschaft gezogen. Leer = Mitglieder zahlen Einzeltarife."
+Beitragsgemeinschaft,aktiv,ja/nein,ja,ja_nein,finanz,—
+Beitragsgemeinschaft,bemerkung,Langtext,nein,,finanz,—
+Beitragsgemeinschaft,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Beitragsgemeinschaft,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Beitragsgemeinschaft,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Beitragskonto,beitragskonto_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
+Beitragskonto,kontoinhaber_name,Text,ja,,finanz,"Auch bei externem Zahler, der nicht Mitglied ist."
+Beitragskonto,kontoinhaber_mitglied_id,FK,nein,,finanz,"→ Mitglied, falls der Zahler selbst Mitglied ist."
+Beitragskonto,zahlweg,Auswahl,ja,zahlweg,finanz,—
+Beitragskonto,iban,Text,bedingt,,finanz,SENSIBEL. Pflicht bei Lastschrift. Immer als Text formatieren.
+Beitragskonto,bic,Text,nein,,finanz,SENSIBEL. Bei DE-IBAN meist entbehrlich.
+Beitragskonto,mandatsreferenz,Text,bedingt,,finanz,"SENSIBEL. Eindeutig, wird nie wiederverwendet."
+Beitragskonto,mandatsdatum,Datum,bedingt,,finanz,SENSIBEL. Unterschriftsdatum des Mandats.
+Beitragskonto,abw_strasse,Text,nein,,finanz,"Abweichende Rechnungsanschrift, getrennte Felder wegen pain.008.001.08."
+Beitragskonto,abw_hausnummer,Text,nein,,finanz,—
+Beitragskonto,abw_plz,Text,nein,,finanz,—
+Beitragskonto,abw_ort,Text,nein,,finanz,—
+Beitragskonto,abw_land,Text,nein,,finanz,—
+Beitragskonto,aktiv,ja/nein,ja,ja_nein,finanz,—
+Beitragskonto,bemerkung,Langtext,nein,,finanz,—
+Beitragskonto,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Beitragskonto,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Beitragskonto,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Sollstellung,sollstellung_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
+Sollstellung,beitragskonto_id,FK,ja,,finanz,"→ Beitragskonto. Eindeutig je (beitragskonto_id, jahr)."
+Sollstellung,jahr,Ganzzahl,ja,,finanz,Beitragsjahr.
+Sollstellung,soll_betrag,Dezimal,ja,,finanz,Errechneter Einzug als Schnappschuss — wird später nie nachgerechnet.
+Sollstellung,ist_betrag,Dezimal,nein,,finanz,Tatsächlich eingegangen. Weicht bei Teilzahlung und Überweisern ab.
+Sollstellung,gebuehr,Dezimal,nein,,finanz,Rücklastschrift- oder Mahngebühr.
+Sollstellung,status,Auswahl,ja,sollstellung_status,finanz,—
+Sollstellung,sepa_sequenz,Auswahl,nein,sepa_sequenz,finanz,Beim Lauf ermittelt und mitgeschrieben.
+Sollstellung,einzugsdatum,Datum,nein,,finanz,Fälligkeit der Lastschrift.
+Sollstellung,buchungsdatum,Datum,nein,,finanz,Tatsächliche Buchung.
+Sollstellung,mahnstufe,Ganzzahl,ja,,finanz,Standard 0.
+Sollstellung,ruecklastschrift_grund,Text,nein,,finanz,"z. B. Konto erloschen, keine Deckung, Widerspruch."
+Sollstellung,bemerkung,Langtext,nein,,finanz,—
+Sollstellung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Sollstellung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Sollstellung,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Qualifikationsart,qualifikationsart_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Qualifikationsart,bezeichnung,Text,ja,,intern,"z. B. Erweitertes Führungszeugnis, Trainer-C-Lizenz."
+Qualifikationsart,kategorie,Auswahl,ja,qual_kategorie,intern,"Steuert, welche Felder gefüllt werden."
+Qualifikationsart,wiedervorlage_monate,Ganzzahl,nein,,intern,Nur Führungszeugnis: Abstand bis zur erneuten Vorlage. PRÜFEN: 60 = 5 Jahre.
+Qualifikationsart,max_alter_zeugnis_monate,Ganzzahl,nein,,intern,Nur Führungszeugnis: Zeugnis darf bei Einsicht nicht älter sein. Üblich 3.
+Qualifikationsart,loeschfrist_monate,Ganzzahl,nein,,intern,Nur Führungszeugnis: Löschung nach Ende der Tätigkeit. Üblich 3.
+Qualifikationsart,aktiv,ja/nein,ja,ja_nein,intern,—
+Qualifikationsart,bemerkung,Langtext,nein,,intern,—
+Qualifikationsart,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Qualifikationsart,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Qualifikationsart,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Qualifikation,qualifikation_id,Ganzzahl,PK,,hochsensibel,Vom Skript vergeben.
+Qualifikation,mitglied_id,FK,ja,,hochsensibel,→ Mitglied.
+Qualifikation,qualifikationsart_id,FK,ja,,hochsensibel,→ Qualifikationsart.
+Qualifikation,funktion_id,FK,nein,,hochsensibel,"→ Funktion, aus der die Pflicht entstand. NUR informativ: Ein Führungszeugnis gilt der Person. Die Löschfrist läuft ab dem Ende der LETZTEN nachweispflichtigen Funktion, nicht ab dieser einen."
+Qualifikation,ausgestellt_am,Datum,nein,,hochsensibel,Ausstellungsdatum des Dokuments.
+Qualifikation,eingesehen_am,Datum,nein,,hochsensibel,HOCHSENSIBEL. Nur beim Führungszeugnis.
+Qualifikation,eingesehen_durch,Text,nein,,hochsensibel,HOCHSENSIBEL. Wer Einsicht genommen hat.
+Qualifikation,ergebnis,Auswahl,nein,ergebnis,hochsensibel,HOCHSENSIBEL. Beim Führungszeugnis ausschließlich „ohne einschlägigen Eintrag“ — NIEMALS Inhalte.
+Qualifikation,gueltig_bis,Datum,nein,,hochsensibel,Bei Lizenzen und Kursen das Ablaufdatum.
+Qualifikation,wiedervorlage_am,Datum,nein,,hochsensibel,Beim Führungszeugnis: eingesehen_am + wiedervorlage_monate.
+Qualifikation,zu_loeschen_ab,Datum,nein,,hochsensibel,Ende der Funktion + loeschfrist_monate. Danach Zeile leeren.
+Qualifikation,geloescht_am,Datum,nein,,hochsensibel,Wann der Vermerk tatsächlich gelöscht wurde.
+Qualifikation,bemerkung,Text,nein,,hochsensibel,Niemals Inhalte des Führungszeugnisses.
+Qualifikation,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Qualifikation,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Qualifikation,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Ehrungsregel,ehrungsregel_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Ehrungsregel,typ,Auswahl,ja,ehrungstyp,intern,—
+Ehrungsregel,schwelle,Ganzzahl,ja,,intern,"Jahre Mitgliedschaft, Lebensalter oder Jahre im Amt."
+Ehrungsregel,bezeichnung,Text,ja,,intern,"Name der Stufe, z. B. Ehrennadel Silber."
+Ehrungsregel,verband,Text,nein,,intern,Verein oder BLSV.
+Ehrungsregel,aktiv,ja/nein,ja,ja_nein,intern,—
+Ehrungsregel,bemerkung,Langtext,nein,,intern,—
+Ehrungsregel,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Ehrungsregel,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Ehrungsregel,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Ehrung,ehrung_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Ehrung,mitglied_id,FK,ja,,intern,→ Mitglied.
+Ehrung,ehrungsregel_id,FK,ja,,intern,"→ Ehrungsregel. Eindeutig je (mitglied_id, ehrungsregel_id)."
+Ehrung,funktion_id,FK,nein,,intern,"→ Funktion, nur bei Funktionsjubiläen."
+Ehrung,faellig_jahr,Ganzzahl,ja,,intern,"Jahr, in dem die Stufe erreicht wurde."
+Ehrung,status,Auswahl,ja,ehrung_status,intern,"fällig, verliehen, verschoben oder abgelehnt."
+Ehrung,verliehen_am,Datum,nein,,intern,—
+Ehrung,veranstaltung,Text,nein,,intern,z. B. Jahreshauptversammlung 2026.
+Ehrung,bemerkung,Langtext,nein,,intern,—
+Ehrung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Ehrung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Ehrung,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Benutzer,benutzer_id,Ganzzahl,PK,,verwaltung,Vom Skript vergeben.
+Benutzer,email,Text,ja,,verwaltung,Google-Konto. Grundlage für Session.getActiveUser().getEmail().
+Benutzer,name,Text,nein,,verwaltung,Klartextname für Anzeige und Protokoll.
+Benutzer,rolle,Auswahl,ja,rolle,verwaltung,Bestimmt Zeilen- und Feldsicht.
+Benutzer,abteilung_id,FK,nein,,verwaltung,→ Abteilung. Nur bei Abteilungsleiter: der Sichtbereich.
+Benutzer,mitglied_id,FK,nein,,verwaltung,"→ Mitglied, falls der Benutzer selbst Mitglied ist."
+Benutzer,aktiv,ja/nein,ja,ja_nein,verwaltung,"Zugang entziehen heißt „nein“ setzen, nicht löschen."
+Benutzer,angelegt_am,Datum,nein,,verwaltung,—
+Benutzer,bemerkung,Langtext,nein,,verwaltung,—
+Benutzer,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Benutzer,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Benutzer,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Einwilligung,einwilligung_id,Ganzzahl,PK,,kontakt,Vom Skript vergeben.
+Einwilligung,mitglied_id,FK,ja,,kontakt,→ Mitglied.
+Einwilligung,art,Auswahl,ja,einwilligung_art,kontakt,Wofür die Einwilligung gilt.
+Einwilligung,umfang,Text,nein,,kontakt,"Reichweite, z. B. „nur Vereinsmedien“ oder „auch Presse und Website“."
+Einwilligung,erteilt_am,Datum,ja,,kontakt,—
+Einwilligung,erteilt_form,Auswahl,nein,einwilligung_form,kontakt,Woraus sich die Einwilligung ergibt.
+Einwilligung,erteilt_durch,Text,nein,,kontakt,Bei Minderjährigen die gesetzliche Vertretung.
+Einwilligung,widerrufen_am,Datum,nein,,kontakt,"Widerruf beendet die Einwilligung, löscht sie aber nicht — der Nachweis bleibt."
+Einwilligung,nachweis_ort,Text,nein,,kontakt,"Wo der Beleg liegt, z. B. „Ordner Aufnahmeanträge 2018“."
+Einwilligung,bemerkung,Langtext,nein,,kontakt,—
+Einwilligung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Einwilligung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Einwilligung,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Aufbewahrungsfrist,aufbewahrungsfrist_id,Ganzzahl,PK,,verwaltung,Vom Skript vergeben.
+Aufbewahrungsfrist,datenkategorie,Text,ja,,verwaltung,Welche Art von Daten die Frist betrifft.
+Aufbewahrungsfrist,betrifft_tab,Text,ja,,verwaltung,"Tab bzw. Feldgruppe, für die die Frist gilt."
+Aufbewahrungsfrist,dauer_monate,Ganzzahl,ja,,verwaltung,"Dauer ab dem Bezugspunkt. 0 = sofort löschbar, leer = unbefristet."
+Aufbewahrungsfrist,bezugspunkt,Auswahl,ja,bezugspunkt,verwaltung,Woran die Frist hängt.
+Aufbewahrungsfrist,rechtsgrundlage,Text,nein,,verwaltung,VORSCHLAG — vom Vorstand bzw. Datenschutzbeauftragten zu bestätigen.
+Aufbewahrungsfrist,aktiv,ja/nein,ja,ja_nein,verwaltung,—
+Aufbewahrungsfrist,bemerkung,Langtext,nein,,verwaltung,—
+Aufbewahrungsfrist,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Aufbewahrungsfrist,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Aufbewahrungsfrist,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Betroffenenanfrage,anfrage_id,Ganzzahl,PK,,verwaltung,Vom Skript vergeben.
+Betroffenenanfrage,mitglied_id,FK,ja,,verwaltung,→ Mitglied.
+Betroffenenanfrage,art,Auswahl,ja,anfrage_art,verwaltung,Welches Recht geltend gemacht wird.
+Betroffenenanfrage,name_bei_eingang,Text,nein,,verwaltung,Nur bis zum Abschluss des Vorgangs. Danach vom Skript geleert — sonst wäre der Name genau hier weiter gespeichert.
+Betroffenenanfrage,eingang_am,Datum,ja,,verwaltung,Fristbeginn: einen Monat bis zur Rückmeldung (Art. 12 Abs. 3 DSGVO).
+Betroffenenanfrage,eingang_kanal,Text,nein,,verwaltung,"E-Mail, Brief, mündlich in der Versammlung."
+Betroffenenanfrage,umfang,Text,ja,,verwaltung,"Was verlangt wurde: vollständige Löschung, nur Kontaktdaten, Widerruf der Fotoeinwilligung."
+Betroffenenanfrage,status,Auswahl,ja,anfrage_status,verwaltung,—
+Betroffenenanfrage,geprueft_von,Text,nein,,verwaltung,Wer die Prüfung vorgenommen hat.
+Betroffenenanfrage,entscheidung,Langtext,nein,,verwaltung,"Was gelöscht, was gesperrt, was behalten wurde — und warum. Das ist die Rechenschaft nach Art. 5 Abs. 2."
+Betroffenenanfrage,umgesetzte_stufe,Auswahl,nein,loesch_stufe,verwaltung,Was tatsächlich passiert ist.
+Betroffenenanfrage,umgesetzt_am,Datum,nein,,verwaltung,—
+Betroffenenanfrage,rueckmeldung_am,Datum,nein,,verwaltung,Wann die betroffene Person Antwort bekam.
+Betroffenenanfrage,restdaten_bis,Datum,nein,,verwaltung,Bis wann gesperrte Restdaten noch bestehen. Danach erneut vorlegen.
+Betroffenenanfrage,bemerkung,Langtext,nein,,verwaltung,—
+Betroffenenanfrage,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Betroffenenanfrage,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Betroffenenanfrage,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Statistik_Jahr,statistik_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Statistik_Jahr,jahr,Ganzzahl,ja,,intern,Berichtsjahr.
+Statistik_Jahr,stichtag,Datum,ja,,intern,Meist 01.01. — gleicher Stichtag wie die BLSV-Bestandserhebung.
+Statistik_Jahr,ebene,Auswahl,ja,ebene,intern,"Verein = Gesamtzahl, Abteilung = je Sparte."
+Statistik_Jahr,abteilung_id,FK,nein,,intern,→ Abteilung. Leer auf Vereinsebene.
+Statistik_Jahr,abteilung_bezeichnung,Text,nein,,intern,"Name als Schnappschuss — bleibt lesbar, auch wenn die Abteilung später umbenannt wird."
+Statistik_Jahr,mitglieder_gesamt,Ganzzahl,ja,,intern,—
+Statistik_Jahr,davon_passiv,Ganzzahl,nein,,intern,—
+Statistik_Jahr,maennlich,Ganzzahl,nein,,intern,—
+Statistik_Jahr,weiblich,Ganzzahl,nein,,intern,—
+Statistik_Jahr,divers,Ganzzahl,nein,,intern,—
+Statistik_Jahr,alter_bis_14,Ganzzahl,nein,,intern,Altersklassen wie in der BLSV-Meldung.
+Statistik_Jahr,alter_15_18,Ganzzahl,nein,,intern,—
+Statistik_Jahr,alter_19_26,Ganzzahl,nein,,intern,—
+Statistik_Jahr,alter_ab_27,Ganzzahl,nein,,intern,—
+Statistik_Jahr,eintritte,Ganzzahl,nein,,intern,Im Berichtsjahr.
+Statistik_Jahr,austritte,Ganzzahl,nein,,intern,Im Berichtsjahr.
+Statistik_Jahr,funktionstraeger,Ganzzahl,nein,,intern,Laufende Ämter und Tätigkeiten zum Stichtag — Kennzahl fürs Ehrenamt.
+Statistik_Jahr,beitragsgemeinschaften,Ganzzahl,nein,,intern,Zahl der Familien- und Ehegattenverbünde.
+Statistik_Jahr,beitragssoll,Dezimal,nein,,intern,Summe der Sollstellungen des Jahres.
+Statistik_Jahr,beitragsist,Dezimal,nein,,intern,Tatsächlich eingegangen.
+Statistik_Jahr,eingefroren_am,Datum,ja,,intern,Ab diesem Datum wird die Zeile nicht mehr neu berechnet.
+Statistik_Jahr,blsv_gemeldet_am,Datum,nein,,intern,—
+Statistik_Jahr,bemerkung,Langtext,nein,,intern,—
+_Konfig,schluessel,Text,ja,,verwaltung,"Technischer Schlüssel, vom Skript gelesen."
+_Konfig,wert,Text,ja,,verwaltung,Wert.
+_Konfig,beschreibung,Text,nein,,verwaltung,Wofür der Wert da ist.
+_Protokoll,protokoll_id,Ganzzahl,PK,,verwaltung,Fortlaufend.
+_Protokoll,zeitpunkt,Zeitpunkt,ja,,verwaltung,—
+_Protokoll,benutzer_email,Text,ja,,verwaltung,"Aus der Sitzung, nicht aus einem Eingabefeld."
+_Protokoll,aktion,Auswahl,ja,protokoll_aktion,verwaltung,—
+_Protokoll,tabelle,Text,ja,,verwaltung,Betroffener Tab.
+_Protokoll,datensatz_id,Text,ja,,verwaltung,PK des betroffenen Datensatzes.
+_Protokoll,feld,Text,nein,,verwaltung,Geändertes Feld.
+_Protokoll,alt_wert,Text,nein,,verwaltung,Alter Wert. Bei IBAN und Mandat immer mitschreiben.
+_Protokoll,neu_wert,Text,nein,,verwaltung,Neuer Wert.
+_Protokoll,kommentar,Text,nein,,verwaltung,—
+_Protokoll,bereinigt_am,Datum,nein,,verwaltung,"Wann alt_wert und neu_wert geleert wurden. Nötig, weil im Protokoll sonst alte IBANs und Adressen weiterleben."
+_Messung,zeitpunkt,Zeitpunkt,ja,,verwaltung,Zeitpunkt der Messung.
+_Messung,funktion,Text,ja,,verwaltung,Aufgerufene Server-Funktion.
+_Messung,rolle,Text,nein,,verwaltung,"Rolle(n) des Aufrufers, keine E-Mail (Datensparsamkeit)."
+_Messung,dauer_ms,Ganzzahl,ja,,verwaltung,Laufzeit auf dem Server.
+_Messung,sheets_aufrufe,Ganzzahl,ja,,verwaltung,Zahl der Zugriffe auf die Tabelle.
+_Messung,cache,Text,nein,,verwaltung,treffer / fehlgriff / leer.
+_Messung,client_ms,Ganzzahl,nein,,verwaltung,"Vom Browser gemessene Gesamtzeit inkl. Übertragung, falls nachgereicht."
+_Messung,ok,ja/nein,ja,ja_nein,verwaltung,Ob der Aufruf erfolgreich war.

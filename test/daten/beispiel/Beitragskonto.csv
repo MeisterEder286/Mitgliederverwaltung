@@ -1,0 +1,12 @@
+beitragskonto_id,kontoinhaber_name,kontoinhaber_mitglied_id,zahlweg,iban,bic,mandatsreferenz,mandatsdatum,abw_strasse,abw_hausnummer,abw_plz,abw_ort,abw_land,aktiv,bemerkung
+1,"Wagner, Michael",1,Lastschrift,DE89370400440532013000,COBADEFFXXX,TSV-2001-1042,2001-09-12,,,,,,ja,Trägt 4 Personen: 180 € Gemeinschaft + 100 € Felix = 280 €
+2,"Bauer, Josef",5,Lastschrift,DE22740500000012345678,BYLADEM1SRG,TSV-1986-0873,2010-04-01,,,,,,ja,
+3,"Huber, Anna",6,Überweisung,,,,,,,,,,ja,Keine IBAN — fällt aus dem SEPA-Lauf
+4,"Fischer, Marion",7,Lastschrift,DE10743500000009876543,GENODEF1LH1,TSV-2001-1255,2001-01-08,,,,,,ja,Mandat seit 2022 ungenutzt — Verfall nach 36 Monaten prüfen
+5,"Obermeier, Thomas",8,Lastschrift,DE71741500000004445566,BYLADEM1LAH,TSV-1996-1099,2012-02-14,,,,,,ja,
+6,"Steinberger, Karl",9,Lastschrift,DE45740500000000112233,BYLADEM1SRG,TSV-1962-0912,2009-05-03,,,,,,nein,Konto stillgelegt nach Sterbefall
+7,"Kellner, Hans",10,Lastschrift,DE33740500000005556677,BYLADEM1SRG,TSV-1985-1023,2011-06-15,,,,,,ja,
+8,"Schmid, Korbinian",11,Lastschrift,DE64743500000007778899,GENODEF1LH1,TSV-2010-1355,2010-01-20,,,,,,ja,
+9,"Vogl, Andreas",12,Lastschrift,DE18741500000001234567,BYLADEM1LAH,TSV-2026-1412,2026-03-01,,,,,,ja,Erstlastschrift beim nächsten Lauf (FRST)
+10,"Lehner, Julia",13,Lastschrift,DE27740500000009998877,BYLADEM1SRG,TSV-2012-1288,2012-09-01,,,,,,ja,
+11,(anonymisiert),14,Lastschrift,,,,,,,,,,nein,"Hülle nach Anonymisierung: IBAN und Mandat geleert, Konto bleibt für die gesperrten Buchungen 2016–2025"

@@ -1,0 +1,5 @@
+# Nur src/ wird nach Apps Script übertragen (rootDir in .clasp.json).
+**/*.md
+**/*.csv
+**/*.py
+**/node_modules/**

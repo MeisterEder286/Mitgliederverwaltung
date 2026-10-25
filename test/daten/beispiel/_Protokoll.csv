@@ -1,0 +1,6 @@
+protokoll_id,zeitpunkt,benutzer_email,aktion,tabelle,datensatz_id,feld,alt_wert,neu_wert,kommentar,bereinigt_am
+1,2026-08-17T19:38:00,verwaltung@tsv-ergoldsbach.de,geändert,Beitragskonto,4,iban,DE10743500000001112223,DE10743500000009876543,IBAN-Wechsel nach Bankfusion,
+2,2026-08-17T19:42:00,verwaltung@tsv-ergoldsbach.de,geändert,Mitglied,7,adresse_ungueltig,nein,ja,Post kam zurück,
+3,2026-08-12T20:05:00,obermeier@tsv-ergoldsbach.de,angelegt,Funktion,14,,,,"Trainer C-Jugend, Vogl",
+4,2026-05-27T10:14:00,verwaltung@tsv-ergoldsbach.de,anonymisiert,Mitglied,14,,,,Betroffenenanfrage 1 umgesetzt — Klartextwerte bewusst nicht protokolliert,
+5,2026-05-27T10:14:00,verwaltung@tsv-ergoldsbach.de,gesperrt,Sollstellung,12,,,,"Bleibt bis 31.12.2035 bestehen, § 147 AO",

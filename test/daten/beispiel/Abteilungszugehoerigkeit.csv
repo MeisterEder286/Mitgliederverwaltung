@@ -1,0 +1,16 @@
+zugehoerigkeit_id,mitglied_id,abteilung_id,passnummer,status,eintrittsdatum,austrittsdatum,bemerkung
+1,1,1,,passiv,2001-09-01,,
+2,1,4,,aktiv,2016-01-01,,
+3,2,2,,aktiv,2001-09-01,,
+4,3,2,,aktiv,2018-02-01,,
+5,3,1,,aktiv,2023-08-01,,
+6,4,1,,aktiv,2018-02-01,,
+7,5,4,,aktiv,1986-04-01,,
+8,6,2,,aktiv,1994-01-01,,
+9,7,3,,aktiv,2001-01-01,,
+10,8,1,,aktiv,1996-07-01,,
+11,9,4,,aktiv,1962-01-01,2026-02-14,Ende durch Sterbedatum
+12,10,1,,passiv,1985-01-01,,
+13,11,1,,aktiv,2010-01-01,,
+14,12,1,,aktiv,2026-03-01,,
+15,13,1,,aktiv,2012-09-01,,

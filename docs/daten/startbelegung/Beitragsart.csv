@@ -1,0 +1,4 @@
+beitragsart_id,bezeichnung,betrag,alter_von,alter_bis,intervall,aktiv,gueltig_ab,bemerkung
+1,Erwachsene,100,18,,jährlich,ja,2024-01-01,BEISPIELBETRAG — echten Satz eintragen
+2,Jugendliche bis 18,45,0,17,jährlich,ja,2024-01-01,BEISPIELBETRAG
+3,Fördermitglied,50,,,jährlich,ja,2024-01-01,BEISPIELBETRAG

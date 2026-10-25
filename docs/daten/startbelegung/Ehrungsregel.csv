@@ -1,0 +1,13 @@
+ehrungsregel_id,typ,schwelle,bezeichnung,verband,aktiv,bemerkung
+1,Mitgliedsjubiläum,25,Ehrennadel Silber,Verein,ja,BEISPIELSTUFE — gegen die Satzung prüfen
+2,Mitgliedsjubiläum,40,Ehrennadel Gold,Verein,ja,BEISPIELSTUFE
+3,Mitgliedsjubiläum,50,Ehrennadel Gold mit Kranz,Verein,ja,BEISPIELSTUFE
+4,Mitgliedsjubiläum,60,Ehrenurkunde,Verein,ja,BEISPIELSTUFE
+5,Geburtstag,70,Geburtstagsgruß,Verein,ja,BEISPIELSTUFE
+6,Geburtstag,75,Geburtstagsgruß,Verein,ja,BEISPIELSTUFE
+7,Geburtstag,80,Geburtstagsgruß,Verein,ja,BEISPIELSTUFE
+8,Geburtstag,85,Geburtstagsgruß,Verein,ja,BEISPIELSTUFE
+9,Geburtstag,90,Geburtstagsgruß,Verein,ja,BEISPIELSTUFE
+10,Funktionsjubiläum,10,Dank für 10 Jahre Ehrenamt,Verein,ja,"BEISPIELSTUFE — Zählweise offen, siehe _Konfig"
+11,Funktionsjubiläum,20,Dank für 20 Jahre Ehrenamt,Verein,ja,BEISPIELSTUFE
+12,Funktionsjubiläum,25,Ehrenurkunde Ehrenamt,BLSV,ja,BEISPIELSTUFE

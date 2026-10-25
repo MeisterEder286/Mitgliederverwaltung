@@ -1,0 +1,10 @@
+aufbewahrungsfrist_id,datenkategorie,betrifft_tab,dauer_monate,bezugspunkt,rechtsgrundlage,aktiv,bemerkung
+1,Beitragsbuchungen und Sollstellungen,"Sollstellung, Beitragskonto",120,Ende Geschäftsjahr,"§ 147 AO, § 257 HGB — VORSCHLAG",ja,"Zehn Jahre. Der Hauptgrund, warum bei Austritt nicht sofort alles weg kann."
+2,SEPA-Mandat und IBAN,Beitragskonto,14,letzter Einzug,Erstattungsfrist unautorisierter Lastschriften — VORSCHLAG,ja,"Danach IBAN und Mandat leeren, Konto bleibt als Hülle für die Buchungshistorie."
+3,Mitgliedsstammdaten,Mitglied,36,Austritt,§ 195 BGB Verjährung — VORSCHLAG,ja,"Danach anonymisieren, nicht zeilenweise löschen (siehe Anker-Prinzip)."
+4,Vermerk erweitertes Führungszeugnis,Qualifikation,3,Ende der Funktion,§ 72a Abs. 5 SGB VIII,ja,Kurz und zwingend. Läuft bereits automatisch über zu_loeschen_ab.
+5,Änderungsprotokoll,_Protokoll,36,Eintrag im Protokoll,"Berechtigtes Interesse, Nachvollziehbarkeit — VORSCHLAG",ja,"Danach alt_wert und neu_wert leeren, Zeitstempel behalten."
+6,Funktions- und Ehrungshistorie,"Funktion, Ehrung",,Ende der Funktion,Berechtigtes Interesse Vereinschronik — OFFENER PUNKT,ja,"Unbefristet nur, wenn der Verein das begründet. Sonst bei Anonymisierung mit entfernen."
+8,Unterschriebener Aufnahmeantrag mit SEPA-Mandat,"Drive-Ordner, Aufnahmeantrag.formular_link",120,Ende Geschäftsjahr,§ 147 AO und Nachweis des Mandats — VORSCHLAG,ja,Das Papier ist zugleich Mandatsnachweis. Ohne es steht der Verein bei einem Widerspruch mit leeren Händen.
+9,Abgelehnte und zurückgezogene Anträge,Aufnahmeantrag,6,Eingang des Antrags,Kein Vertrag zustande gekommen — VORSCHLAG,ja,"Kurz aufbewahren für Rückfragen, dann restlos löschen — Zeile im Archiv UND Datei im Drive-Ordner."
+7,Eingefrorene Jahresstatistik,Statistik_Jahr,,Ende Geschäftsjahr,Kein Personenbezug — keine Frist nötig,ja,Anonyme Summen. Genau deshalb dürfen Einzeldaten darunter verschwinden.

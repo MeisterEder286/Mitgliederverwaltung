@@ -1,0 +1,13 @@
+sollstellung_id,beitragskonto_id,jahr,soll_betrag,ist_betrag,gebuehr,status,sepa_sequenz,einzugsdatum,buchungsdatum,mahnstufe,ruecklastschrift_grund,bemerkung
+1,1,2026,280,280,,bezahlt,RCUR,2026-02-15,2026-02-15,0,,180 € Gemeinschaft + 100 € Felix
+2,1,2025,280,280,,bezahlt,RCUR,2025-02-15,2025-02-15,0,,
+3,2,2026,100,100,,bezahlt,RCUR,2026-02-15,2026-02-15,0,,
+4,3,2026,100,,,offen,,2026-02-15,,0,,Überweiser — noch nicht eingegangen
+5,4,2026,100,0,5,ruecklastschrift,RCUR,2026-02-15,,1,Konto erloschen,
+6,5,2026,100,100,,bezahlt,RCUR,2026-02-15,2026-02-15,0,,
+7,6,2026,100,,,storniert,,2026-02-15,,0,,Verstorben am 14.02.2026
+8,7,2026,100,100,,bezahlt,RCUR,2026-02-15,2026-02-15,0,,
+9,8,2026,100,100,,bezahlt,RCUR,2026-02-15,2026-02-15,0,,
+10,9,2026,100,,,offen,FRST,2026-09-15,,0,,Eintritt März 2026 — anteilig oder voll? OFFENER PUNKT
+11,10,2026,100,100,,bezahlt,RCUR,2026-02-15,2026-02-15,0,,
+12,11,2025,100,100,,bezahlt,RCUR,2025-02-15,2025-02-15,0,,"GESPERRT nach § 147 AO bis 31.12.2035 — Betrag bleibt, Person ist anonymisiert"

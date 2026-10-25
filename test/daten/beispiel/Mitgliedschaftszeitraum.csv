@@ -1,0 +1,15 @@
+zeitraum_id,mitglied_id,antrag_am,aufnahme_beschluss_am,aufnahmeantrag_id,eintrittsdatum,austrittsdatum,kuendigung_eingang,austritt_wirksam,austrittsgrund,bemerkung
+1,1,,,,2001-09-01,,,,,
+2,2,,,,2001-09-01,,,,,
+3,3,,,,2018-02-01,,,,,
+4,4,,,,2018-02-01,,,,,
+5,5,,,,1968-01-01,1979-12-31,1979-09-30,1979-12-31,Umzug,Erste Mitgliedschaft
+6,5,,,,1986-04-01,,,,,"Wiedereintritt — gleiche Mitgliedsnummer, neue Zeile"
+7,6,,,,1994-01-01,,,,,
+8,7,,,,2001-01-01,,,,,
+9,8,,,,1996-07-01,,,,,
+10,9,,,,1962-01-01,2026-02-14,,,verstorben,Ende durch Sterbedatum
+11,10,,,,1985-01-01,,,,,
+12,11,,,,2010-01-01,,,,,
+13,12,2026-07-02,2026-07-14,3,2026-03-01,,,,,
+14,13,,,,2012-09-01,,,,,

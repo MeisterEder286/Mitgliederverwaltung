@@ -1,0 +1,8 @@
+statistik_id,jahr,stichtag,ebene,abteilung_id,abteilung_bezeichnung,mitglieder_gesamt,davon_passiv,maennlich,weiblich,divers,alter_bis_14,alter_15_18,alter_19_26,alter_ab_27,eintritte,austritte,funktionstraeger,beitragsgemeinschaften,beitragssoll,beitragsist,eingefroren_am,blsv_gemeldet_am,bemerkung
+1,2026,2026-01-01,Verein,,TSV Ergoldsbach,1187,63,648,539,0,264,88,97,738,63,41,37,214,96410,94180,2026-01-31,2026-01-28,Eingefroren mit der BLSV-Meldung
+2,2026,2026-01-01,Abteilung,1,Fußball,412,38,331,81,0,148,54,61,149,28,19,11,,,,2026-01-31,2026-01-28,
+3,2026,2026-01-01,Abteilung,2,Turnen,263,12,64,199,0,121,28,19,95,17,11,6,,,,2026-01-31,2026-01-28,
+4,2026,2026-01-01,Abteilung,3,Tennis,148,9,79,69,0,31,14,17,86,9,7,4,,,,2026-01-31,2026-01-28,
+5,2026,2026-01-01,Abteilung,4,Eisstocksport,61,4,44,17,0,2,3,6,50,4,3,3,,,,2026-01-31,2026-01-28,Vereinsintern „Stockschützen“
+6,2025,2025-01-01,Verein,,TSV Ergoldsbach,1165,59,637,528,0,251,86,94,734,58,44,35,208,94200,93110,2025-01-30,2025-01-26,
+7,2024,2024-01-01,Verein,,TSV Ergoldsbach,1151,57,631,520,0,244,84,92,731,55,49,34,203,91800,90940,2024-01-29,2024-01-25,

@@ -1,0 +1,6 @@
+abteilung_id,bezeichnung,blsv_sportart,meldepflichtig,aktiv,bemerkung
+1,Fußball,Fußball,ja,ja,
+2,Turnen,Turnen,ja,ja,
+3,Tennis,Tennis,ja,ja,
+4,Stockschützen,Eisstocksport,ja,ja,BLSV-Bezeichnung weicht ab
+5,Skiabteilung,Skisport,nein,nein,"Ruht seit 2019 — nicht löschen, sonst reißt die Historie"

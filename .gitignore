@@ -1,0 +1,8 @@
+node_modules/
+.clasp.json
+.clasprc.json
+# Echtdaten gehören NIE ins Repo
+migration/eingabe/
+migration/ausgabe/
+*.accdb
+*.mdb

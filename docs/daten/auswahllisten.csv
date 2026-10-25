@@ -1,0 +1,109 @@
+liste,wert
+anrede,Herr
+anrede,Frau
+anrede,Divers
+geschlecht,m
+geschlecht,w
+geschlecht,d
+versandart,Post
+versandart,E-Mail
+mitglied_status,aktiv
+mitglied_status,ausgetreten
+mitglied_status,verstorben
+ja_nein,ja
+ja_nein,nein
+zugehoerigkeit,aktiv
+zugehoerigkeit,passiv
+zahlweg,Lastschrift
+zahlweg,Überweisung
+zahlweg,bar
+sollstellung_status,offen
+sollstellung_status,bezahlt
+sollstellung_status,gemahnt
+sollstellung_status,ruecklastschrift
+sollstellung_status,widerspruch
+sollstellung_status,storniert
+ebene,Verein
+ebene,Abteilung
+bestellung,Wahl JHV
+bestellung,Wahl Abteilung
+bestellung,Berufung
+bestellung,Bestellung Vorstand
+ehrungstyp,Mitgliedsjubiläum
+ehrungstyp,Geburtstag
+ehrungstyp,Funktionsjubiläum
+ehrung_status,fällig
+ehrung_status,verliehen
+ehrung_status,verschoben
+ehrung_status,abgelehnt
+intervall,jährlich
+rolle,Vorstand
+rolle,Mitgliederverwalter
+rolle,Kassier
+rolle,Abteilungsleiter
+rolle,Jugendleiter
+qual_kategorie,Führungszeugnis
+qual_kategorie,Lizenz
+qual_kategorie,Kurs
+ergebnis,ohne einschlägigen Eintrag
+austrittsgrund,Umzug
+austrittsgrund,Unzufriedenheit
+austrittsgrund,verstorben
+austrittsgrund,Beitrag
+austrittsgrund,Vereinswechsel
+austrittsgrund,ohne Angabe
+sepa_sequenz,FRST
+sepa_sequenz,RCUR
+sepa_sequenz,OOFF
+sepa_sequenz,FNAL
+protokoll_aktion,angelegt
+protokoll_aktion,geändert
+protokoll_aktion,gelöscht
+protokoll_aktion,beendet
+protokoll_aktion,exportiert
+protokoll_aktion,gesperrt
+protokoll_aktion,anonymisiert
+protokoll_aktion,eingesehen
+protokoll_aktion,abgewiesen
+loesch_stufe,gesperrt
+loesch_stufe,anonymisiert
+loesch_stufe,gelöscht
+anfrage_status,eingegangen
+anfrage_status,in Prüfung
+anfrage_status,teilweise umgesetzt
+anfrage_status,vollständig umgesetzt
+anfrage_status,abgelehnt
+bezugspunkt,Austritt
+bezugspunkt,Ende Geschäftsjahr
+bezugspunkt,Ende der Funktion
+bezugspunkt,letzter Einzug
+bezugspunkt,Eintrag im Protokoll
+bezugspunkt,Eingang des Antrags
+antrag_status,eingegangen
+antrag_status,E-Mail bestätigt
+antrag_status,wartet auf Unterschrift
+antrag_status,vollständig
+antrag_status,angenommen
+antrag_status,abgelehnt
+antrag_status,zurückgezogen
+antrag_status,übernommen
+antrag_quelle,Homepage-Formular
+antrag_quelle,Papierantrag
+antrag_quelle,E-Mail
+antrag_quelle,Veranstaltung
+anfrage_art,Auskunft (Art. 15)
+anfrage_art,Berichtigung (Art. 16)
+anfrage_art,Löschung (Art. 17)
+anfrage_art,Einschränkung (Art. 18)
+anfrage_art,Datenübertragbarkeit (Art. 20)
+anfrage_art,Widerspruch (Art. 21)
+anfrage_art,Widerruf einer Einwilligung (Art. 7)
+einwilligung_art,Fotos und Videos
+einwilligung_art,Newsletter per E-Mail
+einwilligung_art,Ehrungen und Geburtstage in Vereinsmedien
+einwilligung_art,Messenger-Gruppe
+einwilligung_art,Weitergabe an den Verband
+einwilligung_form,Aufnahmeantrag
+einwilligung_form,gesondert schriftlich
+einwilligung_form,digital
+einwilligung_form,mündlich
