@@ -35,4 +35,14 @@ function ladeProjekt(globale) {
 /** Macht Werte aus dem vm-Kontext mit assert.deepStrictEqual vergleichbar. */
 function rein(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
 
-module.exports = { ladeProjekt, rein };
+/** Gepackten Client-Snapshot ({ bereiche, listen: { name: { k, z } } }) wie der Browser auspacken → { name: [obj] }. */
+function entpacke(snap) {
+  const o = {};
+  const listen = snap && snap.listen ? snap.listen : {};
+  Object.keys(listen).forEach(n => {
+    o[n] = listen[n].z.map(z => { const x = {}; listen[n].k.forEach((k, i) => { if (z[i] !== null) x[k] = z[i]; }); return x; });
+  });
+  return o;
+}
+
+module.exports = { ladeProjekt, rein, entpacke };

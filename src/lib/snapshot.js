@@ -53,6 +53,44 @@ var SnapshotKern = (function () {
   var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel'];
   var FINANZ = ['Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung'];
 
+  /**
+   * Bereiche des Client-Snapshots. Beim Start wird nur „kern“ geschickt; die übrigen Bereiche lädt der Browser
+   * beim ersten Öffnen einer Ansicht, die sie braucht (App.daten.lade), und arbeitet danach ebenfalls lokal.
+   * Grund: Mit ~1.200 Mitgliedern wäre der vollständige Snapshot ~2,8 MB (gemessen), der Kern ist ein Bruchteil.
+   */
+  var BEREICHE = {
+    finanzen: ['gemeinschaften', 'konten', 'sollstellungen'],
+    historie: ['zeitraeume', 'einwilligungen']
+  };
+  function bereichVon(liste) {
+    for (var b in BEREICHE) if (BEREICHE[b].indexOf(liste) >= 0) return b;
+    return 'kern';
+  }
+
+  /** Nur die Listen der gewünschten Bereiche behalten (Standard: ['kern']). */
+  function nurBereiche(aus, bereiche) {
+    bereiche = bereiche && bereiche.length ? bereiche : ['kern'];
+    var o = {};
+    Object.keys(aus).forEach(function (liste) { if (bereiche.indexOf(bereichVon(liste)) >= 0) o[liste] = aus[liste]; });
+    return o;
+  }
+
+  /**
+   * Spaltenform für die Übertragung: { liste: { k: [schluessel], z: [[werte]] } } statt Objekten mit wiederholten
+   * Schlüsseln – etwa halbe Größe, schnelleres JSON. Der Browser (client/kern, App.daten) packt wieder aus.
+   * Fehlende Werte werden als null übertragen.
+   */
+  function packe(aus) {
+    var o = {};
+    Object.keys(aus).forEach(function (liste) {
+      var zeilen = aus[liste] || [];
+      var k = [], pos = {};
+      zeilen.forEach(function (z) { Object.keys(z).forEach(function (f) { if (pos[f] === undefined) { pos[f] = k.length; k.push(f); } }); });
+      o[liste] = { k: k, z: zeilen.map(function (z) { return k.map(function (f) { return z[f] === undefined ? null : z[f]; }); }) };
+    });
+    return o;
+  }
+
   function idSpalte(tab) { return Schema.TABELLEN[tab].idSpalte; }
 
   // ------------------------------------------------------------------ IBAN (bewusst eigenständig)
@@ -358,7 +396,7 @@ var SnapshotKern = (function () {
   }
 
   return {
-    LISTEN: LISTEN, TABS: TABS,
+    LISTEN: LISTEN, TABS: TABS, BEREICHE: BEREICHE, bereichVon: bereichVon, nurBereiche: nurBereiche, packe: packe,
     ibanOk: ibanOk, ibanMaskiert: ibanMaskiert,
     basisAusTabs: basisAusTabs, fuer: fuer, mitgliedSichtbar: mitgliedSichtbar,
     aenderungAnwenden: aenderungAnwenden, antwortFuer: antwortFuer, fzAmpel: function (basis, id, heute) {

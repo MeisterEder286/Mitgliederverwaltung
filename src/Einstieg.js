@@ -42,10 +42,11 @@ function Seite_(template) {
 
 /**
  * Startdaten für den Browser – nur, was die Rolle sehen darf: Benutzer, Rechte, unkritische Einstellungen und
- * der rollenbeschnittene Snapshot (Snapshot.fuer). Abteilungen kommen aus dem Snapshot (kein eigener Lesezugriff).
+ * der rollenbeschnittene Snapshot (Bereich Kern, Spaltenform – Snapshot.fuerClient). Abteilungen kommen aus dem Snapshot (kein eigener Lesezugriff).
  */
 function Startdaten_(ktx) {
-  var snapshot = Snapshot.fuer(ktx);
+  var snapshot = Snapshot.fuerClient(ktx, ['kern']);   // nur Kern; weitere Bereiche lädt der Browser bei Bedarf
+  var abt = snapshot.listen.abteilungen || { k: [], z: [] };
   var k = Konfig.alle();
   var konfig = {};
   ['beitragsjahr', 'jugend_bis_alter', 'ehrung_zaehlweise', 'ehrung_stichtag', 'funktionsjubilaeum_zaehlweise',
@@ -64,8 +65,8 @@ function Startdaten_(ktx) {
     beitragsjahr: konfig.beitragsjahr,
     impressum_url: k.impressum_url || null,
     datenschutz_url: k.datenschutz_url || null,
-    abteilungen: (snapshot.abteilungen || []).map(function (a) {
-      return { id: a.abteilung_id, bezeichnung: a.bezeichnung, aktiv: a.aktiv };
+    abteilungen: abt.z.map(function (z) {
+      return { id: z[abt.k.indexOf('abteilung_id')], bezeichnung: z[abt.k.indexOf('bezeichnung')], aktiv: z[abt.k.indexOf('aktiv')] };
     }),
     snapshot: snapshot,
     erzeugt: DB.jetzt()

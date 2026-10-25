@@ -366,7 +366,7 @@ function erzeugeVerein(optionen) {
         beitragsgemeinschaft_id: neueId('Beitragsgemeinschaft'),
         bezeichnung: (h.typ === 'paar' ? 'Ehepaar ' : 'Familie ') + h.nachname,
         festbetrag: h.typ === 'paar' ? FESTBETRAG_PAAR : FESTBETRAG_FAMILIE,
-        aktiv: h.status !== 'ausgetreten', bemerkung: null,
+        aktiv: h.personen.some(istAktiv), bemerkung: null,
         version: 1, geaendert_am: AENDERUNG, geaendert_von: 'migration@tsv-ergoldsbach.de'
       };
       daten.Beitragsgemeinschaft.push(gemeinschaft);
@@ -379,7 +379,8 @@ function erzeugeVerein(optionen) {
       kontoinhaber_mitglied_id: extern ? null : zahler.mitglied_id,
       zahlweg, iban: null, bic: null, mandatsreferenz: null, mandatsdatum: null,
       abw_strasse: null, abw_hausnummer: null, abw_plz: null, abw_ort: null, abw_land: null,
-      aktiv: h.status !== 'ausgetreten' && h.status !== 'verstorben', bemerkung: extern ? 'Kontoinhaber ist kein Mitglied (Elternteil)' : null,
+      // Konto ist aktiv, solange irgendeine Person des Haushalts aktiv ist (sonst stünden Aktive auf stillgelegten Konten)
+      aktiv: h.personen.some(istAktiv), bemerkung: extern ? 'Kontoinhaber ist kein Mitglied (Elternteil)' : null,
       version: 1, geaendert_am: AENDERUNG, geaendert_von: 'migration@tsv-ergoldsbach.de',
       _haushalt: h
     };

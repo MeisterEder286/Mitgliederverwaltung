@@ -60,6 +60,12 @@ var Snapshot = (function () {
 
   function fuer(ktx) { return SnapshotKern.fuer(basis(), ktx, heute()); }
 
+  /** Für den Browser: nur die gewünschten Bereiche (Standard Kern), in Spaltenform gepackt. */
+  function fuerClient(ktx, bereiche) {
+    var b = (bereiche || ['kern']).filter(function (x) { return x === 'kern' || SnapshotKern.BEREICHE[x]; });
+    return { bereiche: b, listen: SnapshotKern.packe(SnapshotKern.nurBereiche(fuer(ktx), b)) };
+  }
+
   /**
    * Write-through: aenderungen = [{ tab, neu } | { tab, entfernt }] nach erfolgreichem DB-Schreiben.
    * Liefert die Antwort für den Browser { aktualisiert, entfernt }. Nur innerhalb DB.mitSperre.
@@ -100,6 +106,7 @@ var Snapshot = (function () {
   function letzterCache() { return cacheErgebnis; }
 
   return {
+    fuerClient: fuerClient,
     basis: basis, fuer: fuer, schreibe: schreibe, pruefeMitglied: pruefeMitglied, verwerfen: verwerfen,
     warmhalten: warmhalten, mitlesen: mitlesen, letzterCache: letzterCache
   };

@@ -71,9 +71,8 @@ test('synthetischer Verein (1.200 Mitglieder): sauber ohne Fehler, alle eingebau
   const { g } = ladeFachdaten();
   const sauber = erzeugeVerein({ seed: 1, mitglieder: 1200, stichtag: HEUTE, fehler: false });
   const bs = kopie(g.Pruefregeln.pruefe(alsObjekte(sauber.tabs), HEUTE, {}));
-  // Kernregeln aus dem Lies-mich müssen im sauberen Datensatz eingehalten sein. (fz_fehlt ist realistisch gewollt;
-  // konto_inaktiv: Generator legt bei Neuaufnahmen teils stillgelegte Konten an – an W1-G gemeldet.)
-  const kern = ['zeitraum_fehlt', 'lastschrift_unvollstaendig', 'aktiv_ohne_beitrag', 'gemeinschaft_konten', 'amt_ebene',
+  // Kernregeln aus dem Lies-mich müssen im sauberen Datensatz eingehalten sein (fz_fehlt ist realistisch gewollt).
+  const kern = ['konto_inaktiv', 'zeitraum_fehlt', 'lastschrift_unvollstaendig', 'aktiv_ohne_beitrag', 'gemeinschaft_konten', 'amt_ebene',
     'eindeutigkeit', 'verweis_ungueltig', 'iban_ungueltig', 'verstorben_laufend'];
   const harte = bs.filter(x => kern.indexOf(x.regel) >= 0);
   assert.deepStrictEqual(harte.map(x => x.regel + ' ' + x.tab + ' ' + x.id + ': ' + x.meldung).slice(0, 10), [], 'Fehler im sauberen Datensatz');

@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const zlib = require('zlib');
-const { ladeProjekt, rein } = require('./hilfe/projekt');
+const { ladeProjekt, rein, entpacke } = require('./hilfe/projekt');
 const { erzeugeFakes, beispielTabs } = require('./hilfe/gas-fakes');
 
 const HEUTE = '2026-10-25';
@@ -141,7 +141,7 @@ test('apiStart kalt: 1 Tabellenzugriff, warm (neue Ausführung, gleicher Cache):
   assert.strictEqual(a.ok, true, JSON.stringify(a.fehler));
   assert.strictEqual(a.messung.sheets, 1, 'kalt');
   assert.strictEqual(f.zaehler.batchGet, 1);
-  assert.strictEqual(a.daten.snapshot.mitglieder.length, 14);
+  assert.strictEqual(entpacke(a.daten.snapshot).mitglieder.length, 14);
   assert.strictEqual(a.daten.heute.length, 10);
   assert.ok(a.daten.konfig.beitragsjahr);
   // neue Ausführung (eigener Kontext) mit demselben CacheService
@@ -151,7 +151,7 @@ test('apiStart kalt: 1 Tabellenzugriff, warm (neue Ausführung, gleicher Cache):
   const b = rein(s2.apiStart());
   assert.strictEqual(b.messung.sheets, 0, 'warm');
   assert.strictEqual(f2.zaehler.sheets, 0);
-  assert.strictEqual(rein(s2.apiSnapshot()).daten.mitglieder.length, 14);
+  assert.strictEqual(entpacke(rein(s2.apiSnapshot()).daten).mitglieder.length, 14);
 });
 
 test('write-through: Änderung steht ohne erneutes Lesen im nächsten Snapshot; AL darf fremde Person nicht', () => {
@@ -169,7 +169,7 @@ test('write-through: Änderung steht ohne erneutes Lesen im nächsten Snapshot; 
   const s2 = ladeProjekt(f2.globale);
   const snap = rein(s2.apiSnapshot());
   assert.strictEqual(f2.zaehler.batchGet || 0, 0, 'kein Lesezugriff');
-  assert.strictEqual(snap.daten.mitglieder.find(m => m.mitglied_id === 7).ort, 'Landshut');
+  assert.strictEqual(entpacke(snap.daten).mitglieder.find(m => m.mitglied_id === 7).ort, 'Landshut');
   // Abteilungsleiter Fußball → Fischer (Tennis) ist nicht sichtbar
   const f3 = erzeugeFakes({ tabs: beispielTabs(TABS), email: 'obermeier@tsv-ergoldsbach.de' });
   const s3 = ladeProjekt(f3.globale);
@@ -201,4 +201,18 @@ test('Lasttest 1200 Personen: Größe und Laufzeit', () => {
   assert.ok(gz < 500 * 1024, 'gzip-Basis zu groß: ' + gz);
   Object.values(zeiten).forEach(ms => assert.ok(ms < 300, 'fuer() zu langsam: ' + ms));
   assert.ok(!basisJson.includes('"iban"'), 'IBAN-Feld in der Basis');
+});
+
+test('Bereiche und Spaltenform: Start nur Kern, Finanzen/Historie auf Anforderung, Rolle ohne Finanzsicht bekommt keine', () => {
+  const f = erzeugeFakes({ tabs: beispielTabs(TABS), email: 'verwaltung@tsv-ergoldsbach.de' });
+  const g = ladeProjekt(f.globale);
+  const kern = rein(g.apiSnapshot()).daten;
+  assert.deepStrictEqual(kern.bereiche, ['kern']);
+  assert.ok(kern.listen.mitglieder.k.includes('mitglied_id'));
+  assert.ok(!kern.listen.konten && !kern.listen.zeitraeume);
+  const fin = entpacke(rein(g.apiSnapshot(['finanzen', 'historie'])).daten);
+  assert.ok(fin.konten.length && fin.zeitraeume.length && !fin.mitglieder);
+  const al = ladeProjekt(erzeugeFakes({ tabs: beispielTabs(TABS), email: 'obermeier@tsv-ergoldsbach.de' }).globale);
+  const alFin = rein(al.apiSnapshot(['finanzen'])).daten;
+  assert.ok(!alFin.listen.konten && !alFin.listen.sollstellungen, 'AL bekommt keine Finanzlisten');
 });

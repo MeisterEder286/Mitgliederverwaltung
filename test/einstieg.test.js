@@ -39,7 +39,7 @@ function lade(optionen) {
       alle() { return { snapshot_einbetten: o.einbetten, beitragsjahr: '2026', impressum_url: 'https://x/impressum', datenschutz_url: 'https://x/ds' }; },
       wert(k) { return this.alle()[k]; }
     },
-    Snapshot: { fuer() { return { abteilungen: [{ abteilung_id: 1, bezeichnung: 'Fußball</script>', aktiv: true, version: 1 }], mitglieder: [] }; } },
+    Snapshot: { fuerClient() { return { bereiche: ['kern'], listen: { abteilungen: { k: ['abteilung_id', 'bezeichnung', 'aktiv', 'version'], z: [[1, 'Fußball</script>', true, 1]] }, mitglieder: { k: [], z: [] } } }; } },
     DB: { lese(tabs) { return { Abteilung: [{ abteilung_id: 1, bezeichnung: 'Fußball</script>', aktiv: true, version: 1 }] }; },
       jetzt() { return '2026-10-25T10:00:00'; } },
     Messung: { auswertung() { return [{ funktion: 'apiPing' }]; }, clientWerte(l) { protokoll.messungen = l; } },
@@ -68,7 +68,7 @@ test('doGet bettet rollengeprüfte Startdaten ein und maskiert < gegen Skript-Au
   assert.strictEqual(daten.abteilungen[0].bezeichnung, 'Fußball</script>');
   assert.deepStrictEqual(Object.keys(daten.abteilungen[0]).sort(), ['aktiv', 'bezeichnung', 'id']);
   assert.strictEqual(daten.beitragsjahr, '2026');
-  assert.ok(daten.snapshot && Array.isArray(daten.snapshot.mitglieder), 'Snapshot eingebettet');
+  assert.ok(daten.snapshot && daten.snapshot.listen && daten.snapshot.listen.mitglieder, 'Snapshot eingebettet (Spaltenform)');
   assert.strictEqual(daten.heute, '2026-10-25');
   assert.deepStrictEqual(daten.benutzer.rollen, ['Kassier']);
 });

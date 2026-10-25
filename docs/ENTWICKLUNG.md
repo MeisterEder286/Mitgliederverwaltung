@@ -156,7 +156,13 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 - `Snapshot.pruefeMitglied(ktx, mitgliedId)` wirft `Fehler.keinZugriff()`, wenn die Person für ktx nicht sichtbar ist
   (Zeilenschutz bei Schreibzugriffen, z. B. Abteilungsleiter).
 - `Snapshot.verwerfen()` – Cache ungültig machen (z. B. nach Setup, Massenänderung).
-- `apiSnapshot()` liefert `Snapshot.fuer(ktx)`; `apiStart()` liefert zusätzlich `snapshot`.
+- **Bereiche und Spaltenform:** `apiStart()` liefert nur den Bereich `kern`. `finanzen` (konten, gemeinschaften,
+  sollstellungen) und `historie` (zeitraeume, einwilligungen) holt der Browser einmal je Sitzung über
+  `App.daten.lade('finanzen')` → `apiSnapshot(['finanzen'])`. Übertragen wird in Spaltenform
+  `{ bereiche, listen: { name: { k: [schlüssel], z: [[werte]] } } }` (`SnapshotKern.packe`), der Browser packt in
+  `App.daten.setze` wieder aus. Gemessen mit 1.200 synthetischen Mitgliedern (Rolle Mitgliederverwalter): Start
+  638 KB (gzip 82 KB) statt 2,8 MB für alles; finanzen 452 KB, historie 323 KB.
+- Ansichten, die einen Bereich brauchen: `App.daten.lade('finanzen').then(function () { … zeichnen … })`.
 
 ### Schreibmuster in Servermodulen
 ```js

@@ -10,8 +10,10 @@
  */
 
 /** Rollenbeschnittener Snapshot neu vom Server. */
-function apiSnapshot() {
-  return Api.ausfuehren('apiSnapshot', 'start', function (ktx) { return Snapshot.fuer(ktx); });
+function apiSnapshot(bereiche) {
+  return Api.ausfuehren('apiSnapshot', 'start', function (ktx) {
+    return Snapshot.fuerClient(ktx, Array.isArray(bereiche) ? bereiche.map(String) : ['kern']);
+  });
 }
 
 /** Zeit-Trigger (optional, alle 5 h): Snapshot-Basis neu bauen, bevor der Cache abläuft. */

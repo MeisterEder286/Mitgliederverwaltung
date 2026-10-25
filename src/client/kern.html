@@ -188,14 +188,55 @@
    * Struktur siehe docs/ENTWICKLUNG.md („Snapshot“). Nach Schreibaufrufen: App.daten.uebernehme(antwort).
    */
   var beobachter = [];
+  var bereichLaedt = {};
+  var LISTE_BEREICH = { gemeinschaften: 'finanzen', konten: 'finanzen', sollstellungen: 'finanzen', zeitraeume: 'historie', einwilligungen: 'historie' };
+
+  /** Spaltenform { liste: { k: [..], z: [[..]] } } → { liste: [objekte] } (Gegenstück zu SnapshotKern.packe). */
+  function entpacke(listen) {
+    var o = {};
+    Object.keys(listen || {}).forEach(function (name) {
+      var l = listen[name];
+      if (Array.isArray(l)) { o[name] = l; return; }
+      o[name] = (l.z || []).map(function (zeile) {
+        var obj = {};
+        for (var i = 0; i < l.k.length; i++) if (zeile[i] !== null) obj[l.k[i]] = zeile[i];
+        return obj;
+      });
+    });
+    return o;
+  }
+
   App.daten = {
     snapshot: null,
     index: {},
-    setze: function (snapshot) {
-      App.daten.snapshot = snapshot || {};
+    bereiche: [],
+    /** Snapshot übernehmen: { bereiche, listen } (Spaltenform) oder bereits ausgepackte Listen. */
+    setze: function (snapshot, ergaenzen) {
+      var neu = snapshot && snapshot.listen ? entpacke(snapshot.listen) : (snapshot || {});
+      if (ergaenzen && App.daten.snapshot) Object.keys(neu).forEach(function (k) { App.daten.snapshot[k] = neu[k]; });
+      else App.daten.snapshot = neu;
+      var b = snapshot && snapshot.bereiche ? snapshot.bereiche : ['kern'];
+      App.daten.bereiche = ergaenzen ? App.daten.bereiche.concat(b.filter(function (x) { return App.daten.bereiche.indexOf(x) < 0; })) : b;
       App.daten.indexiere();
       beobachter.forEach(function (f) { try { f(); } catch (e) { console.error(e); } });
     },
+    /**
+     * Bereich nachladen (einmal je Sitzung), z. B. App.daten.lade('finanzen').then(…).
+     * Bereiche: 'kern' (beim Start), 'finanzen' (konten, gemeinschaften, sollstellungen), 'historie' (zeitraeume, einwilligungen).
+     */
+    lade: function () {
+      var gewuenscht = Array.prototype.slice.call(arguments).filter(function (b) { return App.daten.bereiche.indexOf(b) < 0; });
+      if (!gewuenscht.length) return Promise.resolve(App.daten.snapshot);
+      var schluessel = gewuenscht.join(',');
+      if (!bereichLaedt[schluessel]) {
+        bereichLaedt[schluessel] = App.rufe('apiSnapshot', gewuenscht).then(function (snap) {
+          App.daten.setze(snap, true);
+          return App.daten.snapshot;
+        }).then(function (s) { delete bereichLaedt[schluessel]; return s; }, function (e) { delete bereichLaedt[schluessel]; throw e; });
+      }
+      return bereichLaedt[schluessel];
+    },
+    geladen: function (bereich) { return App.daten.bereiche.indexOf(bereich) >= 0; },
     indexiere: function () {
       var s = App.daten.snapshot || {};
       var ix = App.daten.index = {};
@@ -222,6 +263,7 @@
       var s = App.daten.snapshot = App.daten.snapshot || {};
       var akt = antwort.aktualisiert || {};
       Object.keys(akt).forEach(function (name) {
+        if (!s[name] && LISTE_BEREICH[name] && !App.daten.geladen(LISTE_BEREICH[name])) return;  // Bereich noch nicht geladen
         var liste = s[name] = s[name] || [];
         akt[name].forEach(function (neu) {
           var idFeld = neu.id !== undefined ? 'id' : Object.keys(neu).filter(function (f) { return /_id$/.test(f); })[0];
@@ -246,7 +288,7 @@
 
   /** Snapshot komplett neu vom Server holen (z. B. nach Versionskonflikt oder auf Wunsch). */
   App.ladeNeu = function () {
-    return App.rufe('apiSnapshot').then(function (snap) { App.daten.setze(snap); App.neuZeichnen(); return snap; });
+    return App.rufe('apiSnapshot', App.daten.bereiche).then(function (snap) { App.daten.setze(snap); App.neuZeichnen(); return snap; });
   };
 
   // ================================================================== Router
