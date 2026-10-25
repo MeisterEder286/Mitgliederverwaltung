@@ -8,7 +8,10 @@
     "test": "node --test \"test/**/*.test.js\"",
     "schema": "node tools/schema-erzeugen.js",
     "push": "npm run check && npm test && clasp push",
-    "deploy:hinweis": "echo 'Deployment nur über bestehende Deployment-ID: clasp deploy -i <ID> -d \"Beschreibung\" (siehe docs/BETRIEB.md)'"
+    "deploy:hinweis": "echo 'Deployment nur über bestehende Deployment-ID: clasp deploy -i <ID> -d \"Beschreibung\" (siehe docs/BETRIEB.md)'",
+    "vorschau": "node tools/vorschau.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

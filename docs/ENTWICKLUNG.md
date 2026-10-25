@@ -12,6 +12,7 @@ Funktion wofür zuständig ist**. Fachliche Regeln stehen im Datenmodell (`docs/
 | `npm run check` | Syntax, gemeinsamer globaler Namensraum, HTML-Skripte, Kopfkommentare, Scopes (`tools/check.js`) |
 | `npm test` | alle Tests unter `test/` (Node, keine Abhängigkeiten) |
 | `npm run push` | check + test + `clasp push` |
+| `npm run vorschau` | `vorschau.html` – Oberfläche lokal im Browser, mit synthetischen Daten und Stub für `google.script.run` (Mobil-Sichtprüfung) |
 
 Node ≥ 20. Es gibt **keine** npm-Abhängigkeiten und **keinen** Build-Schritt: Der Code in `src/` ist genau der
 Code, der im Apps-Script-Editor steht.
@@ -72,6 +73,7 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 - `zuSerial(s)` – akzeptiert `JJJJ-MM-TT`, `JJJJ-MM-TTThh:mm(:ss)`, `TT.MM.JJJJ` → Zahl
 - `zelleLesen(wert, spalte)` / `zelleSchreiben(wert, spalte)` – Konvertierung gemäß Tabelle oben
 - `zeileZuObjekt(kopf, zeile, tab)` / `objektZuZeile(kopf, obj, tab)` – über Spaltennamen; unbekannte Spalten im Sheet bleiben beim Schreiben unverändert
+- Texte, die mit `= + - @` beginnen, bekommen beim Schreiben ein `'` vorangestellt (Formel-Injektion), beim Lesen wird es entfernt
 - `pruefe(tab, obj, {teilweise})` → `[ {feld, meldung} ]` (Pflicht, Typ, Auswahlliste; `auto`-Felder werden ignoriert)
 - `diff(tab, alt, neu)` → `[ {feld, alt, neu} ]` (ohne `version`/`geaendert_*`)
 
@@ -81,7 +83,8 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 - `einfuegen(tab, obj, ktx)` → neues Objekt (ID aus `_Konfig.next_id_<Tab>`, `version = 1`, `geaendert_*`). Nur in `mitSperre`.
 - `aktualisieren(tab, id, aenderungen, erwarteteVersion, ktx)` → `{ alt, neu, diff }`; bei Versionskonflikt `Fehler.konflikt(aktuellerDatensatz)`. Nur in `mitSperre`.
 - `neueId(tab)` – Zähler in `_Konfig` (nur in `mitSperre`)
-- `zaehler()` → `{ sheets: n }` Zahl der Tabellenzugriffe seit Ausführungsbeginn; `zaehlerZuruecksetzen()`
+- `zaehler()` → `{ sheets: n }` Zahl der Tabellenzugriffe seit Ausführungsbeginn; `zaehlerZuruecksetzen()`; `zaehle(n)` für Module mit eigenem Blattzugriff
+- `blatt(tab)` → Sheet-Objekt; `anhaengen(blatt, zeilen, letzte?)` – ein `setValues` unter die letzte Zeile, vergrößert das Raster bei Bedarf (neue Tabs haben nur 1000 Zeilen)
 - `jetzt()` → `"JJJJ-MM-TTThh:mm:ss"` in der Zeitzone des Skripts
 
 ### `Konfig` (`src/Konfig.js`)

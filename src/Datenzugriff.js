@@ -279,6 +279,22 @@ var DB = (function () {
 
   function zaehler() { return { sheets: sheetsAufrufe }; }
   function zaehlerZuruecksetzen() { sheetsAufrufe = 0; }
+  /**
+   * Hängt Zeilen mit EINEM setValues unter die letzte belegte Zeile. Ein Tab hat in Google Sheets eine
+   * feste Rastergröße (neu: 1000 Zeilen); ein Bereich darüber hinaus wirft einen Fehler. Deshalb wird
+   * das Raster bei Bedarf vorher vergrößert. `letzte` kann mitgegeben werden, wenn der Aufrufer sie schon kennt.
+   */
+  function anhaengen(b, zeilen, letzte) {
+    if (!zeilen.length) return;
+    if (letzte === undefined) { letzte = b.getLastRow(); sheetsAufrufe++; }
+    var max = b.getMaxRows();
+    sheetsAufrufe++;
+    var bis = letzte + zeilen.length;
+    if (bis > max) { b.insertRowsAfter(max, Math.max(bis - max, 100)); sheetsAufrufe++; }
+    b.getRange(letzte + 1, 1, zeilen.length, zeilen[0].length).setValues(zeilen);
+    sheetsAufrufe++;
+  }
+
   /** Für andere Module (Protokoll, Messung), die selbst auf ein Blatt zugreifen. */
   function zaehle(n) { sheetsAufrufe += (n || 1); }
 
@@ -292,6 +308,7 @@ var DB = (function () {
     zaehlerZuruecksetzen: zaehlerZuruecksetzen,
     zaehle: zaehle,
     blatt: blatt,
+    anhaengen: anhaengen,
     jetzt: jetzt
   };
 })();

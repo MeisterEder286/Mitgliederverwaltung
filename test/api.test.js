@@ -46,7 +46,11 @@ function umgebung({ email = 'al@tsv.de', effektiv = 'owner@tsv.de', benutzer } =
     jetzt: () => '2026-10-25T12:00:00',
     zaehler: () => ({ sheets }),
     zaehlerZuruecksetzen: () => { sheets = 0; },
-    zaehle: (n) => { sheets += n || 1; }
+    zaehle: (n) => { sheets += n || 1; },
+    anhaengen: (b, zeilen, letzte) => {
+      if (letzte === undefined) letzte = b.getLastRow();
+      b.getRange(letzte + 1, 1, zeilen.length, zeilen[0].length).setValues(zeilen); sheets++;
+    }
   };
   g.Werte = g.Werte && g.Werte.zuSerial ? g.Werte : { zuSerial: () => 46320.5 };
   g.Konfig = { wert: () => null };

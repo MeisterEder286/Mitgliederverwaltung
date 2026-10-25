@@ -1,0 +1,50 @@
+<!--
+  index – Seitengerüst der WebApp (Template, ausgeliefert von doGet in src/Einstieg.js).
+
+  Zweck:      Kopfleiste, Navigation, Inhaltsbereich, Fußzeile mit Impressum/Datenschutz (D1).
+              Logik in client/app, Gestaltung in client/stil (beide per include_ eingebunden).
+  Datenquelle: Startdaten werden – falls _Konfig.snapshot_einbetten = ja – als JSON im Block
+              <script type="application/json" id="startdaten"> mitgeliefert, sonst lädt app sie über apiStart.
+              Sie enthalten nur, was die Rolle sehen darf (serverseitig geschnitten).
+  Wer darf:   Jeder Benutzer mit aktivem Eintrag im Tab Benutzer (Prüfung in doGet).
+  Besonderheiten:
+    - Keine externen Ressourcen (Schriften, Bibliotheken, CDNs), nur Systemschriften (B8).
+    - <base target="_top">: Links (z. B. Impressum) öffnen außerhalb des Apps-Script-Rahmens.
+    - Scriptlets <? ?> nie innerhalb ausführbarer <script>-Blöcke (npm run check prüft das).
+-->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include_('client/stil') ?>
+</head>
+<body>
+  <a class="sprungmarke" href="#inhalt">Zum Inhalt springen</a>
+
+  <header class="kopf" role="banner">
+    <div class="kopf-titel">
+      <span class="verein">TSV Ergoldsbach e.&nbsp;V.</span>
+      <span class="app">Mitgliederverwaltung <span id="beitragsjahr" class="jahr"></span></span>
+    </div>
+    <div class="kopf-benutzer" id="benutzer" aria-live="polite"></div>
+  </header>
+
+  <nav class="navigation" id="navigation" aria-label="Hauptnavigation"></nav>
+
+  <div id="meldung" class="meldung" role="alert" hidden></div>
+
+  <main id="inhalt" class="inhalt" tabindex="-1">
+    <p class="laedt" id="laedt" role="status">Lädt …</p>
+  </main>
+
+  <footer class="fuss" role="contentinfo">
+    <a id="link-impressum" href="#" hidden>Impressum</a>
+    <a id="link-datenschutz" href="#" hidden>Datenschutz</a>
+    <span class="fuss-verein">TSV Ergoldsbach e.&nbsp;V.</span>
+  </footer>
+
+  <script type="application/json" id="startdaten"><?!= startdatenJson ?></script>
+  <?!= include_('client/app') ?>
+</body>
+</html>

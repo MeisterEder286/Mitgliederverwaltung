@@ -1,0 +1,133 @@
+<!--
+  stil – Gestaltung der WebApp (eingebunden in client/index und client/kein_zugang).
+
+  Zweck:      Mobile-first (ab 360 px Breite), gut lesbar, barrierearm: Kontrast mind. 4,5:1, sichtbarer
+              Tastaturfokus, große Bedienflächen (mind. 44 px), keine reinen Farbsignale.
+  Datenquelle: keine.
+  Wer darf:   –
+  Besonderheiten: Nur Systemschriften, keine externen Ressourcen (B8). Farben als Variablen oben gesammelt.
+-->
+<style>
+  :root {
+    --grund: #ffffff;
+    --flaeche: #f3f5f8;
+    --text: #1b1f24;
+    --text-leise: #4a5560;
+    --akzent: #0b4f8a;
+    --akzent-text: #ffffff;
+    --rand: #c9d1da;
+    --fehler-grund: #fdecec;
+    --fehler-text: #8a1111;
+    --ok-grund: #e8f5ec;
+    --ok-text: #135c2c;
+    --fokus: #f2a900;
+    --radius: 6px;
+    --abstand: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 16px; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background: var(--grund);
+    line-height: 1.45;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  a { color: var(--akzent); }
+  :focus-visible { outline: 3px solid var(--fokus); outline-offset: 2px; }
+
+  .sprungmarke { position: absolute; left: -9999px; }
+  .sprungmarke:focus { left: var(--abstand); top: 8px; background: var(--grund); padding: 8px; z-index: 10; }
+
+  .kopf {
+    background: var(--akzent);
+    color: var(--akzent-text);
+    padding: 12px var(--abstand);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .kopf-titel { display: flex; flex-direction: column; }
+  .verein { font-size: 0.85rem; opacity: 0.9; }
+  .app { font-size: 1.15rem; font-weight: 600; }
+  .jahr { font-weight: 400; font-size: 0.9rem; }
+  .kopf-benutzer { font-size: 0.85rem; }
+
+  .navigation {
+    display: flex;
+    gap: 4px;
+    padding: 8px var(--abstand);
+    background: var(--flaeche);
+    border-bottom: 1px solid var(--rand);
+    overflow-x: auto;
+  }
+  .navigation button {
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .navigation button[aria-current="page"] { background: var(--grund); border-color: var(--rand); font-weight: 600; }
+
+  .inhalt { flex: 1; padding: var(--abstand); max-width: 1100px; width: 100%; margin: 0 auto; }
+  .inhalt:focus { outline: none; }
+  h1 { font-size: 1.35rem; margin: 0 0 12px; }
+  h2 { font-size: 1.1rem; margin: 24px 0 8px; }
+  .leise { color: var(--text-leise); font-size: 0.9rem; }
+  .laedt { color: var(--text-leise); }
+
+  .meldung { margin: 8px var(--abstand) 0; padding: 12px; border-radius: var(--radius); background: var(--fehler-grund); color: var(--fehler-text); }
+  .meldung.ok { background: var(--ok-grund); color: var(--ok-text); }
+  .meldung button { margin-left: 8px; }
+
+  .knopf {
+    min-height: 44px;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--akzent);
+    background: var(--akzent);
+    color: var(--akzent-text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .knopf.zweit { background: var(--grund); color: var(--akzent); }
+  .knopf:disabled { opacity: 0.6; cursor: default; }
+
+  .karte { border: 1px solid var(--rand); border-radius: var(--radius); padding: 12px; margin: 0 0 12px; background: var(--grund); }
+  .liste { list-style: none; padding: 0; margin: 0; }
+  .liste li { padding: 6px 0; border-bottom: 1px solid var(--flaeche); }
+
+  .tabelle-rahmen { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rand); white-space: nowrap; }
+  th { background: var(--flaeche); font-weight: 600; }
+  td.zahl, th.zahl { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .fuss {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px var(--abstand);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--rand);
+    background: var(--flaeche);
+    color: var(--text-leise);
+  }
+  .fuss a { min-height: 44px; display: inline-flex; align-items: center; }
+  .fuss-verein { margin-left: auto; display: inline-flex; align-items: center; }
+
+  @media (min-width: 720px) {
+    .kopf { align-items: center; }
+    h1 { font-size: 1.5rem; }
+  }
+</style>

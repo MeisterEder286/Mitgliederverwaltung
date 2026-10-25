@@ -82,8 +82,7 @@ var Messung = (function () {
   function schreibePuffer() {
     var liste = lesePuffer();
     if (!liste.length) return 0;
-    var sh = DB.blatt ? DB.blatt(TAB) : SpreadsheetApp.openById(
-      PropertiesService.getScriptProperties().getProperty('DB_ID')).getSheetByName(TAB);
+    var sh = DB.blatt(TAB);
     var kopf = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
     var zeilen = liste.map(function (m) {
       return kopf.map(function (k) {
@@ -93,7 +92,7 @@ var Messung = (function () {
         return v === null || v === undefined ? '' : v;
       });
     });
-    sh.getRange(sh.getLastRow() + 1, 1, zeilen.length, kopf.length).setValues(zeilen);
+    DB.anhaengen(sh, zeilen);   // vergrößert das Raster bei Bedarf
     speicherePuffer([]);
     return zeilen.length;
   }

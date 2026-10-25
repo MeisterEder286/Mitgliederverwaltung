@@ -1,0 +1,43 @@
+<!--
+  kein_zugang – generische Seite, wenn doGet die Oberfläche nicht ausliefern kann.
+
+  Zweck:      Wird gezeigt, wenn der Aufrufer nicht (aktiv) im Tab Benutzer steht oder beim Start ein
+              interner Fehler auftritt. Bewusst ohne Details (Sicherheitsregel A9): keine Tab-Namen, keine
+              Fehlertexte, kein Hinweis, ob die E-Mail-Adresse bekannt ist.
+  Datenquelle: Template-Variablen aus src/Einstieg.js (KeinZugang_): zugriff (true = keine Berechtigung),
+              impressumUrl, datenschutzUrl (aus _Konfig, falls lesbar).
+  Wer darf:   jeder Aufrufer innerhalb der Domain.
+  Besonderheiten: <?= ?> maskiert die Werte automatisch. Fußzeile mit Impressum/Datenschutz (D1).
+-->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include_('client/stil') ?>
+</head>
+<body>
+  <header class="kopf" role="banner">
+    <div class="kopf-titel">
+      <span class="verein">TSV Ergoldsbach e.&nbsp;V.</span>
+      <span class="app">Mitgliederverwaltung</span>
+    </div>
+  </header>
+  <main class="inhalt">
+    <? if (zugriff) { ?>
+      <h1>Kein Zugang</h1>
+      <p>Für Ihr Google-Konto ist kein Zugang zur Mitgliederverwaltung eingerichtet.</p>
+      <p class="leise">Wenn Sie Zugang benötigen, wenden Sie sich bitte an die Mitgliederverwaltung bzw. den Vorstand.</p>
+    <? } else { ?>
+      <h1>Die Anwendung ist gerade nicht erreichbar</h1>
+      <p>Bitte versuchen Sie es in einigen Minuten erneut.</p>
+      <p class="leise">Bleibt das Problem bestehen, wenden Sie sich bitte an die Mitgliederverwaltung.</p>
+    <? } ?>
+  </main>
+  <footer class="fuss" role="contentinfo">
+    <? if (impressumUrl) { ?><a href="<?= impressumUrl ?>">Impressum</a><? } ?>
+    <? if (datenschutzUrl) { ?><a href="<?= datenschutzUrl ?>">Datenschutz</a><? } ?>
+    <span class="fuss-verein">TSV Ergoldsbach e.&nbsp;V.</span>
+  </footer>
+</body>
+</html>

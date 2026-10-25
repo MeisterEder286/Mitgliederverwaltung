@@ -18,11 +18,7 @@ var Protokoll = (function () {
   var TAB = '_Protokoll';
   var MAX_LAENGE = 500;
 
-  function blatt() {
-    if (typeof DB !== 'undefined' && DB.blatt) return DB.blatt(TAB);
-    var id = PropertiesService.getScriptProperties().getProperty('DB_ID');
-    return SpreadsheetApp.openById(id).getSheetByName(TAB);
-  }
+  function blatt() { return DB.blatt(TAB); }
 
   function zaehle(n) {
     if (typeof DB !== 'undefined' && DB.zaehle) DB.zaehle(n);
@@ -70,8 +66,7 @@ var Protokoll = (function () {
       };
       return kopf.map(function (k) { return Object.prototype.hasOwnProperty.call(werte, k) ? werte[k] : ''; });
     });
-    sh.getRange(letzte + 1, 1, zeilen.length, kopf.length).setValues(zeilen);
-    zaehle(1);
+    DB.anhaengen(sh, zeilen, letzte);   // vergrößert das Raster bei Bedarf, zählt selbst
     return zeilen.length;
   }
 

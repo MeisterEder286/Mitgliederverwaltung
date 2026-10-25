@@ -50,7 +50,13 @@ function erzeugeFakes(opt) {
 
   // ---------- Tabellen ----------
   const tabs = {};
-  Object.keys(opt.tabs || {}).forEach(t => { tabs[t] = (opt.tabs[t] || []).map(z => z.slice()); });
+  // Rastergröße wie in Google Sheets: Ein neuer Tab hat 1000 Zeilen × 26 Spalten. getRange außerhalb
+  // davon wirft (wie das Original); appendRow und insertRowsAfter/insertColumnsAfter vergrößern.
+  const groesse = {};
+  Object.keys(opt.tabs || {}).forEach(t => {
+    tabs[t] = (opt.tabs[t] || []).map(z => z.slice());
+    groesse[t] = { zeilen: Math.max(1000, tabs[t].length), spalten: Math.max(26, ...tabs[t].map(z => z.length)) };
+  });
 
   function letzteZeile(daten) {
     let n = daten.length;
@@ -69,6 +75,9 @@ function erzeugeFakes(opt) {
     if (typeof r !== 'number') throw new Error('Fake: getRange nur mit Zahlen (Zeile, Spalte, Anzahl, Anzahl)');
     nr = nr || 1; nc = nc || 1;
     if (r < 1 || c < 1 || nr < 1 || nc < 1) throw new Error('Fake: ungültiger Bereich');
+    if (r + nr - 1 > groesse[name].zeilen || c + nc - 1 > groesse[name].spalten) {
+      throw new Error('Fake: Die Koordinaten des Bereichs liegen außerhalb der Tabellengröße (' + name + ').');
+    }
     const daten = tabs[name];
     function schreib(werte) {
       if (werte.length !== nr || werte.some(z => z.length !== nc)) {
@@ -118,8 +127,10 @@ function erzeugeFakes(opt) {
       getName() { return name; },
       getLastRow() { zaehle('getLastRow'); return letzteZeile(tabs[name]); },
       getLastColumn() { zaehle('getLastColumn'); return letzteSpalte(tabs[name]); },
-      getMaxRows() { zaehle('getMaxRows'); return Math.max(1000, tabs[name].length); },
-      getMaxColumns() { zaehle('getMaxColumns'); return Math.max(26, letzteSpalte(tabs[name])); },
+      getMaxRows() { zaehle('getMaxRows'); return groesse[name].zeilen; },
+      getMaxColumns() { zaehle('getMaxColumns'); return groesse[name].spalten; },
+      insertRowsAfter(nach, anzahl) { zaehle('insertRowsAfter'); groesse[name].zeilen += anzahl; return this; },
+      insertColumnsAfter(nach, anzahl) { zaehle('insertColumnsAfter'); groesse[name].spalten += anzahl; return this; },
       getRange(r, c, nr, nc) { zaehle('getRange'); return bereich(name, r, c, nr, nc); },
       getDataRange() {
         zaehle('getDataRange');
@@ -130,6 +141,8 @@ function erzeugeFakes(opt) {
         const d = tabs[name];
         d.length = letzteZeile(d);
         d.push(zeile.slice());
+        if (d.length > groesse[name].zeilen) groesse[name].zeilen = d.length;
+        if (zeile.length > groesse[name].spalten) groesse[name].spalten = zeile.length;
         return this;
       },
       setFrozenRows() { zaehle('setFrozenRows'); return this; },
@@ -148,6 +161,7 @@ function erzeugeFakes(opt) {
       zaehle('insertSheet');
       if (tabs[n]) throw new Error('Fake: Tab existiert bereits: ' + n);
       tabs[n] = [];
+      groesse[n] = { zeilen: 1000, spalten: 26 };
       return blatt(n);
     }
   };
