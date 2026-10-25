@@ -92,3 +92,17 @@ test('Konto-Detail: Hinweis auf fehlendes SEPA-Mandat; Kassier sieht „Schreibe
     assert.strictEqual(r, 'zugriff');
   } finally { await al.schliessen(); }
 });
+
+test('Kasse: „Mahnungen erstellen“ im Einzugsstand übergibt die offenen Sollstellungen an „Schreiben“', async () => {
+  const { starteOberflaeche } = require('./harness');
+  const ui = await starteOberflaeche({ rolle: 'Kassier' });
+  try {
+    await ui.page.locator('#navigation button', { hasText: 'Finanzen' }).click();
+    await ui.page.locator('button', { hasText: 'Mahnungen erstellen' }).click();
+    await ui.page.waitForFunction(() => App.aktuell().schluessel === 'korrespondenz');
+    const param = await ui.page.evaluate(() => App.aktuell().param);
+    assert.strictEqual(param.anlass, 'Mahnung');
+    assert.ok(param.sollstellung_ids.length > 0);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});

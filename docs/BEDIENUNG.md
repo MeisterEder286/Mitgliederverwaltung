@@ -26,7 +26,9 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 - Sicht auf Minderjährige und auf alle Funktionsträger mit Nachweispflicht; Nachweise erfassen wie oben.
 
 ## Kasse
-- **Finanzen → Einzugsstand:** Soll, eingezogen, offen, Rücklastschriften; Mahnliste drucken.
+- **Finanzen → Einzugsstand:** Soll, eingezogen, offen, Rücklastschriften; Mahnliste drucken oder „Mahnungen erstellen“.
+- **Nachzügler:** Neue Mitglieder nach dem Jahreslauf → Sollstellungen „Nachzügler anlegen“ → SEPA-Lauf (nimmt nur, was noch nie eingezogen wurde).
+- **Rechnungen** für Überweiser: Finanzen → Rechnungen → auswählen → Schreiben.
 - **Sollstellungen:** einmal im Jahr „Probelauf“ → „Anlegen“.
 - **SEPA-Lauf:** Probelauf prüfen (Ausschlüsse mit Grund) → „XML erzeugen“ → Datei im Online-Banking hochladen.
   Danach „alle als bezahlt buchen“; Rücklastschriften einzeln mit Grund erfassen (Gebühr automatisch).
@@ -37,6 +39,13 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   Geburtsdatum erscheint ein Hinweis (oft ein Wiedereintritt → „Wiedereintritt“ statt neu anlegen).
 - **Austritt:** im Mitglied → „Austritt“. Ist die Person Zahler für andere, fragt das System, wie es mit dem Konto weitergeht.
 - **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!).
+- **Familien:** einmal im Herbst „Fallen heraus“ für das nächste Jahr prüfen. Wer Schule/Studium/Ausbildung nachweist,
+  bekommt das voraussichtliche Ende eingetragen und bleibt bis dahin im Familienbeitrag. Die anderen auswählen →
+  „Auf Einzelbeitrag umstellen“ → „Anschreiben erstellen“.
+- **Zahlungen einer Person:** im Mitglied unter „Zahlungen“ – alle Jahre, auch über frühere Konten.
+- **Schreiben:** Vorlage wählen, Empfänger wählen (oder aus Finanzen/Familien übergeben) → Vorschau → „Erstellen & drucken“.
+  Jedes Schreiben bleibt im Mitglied unter „Dokumente & Schreiben“ und kann nachgedruckt werden. Unterschriebene
+  Anträge und SEPA-Mandate liegen im Drive-Ordner; hier wird nur der Link hinterlegt.
 - **Ehrungen:** Jahresliste prüfen → „übernehmen“ → nach der Versammlung „verliehen“ eintragen.
 - **Berichte → BLSV:** im Januar Bestand prüfen, CSV für verein360 herunterladen, „Jahresstatistik einfrieren“.
 - **Datenschutz:** Einwilligungen, Anfragen von Betroffenen (Frist 1 Monat!), Löschliste. Anonymisieren ist endgültig.
