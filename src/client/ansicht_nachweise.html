@@ -1,13 +1,269 @@
 <!--
-  ansicht_nachweise – Nachweise und Lizenzen
+  ansicht_nachweise – Führungszeugnisse (FZ) und Lizenzen der Funktionsträger: Ampel, Erfassen, Fristen, Löschung.
 
-  Zweck:      Führungszeugnis-Einsichten und Lizenzen, Fälligkeiten, Ampel.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   qualifikation_lesen / qualifikation_erfassen – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Übersicht wie im Mockup (wegen Funktion, Zeugnis vom, eingesehen, Wiedervorlage, Status), Einsichtnahme
+              eines erweiterten FZ erfassen, Lizenzen/Kurse erfassen und nachtragen, abgelaufene FZ-Vermerke löschen,
+              Fälligkeitsliste drucken/als CSV.
+  Datenquelle: apiNachweiseUebersicht (Server rechnet mit Sichtkreis der Rolle), Schreibaufrufe apiNachweiseErfassen /
+              apiNachweiseAendern / apiNachweiseLoeschen / apiNachweiseFristenAktualisieren, Export apiNachweiseExport.
+  Wer darf:   lesen qualifikation_lesen, erfassen qualifikation_erfassen (Vorstand, Mitgliederverwaltung, Jugendleitung,
+              Abteilungsleitung – beschlossen 10/2026). Abteilungsleiter sehen nur Personen ihrer Abteilung.
+              Alles serverseitig erzwungen; App.darf blendet nur aus.
+  Besonderheiten:
+    - § 72a SGB VIII: gespeichert wird nur, DASS eingesehen wurde, wann, von wem und bis wann – nie Inhalte, nie ein
+      Dokument. Wer eingesehen hat, setzt der Server aus dem Benutzerkonto.
+    - Ein FZ gilt der Person; die Löschfrist beginnt erst mit dem Ende der letzten nachweispflichtigen Funktion.
 -->
+<style>
+  .nw-hinweis { border-left: 4px solid var(--akzent); background: var(--flaeche); padding: 8px 12px; margin: 0 0 12px; font-size: 0.9rem; }
+  .nw-auswahl { width: 22px; height: 22px; }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+  var zustand = { reiter: 'fz', daten: null, markiert: {} };
+  var AMPEL_TEXT = { gruen: 'gültig', gelb: 'läuft ab', rot: 'fehlt / abgelaufen' };
+  var STAND_AMPEL = { 'gültig': 'gruen', 'unbefristet': 'grau', 'läuft ab': 'gelb', 'abgelaufen': 'rot' };
+
+  function lade(bereich) {
+    A.leere(bereich).appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
+    A.rufe('apiNachweiseUebersicht').then(function (d) {
+      zustand.daten = d; zustand.markiert = {};
+      zeichne(A.leere(bereich));
+    }).catch(function () { A.leere(bereich).appendChild(A.el('p', 'Die Nachweise konnten nicht geladen werden.', { className: 'leise' })); });
+  }
+
+  function zeichne(bereich) {
+    var d = zustand.daten;
+    var k = d.kennzahlen;
+    var kach = A.el('div', null, { className: 'kacheln' });
+    kach.appendChild(A.kachel(k.gueltig, 'Führungszeugnisse gültig'));
+    kach.appendChild(A.kachel(k.wiedervorlage, 'Wiedervorlage in ≤ 3 Monaten', k.wiedervorlage ? 'warnung' : ''));
+    kach.appendChild(A.kachel(k.fehlt, 'fehlt / abgelaufen', k.fehlt ? 'fehler' : ''));
+    kach.appendChild(A.kachel(k.zu_loeschen, 'zu löschen (Funktion beendet)', k.zu_loeschen ? 'warnung' : ''));
+    kach.appendChild(A.kachel(k.lizenzen_ablauf, 'Lizenzen abgelaufen / laufen ab'));
+    bereich.appendChild(kach);
+
+    var reiter = A.el('div', null, { className: 'reiter', role: 'tablist' });
+    var inhalt = A.el('div');
+    [['fz', 'Führungszeugnisse'], ['lizenzen', 'Lizenzen & Kurse'], ['loeschen', 'Zu löschen (' + k.zu_loeschen + ')']].forEach(function (r) {
+      var b = A.el('button', r[1], { type: 'button', role: 'tab' });
+      b.setAttribute('aria-selected', String(zustand.reiter === r[0]));
+      b.addEventListener('click', function () { zustand.reiter = r[0]; zeichne(A.leere(bereich)); });
+      reiter.appendChild(b);
+    });
+    bereich.appendChild(reiter);
+    bereich.appendChild(inhalt);
+    if (zustand.reiter === 'lizenzen') zeichneLizenzen(inhalt, bereich);
+    else if (zustand.reiter === 'loeschen') zeichneLoeschen(inhalt, bereich);
+    else zeichneFz(inhalt, bereich);
+    if (A.darf('qualifikation_erfassen') && d.fristen_neu_berechnen) {
+      var fr = A.knopf('Fristen aller Vermerke neu berechnen', function () {
+        fr.disabled = true;
+        A.rufe('apiNachweiseFristenAktualisieren').then(function (r) {
+          A.daten.uebernehme(r); A.meldung((r.geaendert || 0) + ' Vermerk(e) aktualisiert.', 'ok'); lade(bereich);
+        }).catch(function () { fr.disabled = false; });
+      }, 'zweit klein');
+      bereich.appendChild(A.el('p', null, { className: 'leise' }, [fr]));
+    }
+  }
+
+  function zeichneFz(ziel, bereich) {
+    var d = zustand.daten;
+    var tabelle;
+    var filter = A.filterleiste([{ name: 'ampel', titel: 'Status', liste: [
+      { wert: 'rot', text: 'fehlt / abgelaufen' }, { wert: 'gelb', text: 'läuft ab' }, { wert: 'gruen', text: 'gültig' }] }],
+      function (z) { tabelle.aktualisiere(gefiltert(z)); }, 'Name oder Funktion …');
+    function gefiltert(z) {
+      var s = A.falte(z.suche || '');
+      return d.personen.filter(function (p) {
+        if (z.ampel && p.ampel !== z.ampel) return false;
+        return !s || A.falte(p.name + ' ' + p.funktionen.join(' ') + ' ' + (p.mitgliedsnummer || '')).indexOf(s) >= 0;
+      });
+    }
+    ziel.appendChild(filter);
+    tabelle = A.tabelle([
+      { feld: 'mitgliedsnummer', titel: 'Nr.' },
+      { feld: 'name', titel: 'Name' },
+      { feld: 'funktionen', titel: 'wegen Funktion', wert: function (p) { return p.funktionen.join(', ') + (p.funktion_seit ? ', seit ' + A.datum(p.funktion_seit) : ''); } },
+      { feld: 'zeugnis', titel: 'Zeugnis vom', wert: function (p) { return p.fz ? A.datum(p.fz.ausgestellt_am) : '–'; }, sort: function (p) { return p.fz && p.fz.ausgestellt_am; } },
+      { feld: 'eingesehen', titel: 'Eingesehen', wert: function (p) { return p.fz ? A.datum(p.fz.eingesehen_am) + (p.fz.eingesehen_durch ? ' (' + p.fz.eingesehen_durch + ')' : '') : '–'; }, sort: function (p) { return p.fz && p.fz.eingesehen_am; } },
+      { feld: 'wiedervorlage', titel: 'Wiedervorlage', wert: function (p) { return p.fz ? A.datum(p.fz.wiedervorlage) : '–'; }, sort: function (p) { return p.fz && p.fz.wiedervorlage; } },
+      { feld: 'ampel', titel: 'Status', wert: function (p) { return A.ampel(p.ampel, AMPEL_TEXT[p.ampel] || p.ampel); }, sort: function (p) { return ['rot', 'gelb', 'gruen'].indexOf(p.ampel); } }
+    ], gefiltert(filter.zustand), {
+      leer: 'Keine Personen mit nachweispflichtiger Funktion.',
+      beiKlick: A.darf('qualifikation_erfassen') ? function (p) { erfassenDialog(bereich, p.mitglied_id, 'fz'); } : null
+    });
+    ziel.appendChild(tabelle);
+  }
+
+  function zeichneLizenzen(ziel, bereich) {
+    var d = zustand.daten;
+    ziel.appendChild(A.tabelle([
+      { feld: 'name', titel: 'Name' },
+      { feld: 'art', titel: 'Nachweis' },
+      { feld: 'ausgestellt_am', titel: 'ausgestellt', wert: function (l) { return A.datum(l.ausgestellt_am); } },
+      { feld: 'gueltig_bis', titel: 'gültig bis', wert: function (l) { return l.gueltig_bis ? A.datum(l.gueltig_bis) : 'unbefristet'; } },
+      { feld: 'stand', titel: 'Status', wert: function (l) { return A.ampel(STAND_AMPEL[l.stand] || 'grau', l.stand); } }
+    ], d.lizenzen, {
+      leer: 'Keine Lizenzen erfasst.', sortiere: 'gueltig_bis',
+      beiKlick: A.darf('qualifikation_erfassen') ? function (l) { lizenzAendern(l, bereich); } : null
+    }));
+  }
+
+  function zeichneLoeschen(ziel, bereich) {
+    var d = zustand.daten;
+    ziel.appendChild(A.el('p', 'Endet die letzte nachweispflichtige Funktion einer Person, ist der FZ-Vermerk nach Ablauf der Frist zu löschen (§ 72a Abs. 5 SGB VIII). Die Zeile bleibt nur mit „gelöscht am“ stehen.', { className: 'leise' }));
+    if (A.darf('qualifikation_erfassen') && d.zu_loeschen.length) {
+      ziel.appendChild(A.knopf('Markierte Vermerke löschen', function (ev) {
+        var l = d.zu_loeschen.filter(function (z) { return zustand.markiert[z.qualifikation_id]; });
+        if (!l.length) { A.meldung('Bitte zuerst Vermerke markieren.', 'hinweis'); return; }
+        var k = ev.currentTarget;
+        A.bestaetige('Vermerke löschen', l.length + ' Führungszeugnis-Vermerk(e) werden unwiderruflich geleert.', 'Löschen').then(function (ja) {
+          if (!ja) return;
+          k.disabled = true;
+          A.rufe('apiNachweiseLoeschen', l.map(function (z) { return { qualifikation_id: z.qualifikation_id, version: z.version }; })).then(function (r) {
+            A.daten.uebernehme(r); A.meldung('Gelöscht.', 'ok'); lade(bereich);
+          }).catch(function (err) { k.disabled = false; if (err.art === 'konflikt') lade(bereich); });
+        });
+      }, 'gefahr'));
+    }
+    ziel.appendChild(A.tabelle([
+      { titel: 'Auswahl', sortierbar: false, wert: function (z) {
+        var c = A.el('input', null, { type: 'checkbox', className: 'nw-auswahl', checked: !!zustand.markiert[z.qualifikation_id] });
+        c.setAttribute('aria-label', 'markieren: ' + z.name);
+        c.addEventListener('change', function () { if (c.checked) zustand.markiert[z.qualifikation_id] = true; else delete zustand.markiert[z.qualifikation_id]; });
+        return c;
+      } },
+      { feld: 'name', titel: 'Name' },
+      { feld: 'eingesehen_am', titel: 'eingesehen', wert: function (z) { return A.datum(z.eingesehen_am); } },
+      { feld: 'zu_loeschen_ab', titel: 'löschen ab', wert: function (z) { return A.datum(z.zu_loeschen_ab); } }
+    ], d.zu_loeschen, { leer: 'Derzeit ist kein Vermerk zu löschen.' }));
+  }
+
+  // ------------------------------------------------------------------ Erfassen
+
+  function personenOptionen(vorauswahl) {
+    var d = zustand.daten;
+    var sel = A.el('select', null, { id: 'nw-person' });
+    sel.appendChild(A.el('option', '– bitte wählen –', { value: '' }));
+    var g1 = A.el('optgroup'); g1.label = 'Funktionsträger mit Nachweispflicht';
+    var gesehen = {};
+    d.personen.slice().sort(function (a, b) { return ['rot', 'gelb', 'gruen'].indexOf(a.ampel) - ['rot', 'gelb', 'gruen'].indexOf(b.ampel) || a.name.localeCompare(b.name); })
+      .forEach(function (p) { gesehen[p.mitglied_id] = true; g1.appendChild(A.el('option', p.name + ' – ' + (AMPEL_TEXT[p.ampel] || ''), { value: String(p.mitglied_id) })); });
+    sel.appendChild(g1);
+    var g2 = A.el('optgroup'); g2.label = 'weitere Personen';
+    A.daten.liste('mitglieder').filter(function (m) { return !gesehen[m.mitglied_id]; })
+      .sort(function (a, b) { return A.name(a).localeCompare(A.name(b)); })
+      .forEach(function (m) { g2.appendChild(A.el('option', A.name(m) + (m.mitgliedsnummer ? ' (' + m.mitgliedsnummer + ')' : ''), { value: String(m.mitglied_id) })); });
+    sel.appendChild(g2);
+    if (vorauswahl) sel.value = String(vorauswahl);
+    return sel;
+  }
+
+  function erfassenDialog(bereich, mitgliedId, art) {
+    var d = zustand.daten;
+    var arten = d.arten.filter(function (a) { return art === 'fz' ? a.kategorie === 'Führungszeugnis' : a.kategorie !== 'Führungszeugnis'; });
+    if (!arten.length) { A.meldung('Keine passende Nachweisart in den Stammdaten.', 'fehler'); return; }
+    var person = personenOptionen(mitgliedId);
+    var artWahl = A.el('select', null, { id: 'nw-art' });
+    arten.forEach(function (a) { artWahl.appendChild(A.el('option', a.bezeichnung, { value: String(a.id) })); });
+    var personFehler = A.el('span', '', { className: 'feldfehler' });
+    var kopf = A.el('div', null, { className: 'formular' }, [
+      A.el('div', null, { className: 'feld breit' }, [A.el('label', 'Person *', { htmlFor: 'nw-person' }), person, personFehler]),
+      A.el('div', null, { className: 'feld breit' }, [A.el('label', 'Nachweis *', { htmlFor: 'nw-art' }), artWahl])
+    ]);
+    var formRahmen = A.el('div');
+    var form = null;
+    function baueForm() {
+      var a = arten.filter(function (x) { return String(x.id) === artWahl.value; })[0];
+      var fz = a && a.kategorie === 'Führungszeugnis';
+      form = A.formular(fz ? [
+        { name: 'ausgestellt_am', titel: 'Zeugnis ausgestellt am', typ: 'datum', pflicht: true,
+          hilfe: a.max_alter_zeugnis_monate ? 'Bei Einsicht nicht älter als ' + a.max_alter_zeugnis_monate + ' Monate.' : null },
+        { name: 'eingesehen_am', titel: 'Eingesehen am', typ: 'datum', pflicht: true },
+        { name: 'ergebnis', titel: 'Ergebnis', typ: 'auswahl', liste: [d.ergebnis_erlaubt], pflicht: true, breit: true,
+          hilfe: 'Nur dieser Vermerk ist zulässig. Wer Einsicht nimmt, wird automatisch mit Ihrem Namen vermerkt.' },
+        { name: 'bemerkung', titel: 'Bemerkung', typ: 'text', breit: true, hilfe: 'NIEMALS Inhalte des Führungszeugnisses eintragen (§ 72a SGB VIII).' }
+      ] : [
+        { name: 'ausgestellt_am', titel: 'ausgestellt am', typ: 'datum' },
+        { name: 'gueltig_bis', titel: 'gültig bis', typ: 'datum' },
+        { name: 'bemerkung', titel: 'Bemerkung', typ: 'text', breit: true }
+      ], fz ? { eingesehen_am: A.heute(), ergebnis: d.ergebnis_erlaubt } : {});
+      A.leere(formRahmen).appendChild(form.element);
+    }
+    artWahl.addEventListener('change', baueForm);
+    baueForm();
+    var inhalt = A.el('div', null, null, [
+      A.el('p', 'Gespeichert wird nur: Ausstellungsdatum, Datum der Einsichtnahme, wer eingesehen hat, der Vermerk „ohne einschlägigen Eintrag“ und die nächste Wiedervorlage. Kein Inhalt, keine Kopie, kein Upload.', { className: 'nw-hinweis' }),
+      kopf, formRahmen]);
+    A.dialog(art === 'fz' ? 'Einsichtnahme erfassen' : 'Lizenz / Kurs erfassen', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: ' ', aktion: function (schliessen) {
+        personFehler.textContent = '';
+        if (!person.value) { personFehler.textContent = 'Bitte eine Person wählen.'; person.focus(); return; }
+        var w = form.werte();
+        w.mitglied_id = Number(person.value);
+        w.qualifikationsart_id = Number(artWahl.value);
+        A.rufe('apiNachweiseErfassen', w).then(function (r) {
+          A.daten.uebernehme(r); schliessen(); A.meldung('Nachweis gespeichert.', 'ok'); lade(bereich);
+        }, function (err) {
+          if (err.felder) {
+            form.setzeFehler(err.felder);
+            err.felder.forEach(function (f) { if (f.feld === 'mitglied_id') personFehler.textContent = f.meldung; });
+          }
+        });
+      } }
+    ]);
+  }
+
+  function lizenzAendern(l, bereich) {
+    var form = A.formular([
+      { name: 'ausgestellt_am', titel: 'ausgestellt am', typ: 'datum' },
+      { name: 'gueltig_bis', titel: 'gültig bis', typ: 'datum' },
+      { name: 'bemerkung', titel: 'Bemerkung', typ: 'text', breit: true }
+    ], { ausgestellt_am: l.ausgestellt_am, gueltig_bis: l.gueltig_bis });
+    A.dialog(l.art + ' – ' + l.name, form.element, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: ' ', aktion: function (schliessen) {
+        A.rufe('apiNachweiseAendern', l.qualifikation_id, l.version, form.werte()).then(function (r) {
+          A.daten.uebernehme(r); schliessen(); A.meldung('Gespeichert.', 'ok'); lade(bereich);
+        }, function (err) {
+          if (err.felder) form.setzeFehler(err.felder);
+          if (err.art === 'konflikt') { schliessen(); lade(bereich); }
+        });
+      } }
+    ]);
+  }
+
+  function exportiere(art) {
+    A.rufe('apiNachweiseExport').then(function (zeilen) {
+      var sp = [{ feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'name', titel: 'Name' }, { feld: 'funktionen', titel: 'Funktion' },
+        { feld: 'eingesehen_am', titel: 'eingesehen', wert: function (z) { return A.datum(z.eingesehen_am); } },
+        { feld: 'wiedervorlage', titel: 'Wiedervorlage', wert: function (z) { return A.datum(z.wiedervorlage); } },
+        { feld: 'status', titel: 'Status' }];
+      if (art === 'druck') A.drucke('Fälligkeitsliste Nachweise', sp, zeilen, 'Führungszeugnisse der Funktionsträger');
+      else A.csv('Nachweise_Faelligkeit_' + A.heute() + '.csv', sp, zeilen);
+    }).catch(function () {});
+  }
+
+  A.registriere('nachweise', {
+    titel: 'Nachweise', aktion: 'qualifikation_lesen', reihenfolge: 40,
+    zeichne: function (ziel) {
+      var bereich = A.el('div');
+      var knoepfe = [];
+      if (A.darf('qualifikation_erfassen')) {
+        knoepfe.push(A.knopf('Einsichtnahme erfassen', function () { if (zustand.daten) erfassenDialog(bereich, null, 'fz'); }));
+        knoepfe.push(A.knopf('Lizenz / Kurs erfassen', function () { if (zustand.daten) erfassenDialog(bereich, null, 'lizenz'); }, 'zweit'));
+      }
+      knoepfe.push(A.knopf('Fälligkeitsliste drucken', function () { exportiere('druck'); }, 'zweit'));
+      knoepfe.push(A.knopf('CSV', function () { exportiere('csv'); }, 'zweit'));
+      ziel.appendChild(A.abschnitt('Nachweise & Lizenzen', knoepfe, 'h1'));
+      ziel.appendChild(A.el('p', 'Die Nachweispflicht hängt an der Funktion, nicht an der Person: Wer als Trainer, Betreuer oder in einem anderen nachweispflichtigen Amt eingetragen ist, erscheint hier automatisch. Endet die Funktion, startet die Löschfrist von selbst.', { className: 'leise' }));
+      ziel.appendChild(bereich);
+      lade(bereich);
+    }
+  });
 })();
 </script>

@@ -1,13 +1,325 @@
 <!--
-  ansicht_berichte – Berichte und BLSV
+  ansicht_berichte – Berichte: BLSV-Bestandserhebung, Jahresstatistik/Jahresvergleich, Geburtstage, Jubiläen,
+  Abteilungsübersicht, Ein- und Austritte.
 
-  Zweck:      BLSV-Bestandserhebung, Jahresstatistik einfrieren, Listen.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   export – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Auswertungen für Verband, Vorstand und Gemeindeblatt. BLSV-Meldung (Frist 31.01.) als Tabelle, CSV und
+              Druck; Jahresstatistik einfrieren (anonyme Summen, bleiben auch nach Löschungen stabil).
+  Datenquelle: apiBerichte…-Funktionen (Server rechnet; Abteilungs-/Jugendleiter nur über ihren Sichtkreis).
+  Wer darf:   Aktion export. BLSV und Jahresvergleich nur Rollen mit Sicht auf alle (Vorstand, Mitgliederverwaltung,
+              Kasse); Einfrieren nur mit konfig_aendern. Alles serverseitig erzwungen; App.darf blendet nur aus.
+  Besonderheiten:
+    - Geburtstags- und Jubiläumslisten fürs Gemeindeblatt: Schalter „nur mit Einwilligung“ (Einwilligung
+      „Ehrungen und Geburtstage in Vereinsmedien“). Ohne Einwilligung darf niemand veröffentlicht werden.
+    - Jeder Export (CSV/Druck) wird protokolliert.
+    - Diagramm ohne Bibliothek (SVG); dieselben Zahlen stehen immer auch als Tabelle daneben (barrierearm).
 -->
+<style>
+  .ber-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0 0 12px; }
+  .ber-zeile label { display: flex; flex-direction: column; font-size: 0.9rem; font-weight: 600; gap: 4px; }
+  .ber-zeile input, .ber-zeile select { min-height: 44px; padding: 6px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .ber-check { flex-direction: row !important; align-items: center; font-weight: 400 !important; min-height: 44px; }
+  .ber-diagramm { width: 100%; max-width: 640px; height: auto; margin: 8px 0 16px; }
+  .ber-diagramm text { font: 11px system-ui, sans-serif; fill: var(--text); }
+  td.ber-summe { font-weight: 700; border-top: 2px solid var(--text); }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+  var VEREINSROLLEN = ['Vorstand', 'Mitgliederverwalter', 'Kassier'];
+  var zustand = { reiter: null };
+
+  function vereinssicht() {
+    var r = (A.startdaten.benutzer && A.startdaten.benutzer.rollen) || [];
+    return r.some(function (x) { return VEREINSROLLEN.indexOf(x) >= 0; });
+  }
+  function jahr() { return Number((A.startdaten.konfig && A.startdaten.konfig.beitragsjahr) || A.startdaten.beitragsjahr || A.heute().slice(0, 4)); }
+  function eingabe(titel, typ, wert, attrs) {
+    var i = A.el('input', null, Object.assign({ type: typ || 'text', value: wert === undefined || wert === null ? '' : String(wert) }, attrs || {}));
+    var l = A.el('label', titel, null, [i]);
+    l.eingabe = i;
+    return l;
+  }
+  function datumEingabe(titel, iso) {
+    var l = eingabe(titel, 'text', A.datum(iso), { placeholder: 'TT.MM.JJJJ', inputMode: 'numeric' });
+    l.iso = function () { return A.isoDatum(l.eingabe.value); };
+    return l;
+  }
+  function protokolliere(liste, anzahl) { A.rufe('apiBerichteExportProtokollieren', liste, anzahl, A.still).catch(function () {}); }
+  function exportKnoepfe(titel, dateiname, spalten, zeilenFn) {
+    return [
+      A.knopf('CSV', function () { var z = zeilenFn(); A.csv(dateiname + '.csv', spalten, z); protokolliere(titel, z.length); }, 'zweit klein'),
+      A.knopf('Drucken', function () { var z = zeilenFn(); A.drucke(titel, spalten, z); protokolliere(titel + ' (Druck)', z.length); }, 'zweit klein')
+    ];
+  }
+  function mitgliedLink(id, text) {
+    if (!A.ansichten.mitglied) return A.el('span', text);
+    var b = A.el('button', text, { type: 'button', className: 'sortierknopf' });
+    b.style.textDecoration = 'underline';
+    b.addEventListener('click', function () { A.zeige('mitglied', { id: id }); });
+    return b;
+  }
+  function laedt(z) { A.leere(z).appendChild(A.el('p', 'Lädt …', { className: 'laedt' })); }
+
+  // ------------------------------------------------------------------ BLSV
+
+  var KLASSEN = [
+    { feld: 'gesamt', titel: 'gesamt' }, { feld: 'maennlich', titel: 'männl.' }, { feld: 'weiblich', titel: 'weibl.' },
+    { feld: 'divers', titel: 'divers' }, { feld: 'alter_bis_14', titel: 'bis 14' }, { feld: 'alter_15_18', titel: '15–18' },
+    { feld: 'alter_19_26', titel: '19–26' }, { feld: 'alter_ab_27', titel: 'ab 27' }, { feld: 'davon_passiv', titel: 'passiv' }
+  ];
+
+  function blsv(ziel) {
+    var stichtag = datumEingabe('Stichtag', jahr() + '-01-01');
+    var ergebnis = A.el('div');
+    var los = A.knopf('Berechnen', rechne);
+    ziel.appendChild(A.el('div', null, { className: 'ber-zeile' }, [stichtag, los]));
+    ziel.appendChild(ergebnis);
+    function rechne() {
+      var s = stichtag.iso();
+      if (!s) { A.meldung('Bitte den Stichtag als TT.MM.JJJJ angeben.', 'fehler'); return; }
+      laedt(ergebnis);
+      A.rufe('apiBerichteBlsv', s).then(function (b) { zeichneBlsv(A.leere(ergebnis), b); }).catch(function () { A.leere(ergebnis); });
+    }
+    rechne();
+  }
+
+  function zeichneBlsv(ziel, b) {
+    var zeilen = b.sportarten.map(function (s) { return Object.assign({ name: s.sportart }, s); });
+    zeilen.push(Object.assign({ name: 'Mitglieder im Verein', summe: true }, b.verein));
+    var summe = function (z) { return z.summe ? 'ber-summe' : ''; };
+    var spalten = [{ feld: 'name', titel: 'Sportart', klasse: summe, sortierbar: false }].concat(KLASSEN.map(function (k) {
+      return { feld: k.feld, titel: k.titel, zahl: true, klasse: summe, sortierbar: false };
+    }));
+    var knoepfe = [
+      A.knopf('CSV für verein360', function () {
+        A.rufe('apiBerichteBlsvExport', b.stichtag).then(function (d) { A.herunterladen(d.dateiname, '﻿' + d.inhalt, 'text/csv;charset=utf-8'); }).catch(function () {});
+      }, 'zweit klein'),
+      A.knopf('Drucken', function () { A.drucke('BLSV-Bestandserhebung', spalten, zeilen, 'Stichtag ' + A.datum(b.stichtag)); protokolliere('BLSV-Bestand (Druck)', zeilen.length); }, 'zweit klein')
+    ];
+    if (A.darf('konfig_aendern')) knoepfe.push(A.knopf('Jahresstatistik einfrieren …', function () { einfrierenDialog(b.stichtag); }, 'klein'));
+    ziel.appendChild(A.abschnitt('Bestand zum ' + A.datum(b.stichtag), knoepfe));
+    ziel.appendChild(A.tabelle(spalten, zeilen, { block: 200 }));
+    ziel.appendChild(A.el('p', 'Die Summe der Sportarten (' + b.summe_sportarten + ') liegt über der Vereinssumme, weil ' + b.mehrfach +
+      ' Personen in mehreren Abteilungen sind – je Sportart einmal gezählt, als Mitglied nur einmal. Das Importformat von verein360 vor der ersten Meldung mit der aktuellen BLSV-Vorlage abgleichen.', { className: 'leise' }));
+    ziel.appendChild(A.el('h2', 'Prüfliste vor dem Export'));
+    if (!b.pruefliste.length) { ziel.appendChild(A.el('p', 'Keine fehlenden Angaben.', { className: 'leise' })); return; }
+    ziel.appendChild(A.tabelle([
+      { feld: 'name', titel: 'Mitglied / Abteilung', wert: function (p) { return p.mitglied_id ? mitgliedLink(p.mitglied_id, (p.name || '') + (p.mitgliedsnummer ? ' (' + p.mitgliedsnummer + ')' : '')) : 'Abteilung'; } },
+      { feld: 'meldung', titel: 'Fehlt' }
+    ], b.pruefliste));
+  }
+
+  function einfrierenDialog(stichtag) {
+    var j = Number(stichtag.slice(0, 4));
+    var f = A.formular([
+      { name: 'jahr', titel: 'Jahr', typ: 'zahl', pflicht: true },
+      { name: 'stichtag', titel: 'Stichtag', typ: 'datum', pflicht: true },
+      { name: 'gemeldet', titel: 'An den BLSV gemeldet am', typ: 'datum', hilfe: 'optional' }
+    ], { jahr: j, stichtag: stichtag });
+    A.dialog('Jahresstatistik einfrieren', A.el('div', null, null, [
+      A.el('p', 'Die Jahreszahlen werden als anonyme Summen gespeichert und danach nie mehr neu berechnet – spätere Löschungen verändern sie nicht. Je Jahr nur einmal möglich.'), f.element]), [
+      { text: 'Abbrechen' },
+      { text: 'Einfrieren', art: ' ', aktion: function (schliessen) {
+        var w = f.werte();
+        A.rufe('apiBerichteStatistikEinfrieren', w.jahr, w.stichtag, w.gemeldet).then(function (r) {
+          schliessen(); A.meldung('Jahresstatistik ' + r.jahr + ' eingefroren (' + r.zeilen + ' Zeilen).', 'ok');
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
+      } }
+    ]);
+  }
+
+  // ------------------------------------------------------------------ Jahresvergleich
+
+  function jahresvergleich(ziel) {
+    laedt(ziel);
+    A.rufe('apiBerichteJahresvergleich').then(function (d) {
+      A.leere(ziel);
+      var j = d.jahre;
+      ziel.appendChild(A.el('p', 'Eingefrorene Jahre aus der Jahresstatistik, dazu der aktuelle Stand (nicht eingefroren).', { className: 'leise' }));
+      ziel.appendChild(diagramm(j));
+      var spalten = [
+        { feld: 'jahr', titel: 'Jahr', wert: function (z) { return z.jahr + (z.eingefroren ? '' : ' (aktuell)'); } },
+        { feld: 'mitglieder', titel: 'Mitglieder', zahl: true }, { feld: 'passiv', titel: 'passiv', zahl: true },
+        { feld: 'eintritte', titel: 'Eintritte', zahl: true }, { feld: 'austritte', titel: 'Austritte', zahl: true },
+        { feld: 'beitragssoll', titel: 'Beitragssoll', zahl: true, wert: function (z) { return z.beitragssoll === null ? '–' : A.betrag(z.beitragssoll); } }
+      ];
+      ziel.appendChild(A.tabelle(spalten, j, { sortiere: 'jahr' }));
+    }).catch(function () { A.leere(ziel); });
+  }
+
+  function diagramm(jahre) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var breite = 640, hoehe = 220, rand = 30;
+    var max = Math.max.apply(null, jahre.map(function (j) { return j.mitglieder || 0; }).concat([1]));
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + breite + ' ' + hoehe);
+    svg.setAttribute('class', 'ber-diagramm');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Mitglieder je Jahr: ' + jahre.map(function (j) { return j.jahr + ' ' + j.mitglieder; }).join(', '));
+    var w = (breite - 2 * rand) / Math.max(jahre.length, 1);
+    jahre.forEach(function (j, i) {
+      var h = (hoehe - 2 * rand) * (j.mitglieder || 0) / max;
+      var r = document.createElementNS(ns, 'rect');
+      r.setAttribute('x', rand + i * w + w * 0.15); r.setAttribute('width', w * 0.7);
+      r.setAttribute('y', hoehe - rand - h); r.setAttribute('height', h);
+      r.setAttribute('fill', j.eingefroren ? 'var(--akzent)' : 'var(--rand)');
+      svg.appendChild(r);
+      var t = document.createElementNS(ns, 'text');
+      t.setAttribute('x', rand + i * w + w / 2); t.setAttribute('y', hoehe - 10); t.setAttribute('text-anchor', 'middle');
+      t.textContent = j.jahr;
+      svg.appendChild(t);
+      var z = document.createElementNS(ns, 'text');
+      z.setAttribute('x', rand + i * w + w / 2); z.setAttribute('y', hoehe - rand - h - 4); z.setAttribute('text-anchor', 'middle');
+      z.textContent = j.mitglieder;
+      svg.appendChild(z);
+    });
+    return svg;
+  }
+
+  // ------------------------------------------------------------------ Geburtstage / Jubiläen
+
+  function geburtstage(ziel) {
+    var h = A.heute();
+    var von = datumEingabe('von', h.slice(0, 8) + '01');
+    var bisIso = new Date(Number(h.slice(0, 4)), Number(h.slice(5, 7)), 0);
+    var bis = datumEingabe('bis', h.slice(0, 8) + ('0' + bisIso.getDate()).slice(-2));
+    var nurEw = A.el('input', null, { type: 'checkbox' });
+    var nurRund = A.el('input', null, { type: 'checkbox' });
+    var ergebnis = A.el('div');
+    var daten = null;
+    ziel.appendChild(A.el('div', null, { className: 'ber-zeile' }, [von, bis, A.knopf('Anzeigen', rechne),
+      A.el('label', null, { className: 'ber-check' }, [nurEw, A.el('span', ' nur mit Einwilligung (Gemeindeblatt)')]),
+      A.el('label', null, { className: 'ber-check' }, [nurRund, A.el('span', ' nur runde')])]));
+    ziel.appendChild(ergebnis);
+    [nurEw, nurRund].forEach(function (c) { c.addEventListener('change', zeichne); });
+    function gefiltert() {
+      return (daten ? daten.eintraege : []).filter(function (e) { return (!nurEw.checked || e.einwilligung) && (!nurRund.checked || e.rund); });
+    }
+    var spalten = [
+      { feld: 'geburtstag', titel: 'Datum', wert: function (e) { return A.datum(e.geburtstag); } },
+      { feld: 'name', titel: 'Name' }, { feld: 'alter', titel: 'Alter', zahl: true },
+      { feld: 'rund', titel: 'rund', wert: function (e) { return e.rund ? 'ja' : ''; } },
+      { feld: 'einwilligung', titel: 'Veröffentlichung', wert: function (e) { return e.einwilligung ? 'erlaubt' : 'nicht erlaubt'; } }
+    ];
+    function zeichne() {
+      A.leere(ergebnis);
+      if (!daten) return;
+      var l = gefiltert();
+      ergebnis.appendChild(A.abschnitt(l.length + ' Geburtstage', exportKnoepfe('Geburtstage ' + A.datum(daten.von) + '–' + A.datum(daten.bis),
+        'Geburtstage_' + daten.von + '_' + daten.bis, spalten, gefiltert)));
+      ergebnis.appendChild(A.tabelle(spalten, l, { sortiere: 'geburtstag', leer: 'Keine Geburtstage im Zeitraum.' }));
+    }
+    function rechne() {
+      if (!von.iso() || !bis.iso()) { A.meldung('Bitte Datum als TT.MM.JJJJ angeben.', 'fehler'); return; }
+      laedt(ergebnis);
+      A.rufe('apiBerichteGeburtstage', von.iso(), bis.iso()).then(function (d) { daten = d; zeichne(); }).catch(function () { A.leere(ergebnis); });
+    }
+    rechne();
+  }
+
+  function jubilaeen(ziel) {
+    var jahrWahl = A.el('select');
+    for (var j = jahr() - 1; j <= jahr() + 2; j++) jahrWahl.appendChild(A.el('option', String(j), { value: String(j) }));
+    jahrWahl.value = String(jahr());
+    var nurEw = A.el('input', null, { type: 'checkbox' });
+    var ergebnis = A.el('div');
+    var daten = null;
+    ziel.appendChild(A.el('div', null, { className: 'ber-zeile' }, [A.el('label', 'Jahr', null, [jahrWahl]),
+      A.el('label', null, { className: 'ber-check' }, [nurEw, A.el('span', ' nur mit Einwilligung (Gemeindeblatt)')])]));
+    ziel.appendChild(A.el('p', 'Mitgliedsjubiläen nach den Stufen der Ehrungsregeln, Zählweise wie bei den Ehrungen.', { className: 'leise' }));
+    ziel.appendChild(ergebnis);
+    var spalten = [{ feld: 'name', titel: 'Name' }, { feld: 'jahre', titel: 'Jahre', zahl: true }, { feld: 'stufe', titel: 'Stufe' },
+      { feld: 'grundlage', titel: 'Grundlage' }, { feld: 'einwilligung', titel: 'Veröffentlichung', wert: function (e) { return e.einwilligung ? 'erlaubt' : 'nicht erlaubt'; } }];
+    function gefiltert() { return (daten ? daten.eintraege : []).filter(function (e) { return !nurEw.checked || e.einwilligung; }); }
+    function zeichne() {
+      A.leere(ergebnis);
+      if (!daten) return;
+      var l = gefiltert();
+      ergebnis.appendChild(A.abschnitt(l.length + ' Jubiläen ' + daten.jahr, exportKnoepfe('Mitgliedsjubiläen ' + daten.jahr, 'Jubilaeen_' + daten.jahr, spalten, gefiltert)));
+      ergebnis.appendChild(A.tabelle(spalten, l, { leer: 'Keine Jubiläen.' }));
+    }
+    function rechne() {
+      laedt(ergebnis);
+      A.rufe('apiBerichteJubilaeen', Number(jahrWahl.value)).then(function (d) { daten = d; zeichne(); }).catch(function () { A.leere(ergebnis); });
+    }
+    jahrWahl.addEventListener('change', rechne);
+    nurEw.addEventListener('change', zeichne);
+    rechne();
+  }
+
+  // ------------------------------------------------------------------ Abteilungen / Bewegungen
+
+  function abteilungen(ziel) {
+    laedt(ziel);
+    A.rufe('apiBerichteAbteilungen').then(function (l) {
+      A.leere(ziel);
+      var spalten = [
+        { feld: 'bezeichnung', titel: 'Abteilung' }, { feld: 'blsv_sportart', titel: 'BLSV-Sportart' },
+        { feld: 'mitglieder', titel: 'Mitglieder', zahl: true }, { feld: 'passiv', titel: 'passiv', zahl: true },
+        { feld: 'leitung', titel: 'Leitung (aus Funktionen)', wert: function (a) { return a.leitung.map(function (x) { return x.name + ' seit ' + A.datum(x.seit).slice(-4); }).join(', ') || '–'; } },
+        { feld: 'meldepflichtig', titel: 'meldepflichtig', wert: function (a) { return A.janein(a.meldepflichtig); } },
+        { feld: 'aktiv_abteilung', titel: 'Status', wert: function (a) { return a.aktiv_abteilung ? 'aktiv' : 'ruht'; } }
+      ];
+      ziel.appendChild(A.abschnitt('Abteilungen', exportKnoepfe('Abteilungsübersicht', 'Abteilungen_' + A.heute(), spalten, function () { return l; })));
+      ziel.appendChild(A.tabelle(spalten, l));
+      ziel.appendChild(A.el('p', 'Die Abteilungsleitung wird aus der laufenden Funktion gelesen – endet das Amt, verschwindet der Name hier automatisch.', { className: 'leise' }));
+    }).catch(function () { A.leere(ziel); });
+  }
+
+  function bewegungen(ziel) {
+    var von = datumEingabe('von', jahr() + '-01-01');
+    var bis = datumEingabe('bis', jahr() + '-12-31');
+    var ergebnis = A.el('div');
+    ziel.appendChild(A.el('div', null, { className: 'ber-zeile' }, [von, bis, A.knopf('Anzeigen', rechne)]));
+    ziel.appendChild(ergebnis);
+    var spalten = [{ feld: 'datum', titel: 'Datum', wert: function (e) { return A.datum(e.datum); } }, { feld: 'art', titel: 'Art' },
+      { feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'name', titel: 'Name' }, { feld: 'grund', titel: 'Grund' }];
+    function rechne() {
+      if (!von.iso() || !bis.iso()) { A.meldung('Bitte Datum als TT.MM.JJJJ angeben.', 'fehler'); return; }
+      laedt(ergebnis);
+      A.rufe('apiBerichteBewegungen', von.iso(), bis.iso()).then(function (d) {
+        A.leere(ergebnis);
+        var k = A.el('div', null, { className: 'kacheln' }, [A.kachel(d.eintritte, 'Eintritte'), A.kachel(d.austritte, 'Austritte'),
+          A.kachel((d.eintritte - d.austritte > 0 ? '+' : '') + (d.eintritte - d.austritte), 'Saldo')]);
+        ergebnis.appendChild(k);
+        ergebnis.appendChild(A.abschnitt('Ein- und Austritte', exportKnoepfe('Ein- und Austritte ' + A.datum(d.von) + '–' + A.datum(d.bis),
+          'Bewegungen_' + d.von + '_' + d.bis, spalten, function () { return d.eintraege; })));
+        ergebnis.appendChild(A.tabelle(spalten, d.eintraege, { sortiere: 'datum', leer: 'Keine Ein- oder Austritte im Zeitraum.' }));
+      }).catch(function () { A.leere(ergebnis); });
+    }
+    rechne();
+  }
+
+  // ------------------------------------------------------------------ Ansicht
+
+  A.registriere('berichte', {
+    titel: 'Berichte', aktion: 'export', reihenfolge: 60,
+    zeichne: function (ziel) {
+      var reiterListe = [];
+      if (vereinssicht()) reiterListe.push(['blsv', 'BLSV-Bestand', blsv], ['vergleich', 'Jahresvergleich', jahresvergleich]);
+      reiterListe.push(['geburtstage', 'Geburtstage', geburtstage], ['jubilaeen', 'Jubiläen', jubilaeen],
+        ['abteilungen', 'Abteilungen', abteilungen], ['bewegungen', 'Ein- & Austritte', bewegungen]);
+      if (!zustand.reiter || !reiterListe.some(function (r) { return r[0] === zustand.reiter; })) zustand.reiter = reiterListe[0][0];
+      ziel.appendChild(A.el('h1', 'Berichte'));
+      var reiter = A.el('div', null, { className: 'reiter', role: 'tablist' });
+      var inhalt = A.el('div');
+      function zeige(schl) {
+        zustand.reiter = schl;
+        Array.prototype.forEach.call(reiter.children, function (b) { b.setAttribute('aria-selected', String(b.dataset.r === schl)); });
+        var r = reiterListe.filter(function (x) { return x[0] === schl; })[0];
+        r[2](A.leere(inhalt));
+      }
+      reiterListe.forEach(function (r) {
+        var b = A.el('button', r[1], { type: 'button', role: 'tab', dataset: { r: r[0] } });
+        b.addEventListener('click', function () { zeige(r[0]); });
+        reiter.appendChild(b);
+      });
+      ziel.appendChild(reiter);
+      ziel.appendChild(A.el('p', 'Jeder Export (CSV, Druck) wird protokolliert: wer, wann, welche Liste.', { className: 'leise' }));
+      ziel.appendChild(inhalt);
+      zeige(zustand.reiter);
+    }
+  });
 })();
 </script>

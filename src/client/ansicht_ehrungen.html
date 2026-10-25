@@ -1,13 +1,224 @@
 <!--
-  ansicht_ehrungen – Ehrungen
+  ansicht_ehrungen – Ehrungen des Jahres: fällige Jubiläen/Geburtstage/Ehrenamt, Verleihung erfassen, Listen.
 
-  Zweck:      Jahresliste der fälligen Ehrungen, Verleihung erfassen.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   ehrung_bearbeiten – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Jahresliste (neu fällig + offene Vorjahre) anzeigen, „Liste übernehmen“, einzelne oder markierte
+              Ehrungen verleihen (Datum, Veranstaltung), verschieben, ablehnen, wieder öffnen; JHV-Liste drucken,
+              CSV und Urkunden-/Serienbriefdaten exportieren.
+  Datenquelle: apiEhrungenListe (Server rechnet die Liste immer neu), Schreibaufrufe apiEhrungenStatus /
+              apiEhrungenUebernehmen, Exporte apiEhrungenExport (protokolliert).
+  Wer darf:   Aktion ehrung_bearbeiten (Vorstand, Mitgliederverwalter) – serverseitig erzwungen; App.darf blendet nur aus.
+  Besonderheiten:
+    - Zählweise laut _Konfig (beschlossen: ab letztem Eintritt). Bei Wiedereintritt zeigt die Liste beide Zählweisen.
+    - „Veröffentlichung nicht erlaubt“: Einwilligung „Ehrungen und Geburtstage in Vereinsmedien“ fehlt – die
+      Verleihung ist trotzdem möglich, aber Name nicht in Gemeindeblatt/Presse/Homepage nennen.
 -->
+<style>
+  .ehr-auswahl { width: 22px; height: 22px; }
+  .ehr-sammel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+  .ehr-jahr { min-height: 44px; padding: 6px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+  var STATUS_TEXT = { 'fällig': 'fällig', verschoben: 'verschoben · nachholen', verliehen: 'verliehen', abgelehnt: 'abgelehnt' };
+  var zustand = { jahr: null, daten: null, markiert: {} };
+
+  function schluessel(e) { return e.ehrung_id ? 'e' + e.ehrung_id : ['n', e.mitglied_id, e.ehrungsregel_id, e.funktion_id || '', e.faellig_jahr].join('|'); }
+  function referenz(e) {
+    return e.ehrung_id ? { ehrung_id: e.ehrung_id, version: e.version }
+      : { mitglied_id: e.mitglied_id, ehrungsregel_id: e.ehrungsregel_id, funktion_id: e.funktion_id || null, faellig_jahr: e.faellig_jahr };
+  }
+
+  function lade(ziel) {
+    var bereich = A.leere(ziel);
+    bereich.appendChild(A.el('p', 'Ehrungsliste wird berechnet …', { className: 'laedt' }));
+    A.rufe('apiEhrungenListe', zustand.jahr).then(function (d) {
+      zustand.daten = d; zustand.markiert = {};
+      zeichneListe(A.leere(bereich));
+    }).catch(function () { A.leere(bereich).appendChild(A.el('p', 'Die Liste konnte nicht geladen werden.', { className: 'leise' })); });
+  }
+
+  function statusZelle(e) {
+    var s = A.el('span', STATUS_TEXT[e.status] || e.status);
+    if (e.neu) s = A.el('span', 'fällig (neu)');
+    return s;
+  }
+
+  function grundlage(e) {
+    var span = A.el('span', e.grundlage || '–');
+    if (e.vergleich) {
+      var akt = zustand.daten.einstellungen.ehrung_zaehlweise === 'gesamt' ? 'gesamt' : 'letzter_eintritt';
+      span.appendChild(A.el('span', ' · Vergleich: ab letztem Eintritt ' + e.vergleich.letzter_eintritt + ' J.' +
+        (akt === 'letzter_eintritt' ? ' (gilt)' : '') + ', gesamt ' + e.vergleich.gesamt + ' J.' + (akt === 'gesamt' ? ' (gilt)' : ''), { className: 'leise' }));
+    }
+    return span;
+  }
+
+  function zeichneListe(ziel) {
+    var d = zustand.daten;
+    var ein = d.einstellungen;
+    ziel.appendChild(A.el('p', 'Zählweise Mitgliedsjubiläum: ' + (ein.ehrung_zaehlweise === 'gesamt' ? 'alle Mitgliedschaftszeiten' : 'ab letztem Eintritt (Austritt setzt zurück)') +
+      ' · Stichtag: ' + (ein.ehrung_stichtag === 'exakter_tag' ? 'exakter Tag' : 'Kalenderjahr') + ' · Funktionsjubiläum: ' + String(ein.funktionsjubilaeum_zaehlweise || 'je_funktion').replace(/_/g, ' '),
+      { className: 'leise' }));
+    var kach = A.el('div', null, { className: 'kacheln' });
+    kach.appendChild(A.kachel(d.anzahl.gesamt, 'offen ' + d.jahr));
+    kach.appendChild(A.kachel(d.anzahl.neu, 'neu fällig (noch nicht übernommen)', d.anzahl.neu ? 'warnung' : ''));
+    kach.appendChild(A.kachel(d.anzahl.offen_vorjahre, 'offen aus Vorjahren'));
+    ziel.appendChild(kach);
+
+    var leiste = A.el('div', null, { className: 'knopfleiste' });
+    if (d.anzahl.neu) {
+      leiste.appendChild(A.knopf('Liste übernehmen (' + d.anzahl.neu + ')', function (ev) {
+        var k = ev.currentTarget; k.disabled = true;
+        A.rufe('apiEhrungenUebernehmen', d.jahr).then(function (r) {
+          A.daten.uebernehme(r);
+          A.meldung(r.angelegt + ' Ehrung(en) als „fällig“ übernommen.', 'ok');
+          lade(ziel);
+        }).catch(function () { k.disabled = false; });
+      }));
+    }
+    leiste.appendChild(A.knopf('JHV-Liste drucken', function () { exportiere('druck'); }, 'zweit'));
+    leiste.appendChild(A.knopf('CSV', function () { exportiere('csv'); }, 'zweit'));
+    leiste.appendChild(A.knopf('Urkunden-Daten (CSV)', function () { exportiere('urkunden'); }, 'zweit'));
+    ziel.appendChild(leiste);
+
+    var typen = [];
+    d.eintraege.forEach(function (e) { if (typen.indexOf(e.typ) < 0) typen.push(e.typ); });
+    var tabelle;
+    var filter = A.filterleiste([
+      { name: 'typ', titel: 'Anlass', liste: typen.map(function (t) { return { wert: t, text: t }; }) },
+      { name: 'status', titel: 'Status', liste: [{ wert: 'neu', text: 'neu fällig' }, { wert: 'fällig', text: 'fällig' }, { wert: 'verschoben', text: 'verschoben' }] }
+    ], function (z) { tabelle.aktualisiere(gefiltert(z)); }, 'Name oder Nummer …');
+    ziel.appendChild(filter);
+
+    var sammel = A.el('div', null, { className: 'ehr-sammel' });
+    var zaehler = A.el('span', '0 markiert', { className: 'leise' });
+    sammel.appendChild(zaehler);
+    sammel.appendChild(A.knopf('Markierte verleihen …', function () {
+      var l = d.eintraege.filter(function (e) { return zustand.markiert[schluessel(e)]; });
+      if (!l.length) { A.meldung('Bitte zuerst Ehrungen markieren.', 'hinweis'); return; }
+      verleihDialog(l, ziel);
+    }, 'klein'));
+    ziel.appendChild(sammel);
+
+    function gefiltert(z) {
+      var s = A.falte(z.suche || '');
+      return d.eintraege.filter(function (e) {
+        if (z.typ && e.typ !== z.typ) return false;
+        if (z.status === 'neu' && !e.neu) return false;
+        if (z.status && z.status !== 'neu' && (e.neu || e.status !== z.status)) return false;
+        return !s || A.falte(e.name + ' ' + (e.mitgliedsnummer || '')).indexOf(s) >= 0;
+      });
+    }
+    function zaehle() { zaehler.textContent = Object.keys(zustand.markiert).length + ' markiert'; }
+
+    tabelle = A.tabelle([
+      { titel: 'Auswahl', sortierbar: false, wert: function (e) {
+        var c = A.el('input', null, { type: 'checkbox', className: 'ehr-auswahl', checked: !!zustand.markiert[schluessel(e)] });
+        c.setAttribute('aria-label', 'markieren: ' + e.name);
+        c.addEventListener('click', function (ev) { ev.stopPropagation(); });
+        c.addEventListener('change', function () { if (c.checked) zustand.markiert[schluessel(e)] = true; else delete zustand.markiert[schluessel(e)]; zaehle(); });
+        return c;
+      } },
+      { feld: 'mitgliedsnummer', titel: 'Nr.' },
+      { feld: 'name', titel: 'Mitglied' },
+      { feld: 'typ', titel: 'Anlass' },
+      { feld: 'bezeichnung', titel: 'Stufe', wert: function (e) { return (e.schwelle ? e.schwelle + ' – ' : '') + (e.bezeichnung || '') + (e.verband === 'BLSV' ? ' (BLSV)' : ''); } },
+      { feld: 'grundlage', titel: 'Grundlage', wert: grundlage },
+      { feld: 'faellig_jahr', titel: 'fällig', zahl: true },
+      { feld: 'status', titel: 'Status', wert: statusZelle },
+      { titel: 'Veröffentlichung', sortierbar: false, wert: function (e) {
+        return e.veroeffentlichung_erlaubt ? A.el('span', 'erlaubt', { className: 'leise' }) : A.ampel('gelb', 'nicht erlaubt');
+      } }
+    ], gefiltert(filter.zustand), { beiKlick: function (e) { bearbeiteDialog(e, ziel); }, leer: 'Für dieses Jahr ist nichts offen.', sortiere: 'faellig_jahr' });
+    ziel.appendChild(tabelle);
+  }
+
+  function aktion(eintraege, art, eingabe, ziel, schliessen, formular) {
+    return A.rufe('apiEhrungenStatus', eintraege.map(referenz), art, eingabe || {}).then(function (r) {
+      A.daten.uebernehme(r);
+      if (schliessen) schliessen();
+      A.meldung({ verleihen: 'Verleihung gespeichert.', verschieben: 'Verschoben – bleibt offen.', ablehnen: 'Als abgelehnt vermerkt.', oeffnen: 'Wieder geöffnet.' }[art], 'ok');
+      lade(ziel);
+    }, function (err) {
+      if (formular && err.felder) formular.setzeFehler(err.felder);
+      if (err.art === 'konflikt') { if (schliessen) schliessen(); lade(ziel); }
+    });
+  }
+
+  function verleihDialog(eintraege, ziel) {
+    var f = A.formular([
+      { name: 'verliehen_am', titel: 'Datum der Verleihung', typ: 'datum', pflicht: true },
+      { name: 'veranstaltung', titel: 'Veranstaltung', typ: 'text', hilfe: 'z. B. Jahreshauptversammlung ' + (zustand.jahr + 1) }
+    ], { verliehen_am: A.heute() });
+    var inhalt = A.el('div', null, null, [A.el('p', eintraege.length === 1 ? eintraege[0].name + ' – ' + (eintraege[0].bezeichnung || '') : eintraege.length + ' Ehrungen werden als verliehen vermerkt.'), f.element]);
+    A.dialog('Verleihung erfassen', inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: ' ', aktion: function (schliessen) {
+        var w = f.werte();
+        if (!w.verliehen_am || !/^\d{4}-\d{2}-\d{2}$/.test(w.verliehen_am)) { f.setzeFehler([{ feld: 'verliehen_am', meldung: 'Bitte ein Datum TT.MM.JJJJ angeben.' }]); return; }
+        aktion(eintraege, 'verleihen', w, ziel, schliessen, f);
+      } }
+    ]);
+  }
+
+  function bearbeiteDialog(e, ziel) {
+    var details = A.details([
+      ['Mitglied', e.name + (e.mitgliedsnummer ? ' (' + e.mitgliedsnummer + ')' : '')],
+      ['Anlass', e.typ], ['Stufe', (e.schwelle || '') + ' – ' + (e.bezeichnung || '')],
+      ['Grundlage', grundlage(e)], ['Funktion', e.funktion_text || null],
+      ['fällig seit', e.faellig_jahr], ['Status', statusZelle(e)],
+      ['Veröffentlichung', e.veroeffentlichung_erlaubt ? 'erlaubt (Einwilligung liegt vor)' : 'nicht erlaubt – Einwilligung fehlt']
+    ], true);
+    var bem = A.formular([{ name: 'bemerkung', titel: 'Bemerkung / Grund (bei Verschieben oder Ablehnen)', typ: 'text' }], {});
+    var inhalt = A.el('div', null, null, [details, bem.element]);
+    var knoepfe = [{ text: 'Schließen' }];
+    if (e.status === 'verliehen' || e.status === 'abgelehnt') {
+      knoepfe.push({ text: 'Wieder öffnen', aktion: function (s) { aktion([e], 'oeffnen', {}, ziel, s); } });
+    } else {
+      knoepfe.push({ text: 'Ablehnen', aktion: function (s) { aktion([e], 'ablehnen', bem.werte(), ziel, s); } });
+      knoepfe.push({ text: 'Verschieben', aktion: function (s) { aktion([e], 'verschieben', bem.werte(), ziel, s); } });
+      knoepfe.push({ text: 'Verleihen …', art: ' ', aktion: function (s) { s(); verleihDialog([e], ziel); } });
+    }
+    A.dialog('Ehrung', inhalt, knoepfe);
+  }
+
+  function exportiere(art) {
+    A.rufe('apiEhrungenExport', zustand.jahr, art === 'urkunden' ? 'urkunden' : 'liste').then(function (zeilen) {
+      var spalten = [
+        { feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'name', titel: 'Name' }, { feld: 'anlass', titel: 'Anlass' },
+        { feld: 'stufe', titel: 'Stufe' }, { feld: 'grundlage', titel: 'Grundlage' }, { feld: 'faellig_jahr', titel: 'fällig' },
+        { feld: 'status', titel: 'Status' }, { feld: 'veroeffentlichung_erlaubt', titel: 'Veröffentlichung erlaubt' }
+      ];
+      if (art === 'druck') { A.drucke('Ehrungen ' + zustand.jahr, spalten, zeilen, 'Liste für die Jahreshauptversammlung'); return; }
+      if (art === 'urkunden') {
+        spalten = [{ feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'anrede', titel: 'Anrede' }, { feld: 'briefanrede', titel: 'Briefanrede' },
+          { feld: 'name', titel: 'Name' }, { feld: 'anlass', titel: 'Anlass' }, { feld: 'stufe', titel: 'Stufe' }, { feld: 'schwelle', titel: 'Jahre/Alter' },
+          { feld: 'funktion', titel: 'Funktion' }, { feld: 'verband', titel: 'Verband' }, { feld: 'veroeffentlichung_erlaubt', titel: 'Veröffentlichung erlaubt' }];
+        A.csv('Ehrungen_' + zustand.jahr + '_Urkunden.csv', spalten, zeilen);
+        return;
+      }
+      A.csv('Ehrungen_' + zustand.jahr + '.csv', spalten, zeilen);
+    }).catch(function () {});
+  }
+
+  A.registriere('ehrungen', {
+    titel: 'Ehrungen', aktion: 'ehrung_bearbeiten', reihenfolge: 50,
+    zeichne: function (ziel) {
+      if (!zustand.jahr) zustand.jahr = Number((A.startdaten.konfig && A.startdaten.konfig.beitragsjahr) || A.startdaten.beitragsjahr || A.heute().slice(0, 4));
+      var jahrWahl = A.el('select', null, { className: 'ehr-jahr' });
+      jahrWahl.setAttribute('aria-label', 'Jahr');
+      var j0 = Number(A.heute().slice(0, 4));
+      for (var j = j0 - 3; j <= j0 + 2; j++) jahrWahl.appendChild(A.el('option', String(j), { value: String(j) }));
+      jahrWahl.value = String(zustand.jahr);
+      var bereich = A.el('div');
+      jahrWahl.addEventListener('change', function () { zustand.jahr = Number(jahrWahl.value); lade(bereich); });
+      ziel.appendChild(A.abschnitt('Ehrungen', [jahrWahl], 'h1'));
+      ziel.appendChild(A.el('p', 'Enthält alles, was im gewählten Jahr neu fällig wird, plus offene Fälle aus Vorjahren. Nichts fällt hinten runter, nichts wird doppelt geehrt.', { className: 'leise' }));
+      ziel.appendChild(bereich);
+      lade(bereich);
+    }
+  });
 })();
 </script>
