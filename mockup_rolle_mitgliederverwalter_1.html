@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup · Mitgliederverwaltung TSV Ergoldsbach — Rolle: Mitgliederverwalter (Administrator)</title>
+<style>
+:root{
+  --tinte:#18232d; --tinte-weich:#5a6b78;
+  --papier:#f4f5f2; --karte:#fff;
+  --linie:#dde2dc; --linie-stark:#c2cbc2;
+  --gruen:#1f5c4f; --gruen-hell:#e8f0ec;
+  --rost:#9a5320; --rost-hell:#f8efe6;
+  --rot:#8f2f2f; --rot-hell:#f6ecec;
+  --gelb:#f3e7c4;
+  --lila:#5b4a7a; --lila-hell:#efecf5;
+  --radius:3px;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--papier);color:var(--tinte);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0;letter-spacing:-.01em}
+code,.mono{font-family:var(--mono);font-size:.86em}
+table{border-collapse:collapse;width:100%}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gruen);outline-offset:2px}
+
+.topbar{background:var(--tinte);color:#eef1ee;display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;padding:14px 22px}
+.brand{font-family:var(--serif);font-size:19px}
+.brand span{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:#93a3ac;margin-left:12px}
+.session{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.session .jahr{color:#93a3ac;font-variant-numeric:tabular-nums}
+.session .mail{color:#c3cdd2;font-family:var(--mono);font-size:11.5px}
+.rollen-chip{background:var(--gruen);color:#fff;padding:3px 10px;border-radius:99px;font-size:11px;text-transform:uppercase;letter-spacing:.12em}
+
+.scopebar{background:var(--gruen-hell);border-bottom:1px solid var(--linie-stark);padding:9px 22px;display:flex;flex-wrap:wrap;gap:8px 26px;align-items:center;font-size:12.5px}
+.scope-item{display:flex;gap:7px;align-items:baseline}
+.scope-item b{font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--gruen)}
+.schalter{margin-left:auto;display:flex;gap:16px;align-items:center}
+.schalter label{display:flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;color:var(--tinte-weich)}
+.schalter input{accent-color:var(--gruen);margin:0}
+
+.tabs{display:flex;flex-wrap:wrap;gap:2px;padding:0 14px;background:var(--karte);border-bottom:1px solid var(--linie)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:11px 12px;cursor:pointer;color:var(--tinte-weich);font-size:13.5px}
+.tab:hover{color:var(--tinte)}
+.tab[aria-selected="true"]{color:var(--tinte);border-bottom-color:var(--gruen);font-weight:600}
+
+main{padding:22px;max-width:1440px;margin:0 auto}
+.view{display:none;animation:auf .18s ease-out}
+.view.aktiv{display:block}
+@keyframes auf{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view{animation:none}}
+
+.view-kopf{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:14px}
+.view-kopf h2{font-size:21px}
+.view-kopf .zahl{color:var(--tinte-weich);font-size:13px;font-variant-numeric:tabular-nums}
+.view-kopf .aktionen{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+
+.knopf{background:var(--karte);border:1px solid var(--linie-stark);border-radius:var(--radius);padding:6px 12px;font-size:13px;cursor:pointer}
+.knopf:hover{border-color:var(--tinte-weich)}
+.knopf.primaer{background:var(--gruen);border-color:var(--gruen);color:#fff}
+.knopf.primaer:hover{background:#17493e}
+.knopf.warn{color:var(--rost);border-color:#dcc6b2}
+.knopf.klein{padding:3px 8px;font-size:12px}
+
+.filter{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--karte);border:1px solid var(--linie);border-radius:var(--radius);padding:9px 11px;margin-bottom:12px}
+.filter input[type=search],.filter select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--linie-stark);border-radius:var(--radius);background:#fff}
+.filter input[type=search]{min-width:220px}
+.filter .kasten{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--tinte-weich)}
+.filter .kasten input{accent-color:var(--gruen)}
+
+.karte{background:var(--karte);border:1px solid var(--linie);border-radius:var(--radius)}
+.karte + .karte{margin-top:16px}
+.karte-kopf{padding:12px 15px;border-bottom:1px solid var(--linie);display:flex;gap:10px;align-items:baseline}
+.karte-kopf h3{font-size:16px}
+.karte-kopf .rand{margin-left:auto;font-size:12px;color:var(--tinte-weich)}
+.tabelle th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--tinte-weich);font-weight:600;padding:9px 11px;border-bottom:1px solid var(--linie-stark);white-space:nowrap}
+.tabelle td{padding:9px 11px;border-bottom:1px solid var(--linie);font-size:13.5px;vertical-align:top}
+.tabelle tr:last-child td{border-bottom:0}
+.tabelle tbody tr.klick{cursor:pointer}
+.tabelle tbody tr.klick:hover{background:#f7f9f6}
+.tabelle tbody tr.gewaehlt{background:var(--gruen-hell);box-shadow:inset 3px 0 0 var(--gruen)}
+.tabelle tr.summe td{background:#fbfcfa;font-weight:600}
+.tabelle tr.vergangen td{color:var(--tinte-weich)}
+.nr{font-family:var(--mono);font-size:12.5px;color:var(--tinte-weich)}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.geld{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+th.geld{text-align:right}
+.iban{font-family:var(--mono);font-size:12px}
+
+.marke{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;border:1px solid var(--linie-stark);background:#fbfcfa;white-space:nowrap}
+.marke.ok{background:var(--gruen-hell);border-color:#b9d2c7;color:var(--gruen)}
+.marke.aus{background:#f0f0ee;color:var(--tinte-weich)}
+.marke.tot{background:var(--rot-hell);color:var(--rot);border-color:#dcc6c6}
+.marke.warn{background:var(--rost-hell);border-color:#e2c9b1;color:var(--rost)}
+.marke.abt{background:#eef2f6;border-color:#d3dde5;color:#3d5c72;margin-right:3px}
+.marke.amt{background:var(--lila-hell);border-color:#d3cbe4;color:var(--lila);margin-right:3px}
+
+.split{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1080px){.split{grid-template-columns:1fr}}
+.detail{position:sticky;top:14px}
+.detail-kopf{padding:14px 16px;border-bottom:1px solid var(--linie)}
+.detail-kopf h3{font-size:20px}
+.detail-kopf .unter{color:var(--tinte-weich);font-size:12.5px;margin-top:3px}
+.detail-tabs{display:flex;flex-wrap:wrap;gap:2px;padding:0 8px;border-bottom:1px solid var(--linie);background:#fbfcfa}
+.dtab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 9px;font-size:12.5px;color:var(--tinte-weich);cursor:pointer}
+.dtab[aria-selected="true"]{color:var(--tinte);border-bottom-color:var(--gruen);font-weight:600}
+.detail-inhalt{padding:14px 16px}
+.dview{display:none}
+.dview.aktiv{display:block}
+
+.feldliste{display:grid;grid-template-columns:145px 1fr;gap:6px 14px;font-size:13.5px}
+.feldliste dt{color:var(--tinte-weich);font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding-top:3px}
+.feldliste dd{margin:0}
+.gruppe-titel{font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--gruen);border-bottom:1px solid var(--linie);padding-bottom:4px;margin:16px 0 10px;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.gruppe-titel:first-child{margin-top:0}
+.gruppe-titel .rand{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400;font-size:11px;color:var(--tinte-weich)}
+.abgeleitet{background:var(--gruen-hell);border-left:2px solid var(--gruen);padding:2px 7px;border-radius:2px;display:inline-block}
+.abgeleitet::after{content:"berechnet";font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gruen);margin-left:8px}
+
+.sens{display:none;font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:99px;margin-left:8px;vertical-align:1px}
+.sens.finanz{background:var(--lila-hell);color:var(--lila);border:1px solid #d3cbe4}
+.sens.fz{background:var(--rot-hell);color:var(--rot);border:1px solid #dcc6c6}
+body.sens-an .sens{display:inline-block}
+body.sens-an .sensfeld{background:linear-gradient(transparent 62%,rgba(91,74,122,.16) 62%)}
+
+.frage{border-left:3px solid #c9a227;background:var(--gelb);padding:11px 14px;border-radius:0 var(--radius) var(--radius) 0;margin:12px 0}
+.frage-nr{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#7a5c05;font-weight:700;margin-bottom:3px}
+.frage p{margin:0;font-size:13px;color:#4d3d0a;max-width:72ch}
+.frage p + p{margin-top:6px}
+body.fragen-aus .frage{display:none}
+
+.hinweis{border-left:3px solid var(--linie-stark);padding:8px 12px;margin:12px 0;font-size:13px;color:var(--tinte-weich);max-width:80ch}
+.warnkasten{border-left:3px solid var(--rost);background:var(--rost-hell);padding:11px 14px;margin:12px 0;font-size:13.5px}
+.warnkasten strong{color:var(--rost)}
+.regelkasten{border:1px solid #b9d2c7;background:var(--gruen-hell);border-radius:var(--radius);padding:12px 15px;margin:12px 0;font-size:13px;max-width:82ch}
+.regelkasten b{color:var(--gruen)}
+
+.zaehlkarten{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:16px}
+.zaehlkarte{background:var(--karte);border:1px solid var(--linie);border-radius:var(--radius);padding:12px 14px}
+.zaehlkarte .wert{font-family:var(--serif);font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.zaehlkarte .beschr{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--tinte-weich);margin-top:3px}
+.zaehlkarte.achtung{border-color:#e2c9b1;background:var(--rost-hell)}
+.zaehlkarte.achtung .wert{color:var(--rost)}
+
+.modal-hg{position:fixed;inset:0;background:rgba(24,35,45,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+.modal-hg.offen{display:flex}
+.modal{background:var(--karte);border-radius:var(--radius);max-width:620px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 18px 48px rgba(24,35,45,.3)}
+.modal-kopf{padding:16px 20px;border-bottom:1px solid var(--linie)}
+.modal-kopf h3{font-size:18px}
+.modal-inhalt{padding:16px 20px;font-size:13.5px}
+.modal-fuss{padding:12px 20px;border-top:1px solid var(--linie);display:flex;gap:8px;justify-content:flex-end}
+.wahl{display:block;border:1px solid var(--linie-stark);border-radius:var(--radius);padding:9px 12px;margin-bottom:7px;cursor:pointer}
+.wahl:hover{border-color:var(--gruen);background:#f7fbf8}
+.wahl input{accent-color:var(--gruen);margin-right:8px}
+.wahl small{display:block;color:var(--tinte-weich);margin-left:22px}
+
+.pruefliste{list-style:none;padding-left:22px}
+.pruefliste li{margin-bottom:7px;font-size:13.5px;position:relative}
+.pruefliste li::before{position:absolute;left:-20px;font-family:var(--mono)}
+.pruefliste li.ok::before{content:"✓";color:var(--gruen)}
+.pruefliste li.stop::before{content:"!";color:var(--rost);font-weight:700}
+
+footer{border-top:1px solid var(--linie);margin-top:30px;padding:16px 22px 40px;font-size:12px;color:var(--tinte-weich);max-width:1440px;margin-left:auto;margin-right:auto}
+</style>
+</head>
+<body class="sens-an">
+
+<header class="topbar">
+  <div class="brand">TSV Ergoldsbach e.&nbsp;V. <span>Mitgliederverwaltung</span></div>
+  <div class="session">
+    <span class="jahr">Beitragsjahr 2026</span>
+    <span class="mail">verwaltung@tsv-ergoldsbach.de</span>
+    <span class="rollen-chip">Mitgliederverwalter · Administrator</span>
+  </div>
+</header>
+
+<div class="scopebar">
+  <div class="scope-item"><b>Sie sehen</b><span>alle 1.187 Mitglieder, alle Felder</span></div>
+  <div class="scope-item"><b>Sie pflegen</b><span>Stammdaten · Bankdaten &amp; Mandate · Abteilungen · Funktionen · Ehrungen · Nachweise · Rechte</span></div>
+  <div class="schalter">
+    <label><input type="checkbox" id="s-sens" checked> Sensible Felder markieren</label>
+    <label><input type="checkbox" id="s-fragen" checked> Fragen an Sie</label>
+  </div>
+</div>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-view="v-mitglieder">Mitglieder</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-funktionen">Funktionen</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-konten">Beitragskonten</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-einzug">Einzugsstand 2026</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-sepa">SEPA-Lauf</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-nachweise">Nachweise</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-abteilungen">Abteilungen</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-ehrungen">Ehrungen</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-blsv">BLSV</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-benutzer">Benutzer</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-protokoll">Protokoll</button>
+</nav>
+
+<main>
+
+<!-- ===================== MITGLIEDER ===================== -->
+<section class="view aktiv" id="v-mitglieder">
+  <div class="view-kopf">
+    <h2>Mitglieder</h2>
+    <span class="zahl" id="trefferzahl"></span>
+    <div class="aktionen"><button class="knopf">Liste exportieren</button><button class="knopf primaer">Neues Mitglied aufnehmen</button></div>
+  </div>
+
+  <div class="filter">
+    <input type="search" id="suche" placeholder="Name, Nummer, Ort oder IBAN">
+    <select id="f-status"><option value="">Status: alle</option><option value="aktiv" selected>nur aktive</option><option value="ausgetreten">ausgetreten</option><option value="verstorben">verstorben</option></select>
+    <select id="f-abt"><option value="">Abteilung: alle</option><option>Fußball</option><option>Turnen</option><option>Tennis</option><option>Stockschützen</option></select>
+    <select id="f-zahl"><option value="">Zahlung: alle</option><option value="offen">offen</option><option value="ruecklastschrift">Rücklastschrift</option></select>
+    <label class="kasten"><input type="checkbox" id="f-amt"> nur mit Funktion</label>
+  </div>
+
+  <div class="split">
+    <div class="karte">
+      <table class="tabelle">
+        <thead><tr><th>Nr.</th><th>Name</th><th>Geb.</th><th>Abteilungen</th><th>Funktion</th><th class="geld">Soll 2026</th><th>Zahlung</th></tr></thead>
+        <tbody id="liste"></tbody>
+      </table>
+    </div>
+    <div class="karte detail" id="detail"></div>
+  </div>
+</section>
+
+<!-- ===================== FUNKTIONEN ===================== -->
+<section class="view" id="v-funktionen">
+  <div class="view-kopf">
+    <h2>Funktionen</h2>
+    <span class="zahl">37 laufend · 214 beendet seit 1998</span>
+    <div class="aktionen"><button class="knopf">Historie durchsuchen</button><button class="knopf primaer">Funktion eintragen</button></div>
+  </div>
+
+  <div class="regelkasten">
+    <b>Warum das eine eigene Liste ist.</b>
+    <p style="margin:6px 0 0">Spieler und Teilnehmerinnen werden <b>nicht</b> mit Funktion geführt — wer in einer Abteilung ist, ist dort schlicht Mitglied. Das erspart die jährliche Nachpflege von hunderten Zeilen.</p>
+    <p style="margin:6px 0 0">Erfasst wird nur, wer ein <b>Amt oder eine Tätigkeit</b> übernimmt: Trainer, Betreuer, Abteilungsleitung, Vorstandschaft. Diese Einträge haben ein Von- und ein Bis-Datum und werden nie überschrieben. Damit steht auch in zwanzig Jahren noch da, wer wann was gemacht hat.</p>
+  </div>
+
+  <div class="karte">
+    <div class="karte-kopf"><h3>Laufende Funktionen</h3><span class="rand">Stand 18.08.2026</span></div>
+    <table class="tabelle">
+      <thead><tr><th>Nr.</th><th>Name</th><th>Funktion</th><th>Ebene</th><th>Zusatz</th><th>seit</th><th class="num">Dauer</th><th>Nachweis nötig</th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="nr">1210</td><td>Meier, Franz</td><td>1. Vorsitzender</td><td>Verein</td><td>—</td><td class="num">01.04.2018</td><td class="num">8 J.</td><td>nein</td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1077</td><td>Sedlmeier, Rita</td><td>Kassierin</td><td>Verein</td><td>—</td><td class="num">01.04.2014</td><td class="num">12 J.</td><td>nein</td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1099</td><td>Obermeier, Thomas</td><td>Abteilungsleiter</td><td>Fußball</td><td>—</td><td class="num">01.04.2016</td><td class="num">10 J.</td><td>ja <span class="marke ok">gültig</span></td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1301</td><td>Huber, Anna</td><td>Abteilungsleiterin</td><td>Turnen</td><td>—</td><td class="num">01.04.2011</td><td class="num">15 J.</td><td>ja <span class="marke ok">gültig</span></td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1301</td><td>Huber, Anna</td><td>Übungsleiterin</td><td>Turnen</td><td>Kinderturnen</td><td class="num">01.09.1998</td><td class="num">27 J.</td><td>ja <span class="marke ok">gültig</span></td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1355</td><td>Schmid, Korbinian</td><td>Trainer</td><td>Fußball</td><td>Herren I</td><td class="num">01.07.2022</td><td class="num">4 J.</td><td>ja <span class="marke ok">gültig</span></td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1187</td><td>Wagner, Felix</td><td>Trainer</td><td>Fußball</td><td>E-Jugend</td><td class="num">01.08.2024</td><td class="num">2 J.</td><td>ja <span class="marke ok">gültig</span></td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1412</td><td>Vogl, Andreas</td><td>Trainer</td><td>Fußball</td><td>C-Jugend</td><td class="num">01.03.2026</td><td class="num">&lt; 1 J.</td><td>ja <span class="marke tot">fehlt</span></td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">1288</td><td>Lehner, Julia</td><td>Betreuerin</td><td>Fußball</td><td>D-Jugend</td><td class="num">01.09.2023</td><td class="num">3 J.</td><td>ja <span class="marke warn">läuft ab</span></td><td><button class="knopf klein">beenden</button></td></tr>
+        <tr><td class="nr">0654</td><td>Aigner, Rosa</td><td>Ehrenamtsbeauftragte</td><td>Verein</td><td>—</td><td class="num">01.04.2022</td><td class="num">4 J.</td><td>nein</td><td><button class="knopf klein">beenden</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="karte">
+    <div class="karte-kopf"><h3>Beendete Funktionen</h3><span class="rand">Auszug — die Historie bleibt dauerhaft</span></div>
+    <table class="tabelle">
+      <thead><tr><th>Nr.</th><th>Name</th><th>Funktion</th><th>Ebene</th><th>von</th><th>bis</th><th class="num">Dauer</th><th>Ende</th></tr></thead>
+      <tbody>
+        <tr class="vergangen"><td class="nr">1099</td><td>Obermeier, Thomas</td><td>Jugendtrainer</td><td>Fußball</td><td class="num">01.08.2004</td><td class="num">30.06.2010</td><td class="num">6 J.</td><td>Rücktritt</td></tr>
+        <tr class="vergangen"><td class="nr">1099</td><td>Obermeier, Thomas</td><td>Beisitzer</td><td>Verein</td><td class="num">01.04.2012</td><td class="num">31.03.2016</td><td class="num">4 J.</td><td>nicht wiedergewählt</td></tr>
+        <tr class="vergangen"><td class="nr">1301</td><td>Huber, Anna</td><td>Schriftführerin</td><td>Verein</td><td class="num">01.04.2005</td><td class="num">31.03.2009</td><td class="num">4 J.</td><td>Wechsel ins Amt AL</td></tr>
+        <tr class="vergangen"><td class="nr">0912</td><td>Steinberger, Karl</td><td>Abteilungsleiter</td><td>Stockschützen</td><td class="num">01.04.1988</td><td class="num">31.03.2004</td><td class="num">16 J.</td><td>Rücktritt Altersgründe</td></tr>
+        <tr class="vergangen"><td class="nr">1477</td><td>Denk, Stefan</td><td>Betreuer</td><td>Fußball</td><td class="num">01.09.2021</td><td class="num">30.06.2026</td><td class="num">5 J.</td><td>beruflich</td></tr>
+        <tr class="vergangen"><td class="nr">0873</td><td>Bauer, Josef</td><td>Platzwart</td><td>Verein</td><td class="num">01.01.1990</td><td class="num">31.12.2014</td><td class="num">25 J.</td><td>Ruhestand</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="karte">
+    <div class="karte-kopf"><h3>Funktionsarten</h3><span class="rand">Stammdaten — steuert Nachweispflicht und Ehrungen</span></div>
+    <table class="tabelle">
+      <thead><tr><th>Bezeichnung</th><th>Ebene</th><th>Führungszeugnis nötig</th><th>Bestellung</th><th>Ehrungsfähig</th><th>Aktiv</th></tr></thead>
+      <tbody>
+        <tr><td>1./2. Vorsitzender</td><td>Verein</td><td>nein</td><td>Wahl JHV</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Kassier</td><td>Verein</td><td>nein</td><td>Wahl JHV</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Schriftführer</td><td>Verein</td><td>nein</td><td>Wahl JHV</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Beisitzer</td><td>Verein</td><td>nein</td><td>Wahl JHV</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Jugendleiter</td><td>Verein</td><td><b>ja</b></td><td>Wahl</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Abteilungsleiter</td><td>Abteilung</td><td><b>ja</b></td><td>Wahl Abteilung</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Trainer / Übungsleiter</td><td>Abteilung</td><td><b>ja</b></td><td>Berufung</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Betreuer</td><td>Abteilung</td><td><b>ja</b></td><td>Berufung</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Schiedsrichter</td><td>Abteilung</td><td>nein</td><td>Berufung</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Platzwart / Zeugwart</td><td>Verein</td><td>nein</td><td>Berufung</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Ehrenamtsbeauftragte(r)</td><td>Verein</td><td>nein</td><td>Berufung</td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 1 · Ist die Liste der Funktionsarten vollständig?</span>
+    <p>Fehlt etwas — Kassenprüfer, Wirt, Vergnügungsausschuss, Webmaster, Fahnenträger? Die Liste ist Stammdaten, lässt sich also später ergänzen; nur soll sie beim Start halbwegs stimmen, damit die Historie nicht mit „Sonstiges“ zugemüllt wird.</p>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 2 · Der Zusatz „Herren I“, „E-Jugend“</span>
+    <p>Im Mockup ist das ein <b>freies Textfeld</b> am Funktionseintrag. Alternative wäre eine gepflegte Mannschaftsliste. Freitext ist unbürokratisch, aber nach zwanzig Jahren steht dort „E-Jgd“, „E-Jugend“ und „E1“ nebeneinander.</p>
+    <p>Reicht Freitext, oder wollen Sie hier feste Auswahlwerte?</p>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 3 · Wie weit zurück?</span>
+    <p>Aus der alten Datenbank kommt diese Historie <b>nicht</b> — dort gab es sie nie. Wir starten also entweder bei den laufenden Ämtern, oder jemand trägt aus alten Protokollen nach.</p>
+    <p>Realistisch: laufende Funktionen sauber erfassen, plus die paar langjährigen Fälle, die für Ehrungen zählen. Sehen Sie das genauso, oder gibt es Unterlagen, aus denen sich mehr rekonstruieren ließe?</p>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 4 · Trainer, die keine Vereinsmitglieder sind</span>
+    <p>Kommt das vor — ein externer Trainer, der ein Führungszeugnis vorlegen muss, aber kein Mitglied ist? Dann braucht er trotzdem einen Datensatz. Entweder als Mitglied mit dem Merker „kein Mitglied, nur Funktionsträger“, oder wir lassen ihn außen vor und Sie führen das weiter auf Papier.</p>
+  </div>
+</section>
+
+<!-- ===================== BEITRAGSKONTEN ===================== -->
+<section class="view" id="v-konten">
+  <div class="view-kopf"><h2>Beitragskonten</h2><span class="zahl">4 Beispielkonten · 843 real</span>
+    <div class="aktionen"><button class="knopf primaer">Konto anlegen</button></div></div>
+  <div class="hinweis">Ein Konto ist der <b>Zahlweg</b>, nicht die Person. Mehrere Mitglieder können an einem Konto hängen, und ein Kontoinhaber muss nicht selbst Mitglied sein. IBAN und Mandat gehören hierher — nicht ans einzelne Mitglied.</div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Konto</th><th>Inhaber</th><th>Zahlweg</th><th>IBAN <span class="sens finanz">Finanzdaten</span></th><th>Mandat</th><th>Personen</th><th class="geld">Soll 2026</th></tr></thead>
+      <tbody>
+        <tr><td class="nr">318</td><td>Wagner, Michael</td><td>Lastschrift</td><td class="iban sensfeld">DE89 3704 0044 0532 0130 00</td><td class="nr">TSV-2001-1042<br><span style="color:var(--tinte-weich)">12.09.2001</span></td><td>4 <span class="marke abt">Familie Wagner</span></td><td class="geld">280,00 €</td></tr>
+        <tr><td colspan="7" style="background:#fbfcfa;padding-left:24px;font-size:13px;color:var(--tinte-weich)"><b>Zusammensetzung:</b> Beitragsgemeinschaft „Familie Wagner“ (Michael, Sabine, Lena) = <b>180,00 €</b> pauschal, einmal gezogen &nbsp;+&nbsp; Felix Wagner, erwachsen, eigener Beitrag = <b>100,00 €</b> &nbsp;=&nbsp; <b>280,00 €</b></td></tr>
+        <tr><td class="nr">122</td><td>Bauer, Josef</td><td>Lastschrift</td><td class="iban sensfeld">DE22 7405 0000 0012 3456 78</td><td class="nr">TSV-1986-0873<br><span style="color:var(--tinte-weich)">01.04.2010</span></td><td>1</td><td class="geld">100,00 €</td></tr>
+        <tr><td class="nr">199</td><td>Fischer, Marion</td><td>Lastschrift</td><td class="iban sensfeld">DE10 7435 0000 0009 8765 43</td><td class="nr">TSV-2001-1255<br><span class="marke warn">seit 2022 ungenutzt</span></td><td>1</td><td class="geld">100,00 €</td></tr>
+        <tr><td class="nr">205</td><td>Huber, Anna</td><td>Überweisung</td><td class="iban" style="color:var(--tinte-weich)">— keine hinterlegt</td><td class="nr">—</td><td>1</td><td class="geld">100,00 €</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="frage">
+    <span class="frage-nr">Frage 5 · Mandatsverfall und IBAN-Anzeige</span>
+    <p>Ein Mandat verfällt nach 36 Monaten ohne Nutzung — bei Marion Fischer ist das so. Soll das System vor dem Einzug <b>blockieren</b> oder nur <b>warnen</b>?</p>
+    <p>Und: IBAN dauerhaft im Klartext (wie hier) oder standardmäßig nur die letzten vier Stellen mit Aufdecken per Klick, protokolliert?</p>
+  </div>
+</section>
+
+<!-- ===================== EINZUGSSTAND ===================== -->
+<section class="view" id="v-einzug">
+  <div class="view-kopf"><h2>Einzugsstand 2026</h2><span class="zahl">Stand 18.08.2026</span>
+    <div class="aktionen"><button class="knopf">Mahnlauf vorbereiten</button><button class="knopf">Export Buchhaltung</button></div></div>
+  <div class="zaehlkarten">
+    <div class="zaehlkarte"><div class="wert">843</div><div class="beschr">Sollstellungen</div></div>
+    <div class="zaehlkarte"><div class="wert">96.410 €</div><div class="beschr">Soll gesamt</div></div>
+    <div class="zaehlkarte"><div class="wert">94.180 €</div><div class="beschr">eingezogen</div></div>
+    <div class="zaehlkarte achtung"><div class="wert">7</div><div class="beschr">Rücklastschriften</div></div>
+    <div class="zaehlkarte achtung"><div class="wert">4</div><div class="beschr">ohne gültiges Mandat</div></div>
+  </div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Konto</th><th>Inhaber</th><th class="geld">Soll</th><th>Einzug</th><th>Status</th><th>Mahnstufe</th><th>Grund</th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="nr">199</td><td>Fischer, Marion</td><td class="geld">100,00 €</td><td class="num">15.02.2026</td><td><span class="marke tot">Rücklastschrift</span></td><td class="num">1</td><td>Konto erloschen</td><td><button class="knopf klein">bearbeiten</button></td></tr>
+        <tr><td class="nr">412</td><td>Neumann, Petra</td><td class="geld">180,00 €</td><td class="num">15.02.2026</td><td><span class="marke tot">Rücklastschrift</span></td><td class="num">2</td><td>Widerspruch</td><td><button class="knopf klein">bearbeiten</button></td></tr>
+        <tr><td class="nr">507</td><td>Brandl, Josef</td><td class="geld">100,00 €</td><td class="num">15.02.2026</td><td><span class="marke warn">gemahnt</span></td><td class="num">1</td><td>keine Deckung</td><td><button class="knopf klein">bearbeiten</button></td></tr>
+        <tr><td class="nr">88</td><td>Steinberger, Karl</td><td class="geld">100,00 €</td><td class="num">—</td><td><span class="marke aus">storniert</span></td><td class="num">0</td><td>verstorben 14.02.2026</td><td><button class="knopf klein">bearbeiten</button></td></tr>
+        <tr class="summe"><td colspan="2">Summe offen / streitig</td><td class="geld">380,00 €</td><td colspan="5"></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="hinweis">Jede Sollstellung ist ein <b>Schnappschuss</b>: Betrag, Datum und Status des jeweiligen Jahres bleiben stehen, auch wenn sich Beitragsart oder Familienkonstellation später ändern.</div>
+  <div class="frage">
+    <span class="frage-nr">Frage 6 · Anteilige Beiträge und Mahnwesen</span>
+    <p>Eintritt im September, Austritt im März — <b>voller</b> oder <b>anteiliger</b> Jahresbeitrag? Die Berechnung braucht eine feste Regel.</p>
+    <p>Und wie weit soll das System beim Mahnen mitgehen: nur Status und Liste, oder auch Mahnschreiben als Serienbrief samt Rücklastschriftgebühr?</p>
+  </div>
+</section>
+
+<!-- ===================== SEPA ===================== -->
+<section class="view" id="v-sepa">
+  <div class="view-kopf"><h2>SEPA-Lastschriftlauf</h2><span class="zahl">Beitragsjahr 2026 · Fälligkeit 15.02.2026</span>
+    <div class="aktionen"><button class="knopf">Probelauf</button><button class="knopf primaer">XML erzeugen</button></div></div>
+  <div class="warnkasten">
+    <strong>Formatwechsel zum 15.11.2026.</strong>
+    <p style="margin:6px 0 0">Ab dann gilt <code>pain.008.001.08</code> statt <code>.02</code>, inklusive strukturierter Adressen (Straße, Hausnummer, PLZ, Ort, Land getrennt). Der Lauf 2026 läuft noch im alten Format, der Lauf 2027 muss im neuen laufen — deshalb sind die Adressfelder im Stamm einzeln geführt.</p>
+  </div>
+  <div class="karte" style="padding:16px 18px">
+    <h3 style="font-size:16px;margin-bottom:10px">Prüfung vor dem Erzeugen</h3>
+    <ul class="pruefliste">
+      <li class="ok">839 Konten mit gültiger IBAN und Prüfziffer</li>
+      <li class="ok">839 Mandate vorhanden, Erst-/Folgelastschrift automatisch aus der Historie bestimmt</li>
+      <li class="stop"><b>4 Konten ohne gültiges Mandat</b> — davon eines seit über 36 Monaten ungenutzt. Bleiben außen vor.</li>
+      <li class="stop"><b>2 Mitglieder ohne Beitragskonto</b> — Zahler ausgetreten, Zuordnung fehlt. <button class="knopf klein">Klärliste</button></li>
+      <li class="stop"><b>11 Adressen unvollständig</b> — unkritisch für 2026, blockierend ab dem Formatwechsel.</li>
+    </ul>
+  </div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Konto</th><th>Inhaber</th><th>Zusammensetzung</th><th>Sequenz</th><th class="geld">Betrag</th></tr></thead>
+      <tbody>
+        <tr><td class="nr">318</td><td>Wagner, Michael</td><td>Familie Wagner 180,00 € + Felix Wagner 100,00 €</td><td>RCUR</td><td class="geld">280,00 €</td></tr>
+        <tr><td class="nr">122</td><td>Bauer, Josef</td><td>Erwachsene 100,00 €</td><td>RCUR</td><td class="geld">100,00 €</td></tr>
+        <tr><td class="nr">712</td><td>Vogl, Andreas</td><td>Erwachsene 100,00 €</td><td><b>FRST</b></td><td class="geld">100,00 €</td></tr>
+        <tr class="summe"><td colspan="4">839 Konten im Lauf</td><td class="geld">96.010,00 €</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="frage">
+    <span class="frage-nr">Frage 7 · Wer löst den Lauf aus?</span>
+    <p>Sie pflegen IBANs und Mandate, der Kassier zieht ein. Soll der Kassier den Lauf allein auslösen — oder bereiten Sie den Probelauf vor und er bestätigt? Die zweite Variante gibt ein Vier-Augen-Prinzip ohne Mehraufwand.</p>
+  </div>
+</section>
+
+<!-- ===================== NACHWEISE ===================== -->
+<section class="view" id="v-nachweise">
+  <div class="view-kopf"><h2>Nachweise &amp; Lizenzen</h2><span class="zahl">37 Personen mit Funktion</span>
+    <div class="aktionen"><button class="knopf">Fälligkeitsliste</button><button class="knopf primaer">Einsichtnahme erfassen</button></div></div>
+
+  <div class="regelkasten">
+    <b>Die Nachweispflicht hängt an der Funktion, nicht an der Person.</b>
+    <p style="margin:6px 0 0">Wer als Trainer eingetragen wird, taucht automatisch hier auf — die Funktionsart ist als „Führungszeugnis nötig“ markiert. Endet die Funktion, startet die Löschfrist von selbst. Sie müssen nichts doppelt pflegen.</p>
+  </div>
+
+  <div class="zaehlkarten">
+    <div class="zaehlkarte"><div class="wert">31</div><div class="beschr">Führungszeugnisse gültig</div></div>
+    <div class="zaehlkarte achtung"><div class="wert">4</div><div class="beschr">Wiedervorlage in 3 Monaten</div></div>
+    <div class="zaehlkarte achtung"><div class="wert">2</div><div class="beschr">fehlt / abgelaufen</div></div>
+    <div class="zaehlkarte"><div class="wert">3</div><div class="beschr">zu löschen (Funktion beendet)</div></div>
+  </div>
+
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Nr.</th><th>Name</th><th>wegen Funktion</th><th>Nachweis <span class="sens fz">§ 72a</span></th><th>Zeugnis vom</th><th>Eingesehen</th><th>Wiedervorlage</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="nr">1412</td><td>Vogl, Andreas</td><td>Trainer Fußball, seit 01.03.2026</td><td>Erw. Führungszeugnis</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td><span class="marke tot">fehlt</span></td><td><button class="knopf klein">erfassen</button></td></tr>
+        <tr><td class="nr">1288</td><td>Lehner, Julia</td><td>Betreuerin Fußball, seit 01.09.2023</td><td>Erw. Führungszeugnis</td><td class="num">28.09.2021</td><td class="num">18.10.2021</td><td class="num">18.10.2026</td><td><span class="marke warn">läuft ab</span></td><td><button class="knopf klein">erneuern</button></td></tr>
+        <tr><td class="nr">1355</td><td>Schmid, Korbinian</td><td>Trainer Fußball, seit 01.07.2022</td><td>Erw. Führungszeugnis</td><td class="num">12.02.2023</td><td class="num">04.03.2023</td><td class="num">04.03.2028</td><td><span class="marke ok">gültig</span></td><td><button class="knopf klein">ansehen</button></td></tr>
+        <tr><td class="nr">1355</td><td>Schmid, Korbinian</td><td>Trainer Fußball</td><td>Trainer-C-Lizenz</td><td class="num">04.06.2021</td><td class="num">—</td><td class="num">gültig bis 31.12.2025</td><td><span class="marke tot">abgelaufen</span></td><td><button class="knopf klein">verlängern</button></td></tr>
+        <tr><td class="nr">1301</td><td>Huber, Anna</td><td>Übungsleiterin Turnen, seit 1998</td><td>Erw. Führungszeugnis</td><td class="num">20.12.2023</td><td class="num">12.01.2024</td><td class="num">12.01.2029</td><td><span class="marke ok">gültig</span></td><td><button class="knopf klein">ansehen</button></td></tr>
+        <tr><td class="nr">1301</td><td>Huber, Anna</td><td>Übungsleiterin Turnen</td><td>Erste-Hilfe-Kurs</td><td class="num">14.04.2024</td><td class="num">—</td><td class="num">gültig bis 14.04.2026</td><td><span class="marke tot">abgelaufen</span></td><td><button class="knopf klein">erneuern</button></td></tr>
+        <tr><td class="nr">1477</td><td>Denk, Stefan</td><td><span class="marke aus">Funktion endete 30.06.2026</span></td><td>Erw. Führungszeugnis</td><td class="num">03.04.2023</td><td class="num">20.04.2023</td><td class="num">—</td><td><span class="marke warn">löschen bis 30.09.2026</span></td><td><button class="knopf klein">löschen</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="hinweis">Gespeichert wird nur: Ausstellungsdatum, Datum der Einsichtnahme, wer eingesehen hat, der Vermerk „ohne einschlägigen Eintrag“ und die nächste Wiedervorlage. <b>Kein Inhalt, keine Kopie, kein Upload.</b></div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 8 · Wiedervorlage und Einsichtsberechtigung</span>
+    <p>Im Mockup stehen fünf Jahre Wiedervorlage — was steht in eurer Vereinbarung mit dem Jugendamt? Und soll das System prüfen, dass das Zeugnis bei der Einsichtnahme nicht älter als drei Monate ist?</p>
+    <p>Zweitens: Der Abteilungsleiter kann im anderen Mockup selbst erfassen. Ist er dafür im Verein förmlich benannt? Wenn nicht, sieht er nur Status und Fälligkeit und meldet an den Vorstand.</p>
+  </div>
+</section>
+
+<!-- ===================== ABTEILUNGEN ===================== -->
+<section class="view" id="v-abteilungen">
+  <div class="view-kopf"><h2>Abteilungen</h2><div class="aktionen"><button class="knopf">Abteilung anlegen</button></div></div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Abteilung</th><th>BLSV-Sportart</th><th class="num">Mitglieder</th><th class="num">passiv</th><th>Leitung <span style="text-transform:none;letter-spacing:0">(aus Funktionen)</span></th><th>Meldepflichtig</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Fußball</td><td>Fußball</td><td class="num">412</td><td class="num">38</td><td>Thomas Obermeier <span class="marke amt">seit 2016</span></td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Turnen</td><td>Turnen</td><td class="num">263</td><td class="num">12</td><td>Anna Huber <span class="marke amt">seit 2011</span></td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Tennis</td><td>Tennis</td><td class="num">148</td><td class="num">9</td><td>Peter Zellner <span class="marke amt">seit 2019</span></td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Stockschützen</td><td>Eisstocksport</td><td class="num">61</td><td class="num">4</td><td>Georg Riedl <span class="marke amt">seit 2004</span></td><td>ja</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td>Skiabteilung</td><td>Skisport</td><td class="num">0</td><td class="num">0</td><td>—</td><td>nein</td><td><span class="marke aus">ruht seit 2019</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="hinweis">Die Abteilungsleitung wird hier nicht separat gepflegt, sondern aus der <b>laufenden Funktion</b> gelesen. Wird das Amt beendet, verschwindet der Name hier automatisch — und die Historie zeigt trotzdem noch, wer es vorher war.</div>
+  <div class="frage">
+    <span class="frage-nr">Frage 9 · Was bedeutet „passiv“?</span>
+    <p>Steht „passiv“ an der <b>Person</b> (zahlt Beitrag, spielt aber nirgends mehr) oder an der einzelnen <b>Abteilungszugehörigkeit</b> (bei den Stockschützen aktiv, im Fußball nur noch passiv)?</p>
+    <p>Im Mockup steht es je Abteilung. Wenn es bei euch faktisch eine Eigenschaft der Person ist, gehört es an den Mitgliedsstamm — dann ist es einfacher zu pflegen.</p>
+  </div>
+</section>
+
+<!-- ===================== EHRUNGEN ===================== -->
+<section class="view" id="v-ehrungen">
+  <div class="view-kopf"><h2>Ehrungen 2026</h2><span class="zahl">6 offen · 1 verliehen</span>
+    <div class="aktionen"><button class="knopf">Urkunden-Serienbrief</button><button class="knopf primaer">Liste für JHV</button></div></div>
+  <div class="hinweis">Enthält alles, was <b>2026 neu fällig</b> wird, plus offene Fälle aus Vorjahren. Nichts fällt hinten runter, nichts wird doppelt geehrt.</div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Nr.</th><th>Mitglied</th><th>Anlass</th><th>Stufe</th><th>Grundlage</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="nr">0873</td><td>Bauer, Josef</td><td>Mitgliedsjubiläum</td><td>40 Jahre — Gold</td><td>Mitgliedschaftszeiträume</td><td><span class="marke warn">fällig · zu klären</span></td><td><button class="knopf klein">verliehen</button></td></tr>
+        <tr><td class="nr">1099</td><td>Obermeier, Thomas</td><td>Funktionsjubiläum</td><td>10 Jahre Abteilungsleitung</td><td>Funktionshistorie</td><td><span class="marke">fällig</span></td><td><button class="knopf klein">verliehen</button></td></tr>
+        <tr><td class="nr">1077</td><td>Sedlmeier, Rita</td><td>Funktionsjubiläum</td><td>12 Jahre Kassiererin</td><td>Funktionshistorie</td><td><span class="marke">fällig</span></td><td><button class="knopf klein">verliehen</button></td></tr>
+        <tr><td class="nr">1042</td><td>Wagner, Michael</td><td>Mitgliedsjubiläum</td><td>25 Jahre — Silber</td><td>Mitgliedschaftszeiträume</td><td><span class="marke">fällig</span></td><td><button class="knopf klein">verliehen</button></td></tr>
+        <tr><td class="nr">1301</td><td>Huber, Anna</td><td>Geburtstag</td><td>70. Geburtstag</td><td>Geburtsdatum</td><td><span class="marke">fällig</span></td><td><button class="knopf klein">verliehen</button></td></tr>
+        <tr><td class="nr">1255</td><td>Fischer, Marion</td><td>Mitgliedsjubiläum</td><td>25 Jahre — Silber</td><td>fällig 2025</td><td><span class="marke warn">verschoben · nachholen</span></td><td><button class="knopf klein">verliehen</button></td></tr>
+        <tr><td class="nr">1188</td><td>Kellner, Hans</td><td>Mitgliedsjubiläum</td><td>25 Jahre — Silber</td><td>Mitgliedschaftszeiträume</td><td><span class="marke ok">verliehen 08.03.2026</span></td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="frage">
+    <span class="frage-nr">Frage 10 · Funktionsjubiläen zählen wie?</span>
+    <p>Anna Huber ist seit 1998 Übungsleiterin und seit 2011 zusätzlich Abteilungsleiterin. Zählt für ein Funktionsjubiläum die <b>längste einzelne Funktion</b>, die <b>Summe aller Jahre im Ehrenamt</b>, oder jede Funktion getrennt?</p>
+    <p>Bei Thomas Obermeier dasselbe: 6 Jahre Jugendtrainer, 4 Jahre Beisitzer, 10 Jahre Abteilungsleiter — das sind 20 Jahre Ehrenamt oder ein 10-Jahres-Jubiläum, je nach Lesart.</p>
+  </div>
+  <div class="frage">
+    <span class="frage-nr">Frage 11 · Mitgliedsjubiläum bei Wiedereintritt</span>
+    <p>Josef Bauer war 1968–1979 im Verein und ist 1986 wieder eingetreten: <b>40 Jahre seit Wiedereintritt</b> oder <b>51 Jahre gesamt</b>? Dazu: welche Stufen (25/40/50/60?), ab welchem Geburtstag wird geehrt, Kalenderjahr oder exakter Tag?</p>
+  </div>
+</section>
+
+<!-- ===================== BLSV ===================== -->
+<section class="view" id="v-blsv">
+  <div class="view-kopf"><h2>BLSV-Bestandserhebung</h2><span class="zahl">Stichtag 01.01.2026 · Frist 31.01.2026</span>
+    <div class="aktionen"><button class="knopf primaer">Excel für verein360</button></div></div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Sportart</th><th class="num">gesamt</th><th class="num">männl.</th><th class="num">weibl.</th><th class="num">bis 14</th><th class="num">15–18</th><th class="num">19–26</th><th class="num">ab 27</th></tr></thead>
+      <tbody>
+        <tr><td>Fußball</td><td class="num">412</td><td class="num">331</td><td class="num">81</td><td class="num">148</td><td class="num">54</td><td class="num">61</td><td class="num">149</td></tr>
+        <tr><td>Turnen</td><td class="num">263</td><td class="num">64</td><td class="num">199</td><td class="num">121</td><td class="num">28</td><td class="num">19</td><td class="num">95</td></tr>
+        <tr><td>Tennis</td><td class="num">148</td><td class="num">79</td><td class="num">69</td><td class="num">31</td><td class="num">14</td><td class="num">17</td><td class="num">86</td></tr>
+        <tr><td>Eisstocksport</td><td class="num">61</td><td class="num">44</td><td class="num">17</td><td class="num">2</td><td class="num">3</td><td class="num">6</td><td class="num">50</td></tr>
+        <tr class="summe"><td>Mitglieder im Verein</td><td class="num">1.187</td><td class="num">648</td><td class="num">539</td><td class="num">264</td><td class="num">88</td><td class="num">97</td><td class="num">738</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="hinweis">Die Summe der Sportarten (884) liegt über der Vereinssumme, weil 197 Personen in mehreren Abteilungen sind — <b>je Sportart einmal gezählt, als Mitglied nur einmal</b>. Vor dem Export prüft das System auf fehlende Geburtsdaten und fehlendes Geschlecht.</div>
+</section>
+
+<!-- ===================== BENUTZER ===================== -->
+<section class="view" id="v-benutzer">
+  <div class="view-kopf"><h2>Benutzer &amp; Rechte</h2><div class="aktionen"><button class="knopf primaer">Zugang anlegen</button></div></div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Google-Konto</th><th>Person</th><th>Rolle</th><th>Sieht</th><th>Darf ändern</th><th>Aktiv</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">verwaltung@…</td><td>Sie</td><td><b>Mitgliederverwalter</b></td><td>alles</td><td>alles inkl. Bankdaten, Funktionen, Nachweise, Rechte</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td class="mono">vorstand@…</td><td>Franz Meier</td><td>Vorstand</td><td>alles</td><td>alles</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td class="mono">kassier@…</td><td>Rita Sedlmeier</td><td>Kassier</td><td>Konten, Sollstellungen, Kontakt</td><td>Einzug, Buchungsstatus, Mahnstufe — <b>keine</b> IBAN-Änderung</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td class="mono">obermeier@…</td><td>Thomas Obermeier</td><td>Abteilungsleiter</td><td>nur Fußball, keine Finanzen</td><td>Zugehörigkeit, Funktionen und Nachweise seiner Abteilung</td><td><span class="marke ok">aktiv</span></td></tr>
+        <tr><td class="mono">huber@…</td><td>Anna Huber</td><td>Abteilungsleiterin</td><td>nur Turnen, keine Finanzen</td><td>Zugehörigkeit, Funktionen und Nachweise ihrer Abteilung</td><td><span class="marke ok">aktiv</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="frage">
+    <span class="frage-nr">Frage 12 · Zugang automatisch ans Amt koppeln?</span>
+    <p>Jetzt, wo die Abteilungsleitung als Funktion mit Von–Bis geführt wird: Soll der Zugang <b>automatisch</b> daraus folgen? Wer als Abteilungsleiter eingetragen ist, bekommt Rechte für seine Abteilung; endet das Amt, endet der Zugang.</p>
+    <p>Das erspart das Nachhalten in zwei Listen und verhindert den klassischen Fall „der ist seit drei Jahren nicht mehr Abteilungsleiter, hat aber noch Zugriff“.</p>
+  </div>
+</section>
+
+<!-- ===================== PROTOKOLL ===================== -->
+<section class="view" id="v-protokoll">
+  <div class="view-kopf"><h2>Änderungsprotokoll</h2><span class="zahl">letzte 30 Tage</span></div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Zeitpunkt</th><th>Wer</th><th>Was</th><th>Datensatz</th><th>Änderung</th></tr></thead>
+      <tbody>
+        <tr><td class="num">17.08.2026 19:42</td><td class="mono">verwaltung@…</td><td>geändert</td><td>Mitglied 1255 Fischer</td><td>adresse_ungueltig: nein → ja</td></tr>
+        <tr><td class="num">17.08.2026 19:38</td><td class="mono">verwaltung@…</td><td>geändert</td><td>Beitragskonto 199</td><td>IBAN geändert <span class="marke warn">Altwert gespeichert</span></td></tr>
+        <tr><td class="num">15.08.2026 09:11</td><td class="mono">kassier@…</td><td>geändert</td><td>Sollstellung 2026 / Konto 507</td><td>status: offen → gemahnt</td></tr>
+        <tr><td class="num">12.08.2026 20:03</td><td class="mono">obermeier@…</td><td>beendet</td><td>Funktion 391 Denk</td><td>Betreuer Fußball, bis 30.06.2026, Grund: beruflich</td></tr>
+        <tr><td class="num">12.08.2026 20:05</td><td class="mono">obermeier@…</td><td>angelegt</td><td>Nachweis 418 Vogl</td><td>Erw. Führungszeugnis, eingesehen 12.08.2026</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="hinweis">Beendete Funktionen werden nie gelöscht, nur mit Bis-Datum abgeschlossen. Deshalb ist die Historie belastbar, auch wenn zwischendurch jemand anderes die Verwaltung macht.</div>
+</section>
+
+</main>
+
+<div class="modal-hg" id="modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titel">
+    <div class="modal-kopf"><h3 id="modal-titel">Austritt erfassen — Wagner, Michael (1042)</h3></div>
+    <div class="modal-inhalt">
+      <div class="warnkasten" style="margin-top:0">
+        <strong>Drei Mitglieder hängen an diesem Beitragskonto.</strong>
+        <p style="margin:6px 0 0">Michael Wagner ist Inhaber von Konto 318 und Zahler für Sabine, Lena und Felix. Sein Mandat deckt die drei nach dem Austritt nicht mehr ab. Sie werden <b>nicht</b> automatisch mit ausgetragen.</p>
+      </div>
+      <p style="margin:0 0 4px"><b>Kündigung</b></p>
+      <div class="feldliste" style="margin-bottom:14px">
+        <dt>Eingang</dt><dd>18.08.2026</dd>
+        <dt>Wirksam zum</dt><dd>31.12.2026 <span style="color:var(--tinte-weich)">(Kündigungsfrist Satzung)</span></dd>
+        <dt>Grund</dt><dd>Umzug</dd>
+      </div>
+      <p style="margin:0 0 6px"><b>Was passiert mit Konto 318?</b></p>
+      <label class="wahl"><input type="radio" name="folge" checked>Sabine übernimmt Konto und Mandat<small>Neues Mandat nötig, Erstlastschrift beim nächsten Lauf.</small></label>
+      <label class="wahl"><input type="radio" name="folge">Konto bleibt, Michael zahlt weiter für die Familie<small>Kommt vor, wenn nur er austritt. Mandat bleibt gültig.</small></label>
+      <label class="wahl"><input type="radio" name="folge">Die drei bekommen den Merker „Zahlweg offen“<small>Erscheinen in der Klärliste, fallen aus dem nächsten SEPA-Lauf.</small></label>
+      <label class="wahl"><input type="radio" name="folge">Alle vier treten zum 31.12.2026 aus</label>
+    </div>
+    <div class="modal-fuss"><button class="knopf" data-schliessen>Abbrechen</button><button class="knopf primaer" data-schliessen>Austritt speichern</button></div>
+  </div>
+</div>
+
+<footer>
+  <b>Klick-Mockup, keine echten Daten und keine Logik.</b> Alle Namen, IBANs und Beträge sind erfunden. Gelb markiert sind offene Entscheidungen, violett hinterlegt die Felder, die andere Rollen nicht sehen.
+</footer>
+
+<script>
+const M=[
+ {id:"1042",name:"Wagner, Michael",geb:"14.03.1978",ort:"Ergoldsbach",plz:"84061",strasse:"Rosenweg 12",seit:"01.09.2001",
+  abt:[["Fußball","passiv","01.09.2001","—"],["Stockschützen","aktiv","01.01.2016","—"]],status:"aktiv",anrede:"Herr",brief:"Sehr geehrter Herr Wagner",
+  tel:"09452 1234",mail:"m.wagner@example.de",versand:"E-Mail",zeitraeume:[["01.09.2001","laufend","—","—"]],
+  funktionen:[],ehrungen:[["Mitgliedsjubiläum","25 Jahre",2026,"fällig"]],jahre:"25 Jahre (seit 01.09.2001)",
+  notiz:"Kontoinhaber Konto 318, Beitragsgemeinschaft „Familie Wagner“.",
+  konto:"318",kontoinhaber:"Wagner, Michael (er selbst)",zahlweg:"Lastschrift",iban:"DE89 3704 0044 0532 0130 00",bic:"COBADEFFXXX",
+  mandat:"TSV-2001-1042",mandatsdatum:"12.09.2001",gemeinschaft:"Familie Wagner — Pauschale 180,00 €",beitragsart:"— (in der Pauschale)",
+  soll:"280,00 €",zahlstatus:"bezahlt",soll_hist:[["2026","280,00 €","bezahlt","15.02.2026"],["2025","280,00 €","bezahlt","15.02.2025"]],quali:[],austrittKnopf:true},
+
+ {id:"1044",name:"Wagner, Lena",geb:"21.11.2011",ort:"Ergoldsbach",plz:"84061",strasse:"Rosenweg 12",seit:"01.02.2018",
+  abt:[["Turnen","aktiv","01.02.2018","—"],["Fußball","aktiv","01.08.2023","—"]],status:"aktiv",anrede:"",brief:"Liebe Lena",
+  tel:"—",mail:"—",versand:"Post",zeitraeume:[["01.02.2018","laufend","—","—"]],funktionen:[],ehrungen:[],jahre:"8 Jahre (seit 01.02.2018)",
+  notiz:"14 Jahre alt — gesetzliche Vertretung noch nicht erfasst.",jugend:true,
+  konto:"318",kontoinhaber:"Wagner, Michael (Vater)",zahlweg:"Lastschrift",iban:"DE89 3704 0044 0532 0130 00",bic:"COBADEFFXXX",
+  mandat:"TSV-2001-1042",mandatsdatum:"12.09.2001",gemeinschaft:"Familie Wagner — Pauschale 180,00 €",beitragsart:"— (in der Pauschale)",
+  soll:"in 280,00 €",zahlstatus:"bezahlt",soll_hist:[["2026","über Konto 318","bezahlt","15.02.2026"]],quali:[]},
+
+ {id:"1187",name:"Wagner, Felix",geb:"03.05.2004",ort:"Landshut",plz:"84028",strasse:"Am Anger 7",seit:"01.02.2018",
+  abt:[["Fußball","aktiv","01.02.2018","—"]],status:"aktiv",anrede:"Herr",brief:"Lieber Felix",
+  tel:"—",mail:"felix.w@example.de",versand:"E-Mail",zeitraeume:[["01.02.2018","laufend","—","—"]],
+  funktionen:[["Trainer","Fußball","E-Jugend","01.08.2024","laufend","2 J."]],ehrungen:[],jahre:"8 Jahre (seit 01.02.2018)",
+  notiz:"Erwachsen, eigener Beitrag — Abbuchung läuft weiter über das Konto des Vaters.",
+  konto:"318",kontoinhaber:"Wagner, Michael (Vater)",zahlweg:"Lastschrift",iban:"DE89 3704 0044 0532 0130 00",bic:"COBADEFFXXX",
+  mandat:"TSV-2001-1042",mandatsdatum:"12.09.2001",gemeinschaft:"— keine",beitragsart:"Erwachsene 100,00 € / jährlich",
+  soll:"100,00 €",zahlstatus:"bezahlt",soll_hist:[["2026","100,00 €","bezahlt","15.02.2026"]],
+  quali:[["Erw. Führungszeugnis","eingesehen 02.08.2024","Wiedervorlage 02.08.2029","gültig"],["Erste-Hilfe-Kurs","ausgestellt 11.06.2025","gültig bis 11.06.2027","gültig"]]},
+
+ {id:"1099",name:"Obermeier, Thomas",geb:"11.02.1982",ort:"Ergoldsbach",plz:"84061",strasse:"Schulweg 21",seit:"01.07.1996",
+  abt:[["Fußball","aktiv","01.07.1996","—"]],status:"aktiv",anrede:"Herr",brief:"Sehr geehrter Herr Obermeier",
+  tel:"0170 9998877",mail:"obermeier@example.de",versand:"E-Mail",zeitraeume:[["01.07.1996","laufend","—","—"]],
+  funktionen:[["Abteilungsleiter","Fußball","—","01.04.2016","laufend","10 J."],["Beisitzer","Verein","—","01.04.2012","31.03.2016","4 J."],["Jugendtrainer","Fußball","D-Jugend","01.08.2004","30.06.2010","6 J."]],
+  ehrungen:[["Funktionsjubiläum","10 Jahre Abteilungsleitung",2026,"fällig"]],jahre:"30 Jahre (seit 01.07.1996)",
+  notiz:"Eigener Zugang, sieht nur die Abteilung Fußball.",amtHinweis:true,
+  konto:"176",kontoinhaber:"Obermeier, Thomas (er selbst)",zahlweg:"Lastschrift",iban:"DE71 7415 0000 0004 4455 66",bic:"BYLADEM1LAH",
+  mandat:"TSV-1996-1099",mandatsdatum:"14.02.2012",gemeinschaft:"— keine",beitragsart:"Erwachsene 100,00 € / jährlich",
+  soll:"100,00 €",zahlstatus:"bezahlt",soll_hist:[["2026","100,00 €","bezahlt","15.02.2026"]],
+  quali:[["Erw. Führungszeugnis","eingesehen 21.02.2022","Wiedervorlage 21.02.2027","gültig"]]},
+
+ {id:"1301",name:"Huber, Anna",geb:"28.06.1956",ort:"Ergoldsbach",plz:"84061",strasse:"Lindenallee 3",seit:"01.01.1994",
+  abt:[["Turnen","aktiv","01.01.1994","—"]],status:"aktiv",anrede:"Frau",brief:"Liebe Anna",
+  tel:"09452 2211",mail:"a.huber@example.de",versand:"E-Mail",zeitraeume:[["01.01.1994","laufend","—","—"]],
+  funktionen:[["Abteilungsleiterin","Turnen","—","01.04.2011","laufend","15 J."],["Übungsleiterin","Turnen","Kinderturnen","01.09.1998","laufend","27 J."],["Schriftführerin","Verein","—","01.04.2005","31.03.2009","4 J."]],
+  ehrungen:[["Geburtstag","70. Geburtstag",2026,"fällig"],["Mitgliedsjubiläum","25 Jahre",2019,"verliehen"]],jahre:"32 Jahre (seit 01.01.1994)",
+  notiz:"Zahlt per Überweisung — keine IBAN, fällt aus dem SEPA-Lauf.",
+  konto:"205",kontoinhaber:"Huber, Anna (sie selbst)",zahlweg:"Überweisung",iban:"— keine hinterlegt",bic:"—",
+  mandat:"—",mandatsdatum:"—",gemeinschaft:"— keine",beitragsart:"Erwachsene 100,00 € / jährlich",
+  soll:"100,00 €",zahlstatus:"offen",soll_hist:[["2026","100,00 €","offen","—"],["2025","100,00 €","bezahlt","03.03.2025"]],
+  quali:[["Erw. Führungszeugnis","eingesehen 12.01.2024","Wiedervorlage 12.01.2029","gültig"],["Übungsleiter-B-Lizenz","ausgestellt 30.09.2022","gültig bis 31.12.2026","läuft ab"],["Erste-Hilfe-Kurs","ausgestellt 14.04.2024","gültig bis 14.04.2026","abgelaufen"]]},
+
+ {id:"0873",name:"Bauer, Josef",geb:"09.01.1951",ort:"Ergoldsbach",plz:"84061",strasse:"Hauptstraße 44",seit:"01.04.1986",
+  abt:[["Stockschützen","aktiv","01.04.1986","—"]],status:"aktiv",anrede:"Herr",brief:"Sehr geehrter Herr Bauer",
+  tel:"09452 5678",mail:"—",versand:"Post",zeitraeume:[["01.01.1968","31.12.1979","30.09.1979","Umzug"],["01.04.1986","laufend","—","—"]],
+  funktionen:[["Platzwart","Verein","—","01.01.1990","31.12.2014","25 J."]],
+  ehrungen:[["Mitgliedsjubiläum","40 Jahre",2026,"fällig"]],jahre:"40 Jahre seit Wiedereintritt · 51 Jahre insgesamt",
+  wiedereintritt:true,ehrenmitglied:true,notiz:"Ehrenmitglied seit 2014 — zahlt weiterhin den vollen Beitrag.",
+  konto:"122",kontoinhaber:"Bauer, Josef (er selbst)",zahlweg:"Lastschrift",iban:"DE22 7405 0000 0012 3456 78",bic:"BYLADEM1SRG",
+  mandat:"TSV-1986-0873",mandatsdatum:"01.04.2010",gemeinschaft:"— keine",beitragsart:"Erwachsene 100,00 € / jährlich",
+  soll:"100,00 €",zahlstatus:"bezahlt",soll_hist:[["2026","100,00 €","bezahlt","15.02.2026"]],quali:[]},
+
+ {id:"1255",name:"Fischer, Marion",geb:"17.09.1975",ort:"unbekannt",plz:"84061",strasse:"Ahornstraße 8 (Post zurück)",seit:"01.01.2001",
+  abt:[["Tennis","aktiv","01.01.2001","—"]],status:"aktiv",anrede:"Frau",brief:"Sehr geehrte Frau Fischer",
+  tel:"—",mail:"—",versand:"Post",zeitraeume:[["01.01.2001","laufend","—","—"]],funktionen:[],
+  ehrungen:[["Mitgliedsjubiläum","25 Jahre",2025,"verschoben"]],jahre:"25 Jahre (seit 01.01.2001)",adrUngueltig:true,
+  notiz:"Adresse seit 04.11.2025 ungültig, Lastschrift 2026 zurückgekommen.",
+  konto:"199",kontoinhaber:"Fischer, Marion (sie selbst)",zahlweg:"Lastschrift",iban:"DE10 7435 0000 0009 8765 43",bic:"GENODEF1LH1",
+  mandat:"TSV-2001-1255",mandatsdatum:"08.01.2001",gemeinschaft:"— keine",beitragsart:"Erwachsene 100,00 € / jährlich",
+  soll:"100,00 €",zahlstatus:"ruecklastschrift",mandatWarn:true,
+  soll_hist:[["2026","100,00 €","Rücklastschrift","15.02.2026"],["2025","100,00 €","bezahlt","15.02.2025"]],quali:[]},
+
+ {id:"0912",name:"Steinberger, Karl",geb:"05.12.1938",ort:"Ergoldsbach",plz:"84061",strasse:"Kirchgasse 2",seit:"01.01.1962",
+  abt:[["Stockschützen","aktiv","01.01.1962","14.02.2026"]],status:"verstorben",anrede:"Herr",brief:"—",
+  tel:"—",mail:"—",versand:"Post",zeitraeume:[["01.01.1962","14.02.2026","—","verstorben"]],
+  funktionen:[["Abteilungsleiter","Stockschützen","—","01.04.1988","31.03.2004","16 J."]],
+  ehrungen:[["Mitgliedsjubiläum","60 Jahre",2022,"verliehen"]],jahre:"64 Jahre (1962–2026)",verstorben:true,
+  notiz:"Sterbedatum 14.02.2026 — Status automatisch, Sollstellung storniert, laufende Funktionen beendet.",
+  konto:"88",kontoinhaber:"Steinberger, Karl",zahlweg:"Lastschrift",iban:"DE45 7405 0000 0000 1122 33",bic:"BYLADEM1SRG",
+  mandat:"TSV-1962-0912",mandatsdatum:"03.05.2009",gemeinschaft:"— keine",beitragsart:"Erwachsene 100,00 € / jährlich",
+  soll:"0,00 €",zahlstatus:"storniert",soll_hist:[["2026","100,00 €","storniert (verstorben)","—"]],quali:[]}
+];
+
+const tbody=document.getElementById('liste');
+let gewaehlt="1099";
+
+function stM(s){return s==="aktiv"?'<span class="marke ok">aktiv</span>':s==="verstorben"?'<span class="marke tot">verstorben</span>':'<span class="marke aus">ausgetreten</span>'}
+function zM(z){return z==="bezahlt"?'<span class="marke ok">bezahlt</span>':z==="offen"?'<span class="marke warn">offen</span>':z==="ruecklastschrift"?'<span class="marke tot">Rücklastschrift</span>':'<span class="marke aus">storniert</span>'}
+function qM(s){return s==="gültig"?'<span class="marke ok">gültig</span>':s==="läuft ab"?'<span class="marke warn">läuft ab</span>':'<span class="marke tot">'+s+'</span>'}
+function laufend(m){return m.funktionen.filter(f=>f[4]==="laufend")}
+
+function renderListe(){
+  const q=document.getElementById('suche').value.toLowerCase();
+  const st=document.getElementById('f-status').value;
+  const ab=document.getElementById('f-abt').value;
+  const za=document.getElementById('f-zahl').value;
+  const am=document.getElementById('f-amt').checked;
+  const t=M.filter(m=>{
+    if(q && !(m.name.toLowerCase().includes(q)||m.id.includes(q)||m.ort.toLowerCase().includes(q)||m.iban.replace(/\s/g,'').toLowerCase().includes(q))) return false;
+    if(st && m.status!==st) return false;
+    if(ab && !m.abt.some(a=>a[0]===ab)) return false;
+    if(za==="offen" && m.zahlstatus!=="offen") return false;
+    if(za==="ruecklastschrift" && m.zahlstatus!=="ruecklastschrift") return false;
+    if(am && laufend(m).length===0) return false;
+    return true;
+  });
+  tbody.innerHTML=t.map(m=>{
+    const lf=laufend(m);
+    return `<tr class="klick ${m.id===gewaehlt?'gewaehlt':''}" data-id="${m.id}">
+      <td class="nr">${m.id}</td>
+      <td>${m.name}${m.adrUngueltig?' <span class="marke warn">Adresse?</span>':''}</td>
+      <td class="num">${m.geb}</td>
+      <td>${m.abt.map(a=>`<span class="marke abt">${a[0]}${a[1]==="passiv"?' · passiv':''}</span>`).join('')}</td>
+      <td>${lf.length?lf.map(f=>`<span class="marke amt">${f[0]}</span>`).join(''):'<span style="color:#9aa7ae">—</span>'}</td>
+      <td class="geld">${m.soll}</td>
+      <td>${zM(m.zahlstatus)}</td></tr>`;
+  }).join('') || '<tr><td colspan="7" style="color:#5a6b78;padding:22px 11px">Kein Mitglied passt zu diesen Filtern.</td></tr>';
+  document.getElementById('trefferzahl').textContent=t.length+' von '+M.length+' angezeigt (Beispielausschnitt)';
+}
+
+function renderDetail(){
+  const m=M.find(x=>x.id===gewaehlt); if(!m) return;
+  const zr=m.zeitraeume.map(z=>`<tr><td class="num">${z[0]}</td><td class="num">${z[1]}</td><td class="num">${z[2]}</td><td>${z[3]}</td></tr>`).join('');
+  const ab=m.abt.map(a=>`<tr><td>${a[0]}</td><td>${a[1]==="passiv"?'<span class="marke aus">passiv</span>':'<span class="marke ok">aktiv</span>'}</td><td class="num">${a[2]}</td><td class="num">${a[3]}</td></tr>`).join('');
+  const fn=m.funktionen.length
+    ? m.funktionen.map(f=>`<tr class="${f[4]==='laufend'?'':'vergangen'}"><td>${f[0]}</td><td>${f[1]}${f[2]!=='—'?' · '+f[2]:''}</td><td class="num">${f[3]}</td><td class="num">${f[4]}</td><td class="num">${f[5]}</td></tr>`).join('')
+    : '<tr><td colspan="5" style="color:#5a6b78">Kein Amt, keine Tätigkeit erfasst — normales Mitglied.</td></tr>';
+  const eh=m.ehrungen.length?m.ehrungen.map(e=>`<tr><td>${e[0]}</td><td>${e[1]}</td><td class="num">${e[2]}</td><td>${e[3]==='verliehen'?'<span class="marke ok">verliehen</span>':e[3]==='verschoben'?'<span class="marke warn">verschoben</span>':'<span class="marke">fällig</span>'}</td></tr>`).join('')
+    :'<tr><td colspan="4" style="color:#5a6b78">Noch keine Ehrung fällig oder verliehen.</td></tr>';
+  const sh=m.soll_hist.map(s=>`<tr><td class="num">${s[0]}</td><td class="geld">${s[1]}</td><td>${s[2]}</td><td class="num">${s[3]}</td></tr>`).join('');
+  const qu=m.quali.length?m.quali.map(q=>`<tr><td>${q[0]}</td><td class="num">${q[1]}</td><td class="num">${q[2]}</td><td>${qM(q[3])}</td></tr>`).join('')
+    :'<tr><td colspan="4" style="color:#5a6b78">Keine nachweispflichtige Funktion.</td></tr>';
+
+  document.getElementById('detail').innerHTML=`
+  <div class="detail-kopf">
+    <h3>${m.name}</h3>
+    <div class="unter">Nr. ${m.id} · ${stM(m.status)}
+      ${m.wiedereintritt?' · <span class="marke warn">Wiedereintritt</span>':''}
+      ${m.jugend?' · <span class="marke warn">minderjährig</span>':''}
+      ${m.ehrenmitglied?' · <span class="marke">Ehrenmitglied</span>':''}
+      ${laufend(m).map(f=>`<span class="marke amt">${f[0]}</span>`).join('')}</div>
+  </div>
+  <div class="detail-tabs">
+    <button class="dtab" aria-selected="true" data-dview="d-stamm">Stammdaten</button>
+    <button class="dtab" aria-selected="false" data-dview="d-zeit">Mitgliedschaft</button>
+    <button class="dtab" aria-selected="false" data-dview="d-abt">Abteilungen</button>
+    <button class="dtab" aria-selected="false" data-dview="d-fkt">Funktionen</button>
+    <button class="dtab" aria-selected="false" data-dview="d-geld">Beitrag</button>
+    <button class="dtab" aria-selected="false" data-dview="d-qual">Nachweise</button>
+    <button class="dtab" aria-selected="false" data-dview="d-ehr">Ehrungen</button>
+  </div>
+  <div class="detail-inhalt">
+
+    <div class="dview aktiv" id="d-stamm">
+      <div class="gruppe-titel">Person</div>
+      <dl class="feldliste">
+        <dt>Anrede</dt><dd>${m.anrede||'—'}</dd>
+        <dt>Briefanrede</dt><dd>${m.brief}</dd>
+        <dt>Geburtsdatum</dt><dd class="num">${m.geb}</dd>
+      </dl>
+      <div class="gruppe-titel">Kontakt<span class="rand">Felder getrennt — nötig ab pain.008.001.08</span></div>
+      <dl class="feldliste">
+        <dt>Straße</dt><dd>${m.strasse}</dd>
+        <dt>PLZ / Ort</dt><dd>${m.plz} ${m.ort}</dd>
+        <dt>Telefon</dt><dd>${m.tel}</dd>
+        <dt>E-Mail</dt><dd>${m.mail}</dd>
+        <dt>Versand</dt><dd>per ${m.versand}</dd>
+        <dt>Adresse gültig</dt><dd>${m.adrUngueltig?'<span class="marke warn">nein — Post zurück 04.11.2025</span>':'ja'}</dd>
+      </dl>
+      <div class="gruppe-titel">Vermerke</div>
+      <dl class="feldliste">
+        <dt>Ehrenmitglied</dt><dd>${m.ehrenmitglied?'ja, seit 2014 — ohne Beitragsbefreiung':'nein'}</dd>
+        <dt>Foto-Einwilligung</dt><dd>${m.jugend?'liegt vor (Erziehungsberechtigte), 12.02.2018':'liegt vor, 25.05.2018'}</dd>
+        <dt>Bemerkung</dt><dd>${m.notiz}</dd>
+        <dt>Zuletzt geändert</dt><dd class="num">17.08.2026 · verwaltung@…</dd>
+      </dl>
+      ${m.austrittKnopf?'<p style="margin:16px 0 0"><button class="knopf warn" id="austritt-knopf">Austritt erfassen</button></p>':''}
+      ${m.jugend?`<div class="frage"><span class="frage-nr">Frage 13 · Gesetzliche Vertretung</span><p>Bei Lena fehlt, wer sie vertritt. Als eigene Felder am Kind — oder als Verweis auf das Elternteil, wenn es selbst Mitglied ist?</p></div>`:''}
+    </div>
+
+    <div class="dview" id="d-zeit">
+      <p style="margin:0 0 4px"><span class="abgeleitet">Mitglied seit ${m.seit}</span></p>
+      <p style="margin:6px 0 14px"><span class="abgeleitet">${m.jahre}</span></p>
+      <table class="tabelle" style="border:1px solid var(--linie)">
+        <thead><tr><th>Eintritt</th><th>Austritt</th><th>Kündigung ein</th><th>Grund</th></tr></thead><tbody>${zr}</tbody></table>
+      <p style="margin:12px 0 0"><button class="knopf">Zeitraum hinzufügen</button></p>
+      <div class="hinweis">Ein Wiedereintritt bekommt <b>keine neue Mitgliedsnummer</b> — es kommt nur ein Zeitraum dazu.</div>
+    </div>
+
+    <div class="dview" id="d-abt">
+      <table class="tabelle" style="border:1px solid var(--linie)">
+        <thead><tr><th>Abteilung</th><th>Status</th><th>seit</th><th>bis</th></tr></thead><tbody>${ab}</tbody></table>
+      <p style="margin:12px 0 0"><button class="knopf">Abteilung zuordnen</button></p>
+      <div class="hinweis">Hier steht nur <b>Zugehörigkeit und aktiv/passiv</b> — keine Funktion. Wer Trainer oder Funktionär ist, steht im Reiter „Funktionen“ und wird dort mit Zeitraum geführt.</div>
+    </div>
+
+    <div class="dview" id="d-fkt">
+      <table class="tabelle" style="border:1px solid var(--linie)">
+        <thead><tr><th>Funktion</th><th>Ebene</th><th>von</th><th>bis</th><th class="num">Dauer</th></tr></thead><tbody>${fn}</tbody></table>
+      <p style="margin:12px 0 0"><button class="knopf">Funktion eintragen</button>${laufend(m).length?' <button class="knopf">laufende beenden</button>':''}</p>
+      ${m.amtHinweis?`<div class="hinweis">Das ist der Fall, um den es geht: 6 Jahre Jugendtrainer, 4 Jahre Beisitzer, seit 2016 Abteilungsleiter. Nichts davon wird überschrieben — auch 2046 steht hier noch, wer wann was gemacht hat.</div>`:''}
+      ${m.funktionen.length===0?`<div class="hinweis">Spieler und Teilnehmerinnen bekommen keinen Eintrag. Das erspart die jährliche Nachpflege.</div>`:''}
+    </div>
+
+    <div class="dview" id="d-geld">
+      <div class="gruppe-titel">Beitrag<span class="sens finanz">Finanzdaten</span></div>
+      <dl class="feldliste">
+        <dt>Beitragsart</dt><dd class="sensfeld">${m.beitragsart}</dd>
+        <dt>Beitragsgemeinschaft</dt><dd class="sensfeld">${m.gemeinschaft}</dd>
+        <dt>Soll 2026</dt><dd class="sensfeld"><b>${m.soll}</b> ${zM(m.zahlstatus)}</dd>
+      </dl>
+      <div class="gruppe-titel">Beitragskonto ${m.konto}<span class="sens finanz">Finanzdaten</span></div>
+      <dl class="feldliste">
+        <dt>Inhaber</dt><dd class="sensfeld">${m.kontoinhaber}</dd>
+        <dt>Zahlweg</dt><dd class="sensfeld">${m.zahlweg}</dd>
+        <dt>IBAN</dt><dd class="iban sensfeld">${m.iban}</dd>
+        <dt>BIC</dt><dd class="iban sensfeld">${m.bic}</dd>
+        <dt>Mandatsreferenz</dt><dd class="iban sensfeld">${m.mandat}</dd>
+        <dt>Mandat vom</dt><dd class="sensfeld num">${m.mandatsdatum} ${m.mandatWarn?'<span class="marke warn">seit 2022 ungenutzt</span>':''}</dd>
+      </dl>
+      <p style="margin:12px 0 0"><button class="knopf">Bankdaten ändern</button> <button class="knopf">Konto wechseln</button></p>
+      <div class="gruppe-titel">Zahlungshistorie</div>
+      <table class="tabelle" style="border:1px solid var(--linie)">
+        <thead><tr><th>Jahr</th><th class="geld">Soll</th><th>Status</th><th>Einzug</th></tr></thead><tbody>${sh}</tbody></table>
+    </div>
+
+    <div class="dview" id="d-qual">
+      <table class="tabelle" style="border:1px solid var(--linie)">
+        <thead><tr><th>Nachweis <span class="sens fz">§ 72a</span></th><th>Datum</th><th>Gültig bis</th><th>Status</th></tr></thead><tbody>${qu}</tbody></table>
+      <p style="margin:12px 0 0"><button class="knopf">Einsichtnahme erfassen</button> <button class="knopf">Lizenz eintragen</button></p>
+      <div class="hinweis">Nur Ausstellungsdatum, Einsichtnahme, einsehende Person, Vermerk „ohne einschlägigen Eintrag“ und Wiedervorlage. <b>Kein Inhalt, keine Kopie, kein Upload.</b></div>
+    </div>
+
+    <div class="dview" id="d-ehr">
+      <table class="tabelle" style="border:1px solid var(--linie)">
+        <thead><tr><th>Anlass</th><th>Stufe</th><th>Fällig</th><th>Status</th></tr></thead><tbody>${eh}</tbody></table>
+    </div>
+  </div>`;
+  const ak=document.getElementById('austritt-knopf');
+  if(ak) ak.addEventListener('click',()=>document.getElementById('modal').classList.add('offen'));
+}
+
+tbody.addEventListener('click',e=>{const tr=e.target.closest('tr[data-id]');if(!tr)return;gewaehlt=tr.dataset.id;renderListe();renderDetail();});
+document.getElementById('detail').addEventListener('click',e=>{
+  const b=e.target.closest('.dtab'); if(!b) return;
+  document.querySelectorAll('.dtab').forEach(x=>x.setAttribute('aria-selected','false'));
+  b.setAttribute('aria-selected','true');
+  document.querySelectorAll('.dview').forEach(v=>v.classList.remove('aktiv'));
+  document.getElementById(b.dataset.dview).classList.add('aktiv');
+});
+['suche','f-status','f-abt','f-zahl','f-amt'].forEach(id=>document.getElementById(id).addEventListener('input',renderListe));
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected','false'));
+  t.setAttribute('aria-selected','true');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('aktiv'));
+  document.getElementById(t.dataset.view).classList.add('aktiv');
+  window.scrollTo({top:0,behavior:'instant'});
+}));
+document.getElementById('s-sens').addEventListener('change',e=>document.body.classList.toggle('sens-an',e.target.checked));
+document.getElementById('s-fragen').addEventListener('change',e=>document.body.classList.toggle('fragen-aus',!e.target.checked));
+document.querySelectorAll('[data-schliessen]').forEach(b=>b.addEventListener('click',()=>document.getElementById('modal').classList.remove('offen')));
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal') e.currentTarget.classList.remove('offen')});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') document.getElementById('modal').classList.remove('offen')});
+
+renderListe(); renderDetail();
+</script>
+</body>
+</html>

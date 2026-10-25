@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup · Mitgliederverwaltung TSV Ergoldsbach — Rolle: Abteilungsleiter</title>
+<style>
+:root{
+  --tinte:#18232d;
+  --tinte-weich:#5a6b78;
+  --papier:#f4f5f2;
+  --karte:#ffffff;
+  --linie:#dde2dc;
+  --linie-stark:#c2cbc2;
+  --blau:#2c4f74;
+  --blau-hell:#e9eef4;
+  --rost:#9a5320;
+  --rost-hell:#f8efe6;
+  --rot:#8f2f2f;
+  --gelb:#f3e7c4;
+  --radius:3px;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--papier);color:var(--tinte);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0;letter-spacing:-.01em}
+code,.mono{font-family:var(--mono);font-size:.86em}
+table{border-collapse:collapse;width:100%}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--blau);outline-offset:2px}
+
+.topbar{background:var(--tinte);color:#eef1ee;display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;padding:14px 22px}
+.brand{font-family:var(--serif);font-size:19px}
+.brand span{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:#93a3ac;margin-left:12px}
+.session{margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+.session .jahr{color:#93a3ac;font-variant-numeric:tabular-nums}
+.session .mail{color:#c3cdd2;font-family:var(--mono);font-size:11.5px}
+.rollen-chip{background:var(--blau);color:#fff;padding:3px 10px;border-radius:99px;font-size:11px;text-transform:uppercase;letter-spacing:.12em}
+
+.scopebar{background:var(--blau-hell);border-bottom:1px solid var(--linie-stark);padding:9px 22px;display:flex;flex-wrap:wrap;gap:8px 26px;align-items:center;font-size:12.5px}
+.scope-item{display:flex;gap:7px;align-items:baseline}
+.scope-item b{font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--blau)}
+.scope-item.gesperrt-hinweis b{color:var(--rost)}
+.schalter{margin-left:auto;display:flex;gap:16px;align-items:center}
+.schalter label{display:flex;gap:6px;align-items:center;cursor:pointer;font-size:12.5px;color:var(--tinte-weich)}
+.schalter input{accent-color:var(--blau);margin:0}
+
+.tabs{display:flex;flex-wrap:wrap;gap:2px;padding:0 14px;background:var(--karte);border-bottom:1px solid var(--linie)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:11px 13px;cursor:pointer;color:var(--tinte-weich);font-size:13.5px}
+.tab:hover{color:var(--tinte)}
+.tab[aria-selected="true"]{color:var(--tinte);border-bottom-color:var(--blau);font-weight:600}
+.tab.tab-gesperrt{color:var(--rost);opacity:.75}
+.tab.tab-gesperrt::before{content:"◫ ";font-size:11px}
+
+main{padding:22px;max-width:1400px;margin:0 auto}
+.view{display:none;animation:auf .18s ease-out}
+.view.aktiv{display:block}
+@keyframes auf{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view{animation:none}}
+
+.view-kopf{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:14px}
+.view-kopf h2{font-size:21px}
+.view-kopf .zahl{color:var(--tinte-weich);font-size:13px;font-variant-numeric:tabular-nums}
+.view-kopf .aktionen{margin-left:auto;display:flex;gap:8px}
+
+.knopf{background:var(--karte);border:1px solid var(--linie-stark);border-radius:var(--radius);padding:6px 12px;font-size:13px;cursor:pointer}
+.knopf:hover{border-color:var(--tinte-weich)}
+.knopf.primaer{background:var(--blau);border-color:var(--blau);color:#fff}
+.knopf.primaer:hover{background:#23405f}
+
+.filter{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--karte);border:1px solid var(--linie);border-radius:var(--radius);padding:9px 11px;margin-bottom:12px}
+.filter input[type=search],.filter select{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--linie-stark);border-radius:var(--radius);background:#fff}
+.filter input[type=search]{min-width:220px}
+.filter .kasten{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--tinte-weich)}
+.filter .kasten input{accent-color:var(--blau)}
+
+.karte{background:var(--karte);border:1px solid var(--linie);border-radius:var(--radius)}
+.tabelle th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.11em;color:var(--tinte-weich);font-weight:600;padding:9px 11px;border-bottom:1px solid var(--linie-stark);white-space:nowrap}
+.tabelle td{padding:9px 11px;border-bottom:1px solid var(--linie);font-size:13.5px;vertical-align:top}
+.tabelle tr:last-child td{border-bottom:0}
+.tabelle tbody tr.klick{cursor:pointer}
+.tabelle tbody tr.klick:hover{background:#f7f9fb}
+.tabelle tbody tr.gewaehlt{background:var(--blau-hell);box-shadow:inset 3px 0 0 var(--blau)}
+.nr{font-family:var(--mono);font-size:12.5px;color:var(--tinte-weich)}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.marke{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;border:1px solid var(--linie-stark);background:#fbfcfa;white-space:nowrap}
+.marke.aktiv{background:var(--blau-hell);border-color:#c4d3e2;color:var(--blau)}
+.marke.aus{background:#f0f0ee;color:var(--tinte-weich)}
+.marke.warn{background:var(--rost-hell);border-color:#e2c9b1;color:var(--rost)}
+.marke.ok{background:#e9f1ec;border-color:#bfd6c8;color:#1f5c4f}
+.marke.rot{background:#f6ecec;border-color:#dcc6c6;color:var(--rot)}
+
+.split{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1050px){.split{grid-template-columns:1fr}}
+.detail{position:sticky;top:14px}
+.detail-kopf{padding:14px 16px;border-bottom:1px solid var(--linie)}
+.detail-kopf h3{font-size:20px}
+.detail-kopf .unter{color:var(--tinte-weich);font-size:12.5px;margin-top:3px}
+.detail-inhalt{padding:14px 16px}
+.feldliste{display:grid;grid-template-columns:135px 1fr;gap:6px 14px;font-size:13.5px}
+.feldliste dt{color:var(--tinte-weich);font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding-top:3px}
+.feldliste dd{margin:0}
+.gruppe-titel{font-size:10.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--blau);border-bottom:1px solid var(--linie);padding-bottom:4px;margin:16px 0 10px;font-weight:600}
+.gruppe-titel:first-child{margin-top:0}
+
+.gesperrt{
+  border:1px dashed #d9bfa6;border-radius:var(--radius);
+  background:repeating-linear-gradient(135deg,transparent,transparent 7px,rgba(154,83,32,.055) 7px,rgba(154,83,32,.055) 14px),var(--rost-hell);
+  padding:14px 16px;margin:10px 0;
+}
+.gesperrt h4{margin:0 0 5px;font-size:11px;text-transform:uppercase;letter-spacing:.13em;color:var(--rost);font-family:var(--sans);font-weight:600}
+.gesperrt p{margin:0;font-size:13px;color:#5d4a3a;max-width:64ch}
+.gesperrt p + p{margin-top:6px}
+.gesperrt code{background:rgba(255,255,255,.7);padding:1px 5px;border-radius:2px}
+body.sperren-aus .gesperrt,body.sperren-aus .tab-gesperrt{display:none}
+
+.frage{border-left:3px solid #c9a227;background:var(--gelb);padding:11px 14px;border-radius:0 var(--radius) var(--radius) 0;margin:12px 0}
+.frage-nr{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#7a5c05;font-weight:700;margin-bottom:3px}
+.frage p{margin:0;font-size:13px;color:#4d3d0a;max-width:70ch}
+.frage p + p{margin-top:6px}
+body.fragen-aus .frage{display:none}
+
+.hinweis{border-left:3px solid var(--linie-stark);padding:8px 12px;margin:12px 0;font-size:13px;color:var(--tinte-weich);max-width:78ch}
+
+.suchkasten{background:var(--karte);border:1px solid var(--linie);border-radius:var(--radius);padding:16px 18px;max-width:640px}
+.suchkasten label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--tinte-weich);margin:0 0 4px}
+.suchkasten input{font:inherit;font-size:14px;padding:7px 9px;border:1px solid var(--linie-stark);border-radius:var(--radius);width:100%;max-width:280px}
+.suchzeile{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.treffer{border-top:1px solid var(--linie);margin-top:14px;padding-top:12px}
+
+.zaehlkarten{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.zaehlkarte{background:var(--karte);border:1px solid var(--linie);border-radius:var(--radius);padding:12px 14px}
+.zaehlkarte .wert{font-family:var(--serif);font-size:27px;line-height:1.1;font-variant-numeric:tabular-nums}
+.zaehlkarte .beschr{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--tinte-weich);margin-top:3px}
+
+footer{border-top:1px solid var(--linie);margin-top:30px;padding:16px 22px 40px;font-size:12px;color:var(--tinte-weich);max-width:1400px;margin-left:auto;margin-right:auto}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">TSV Ergoldsbach e.&nbsp;V. <span>Mitgliederverwaltung</span></div>
+  <div class="session">
+    <span class="jahr">Beitragsjahr 2026</span>
+    <span class="mail">obermeier@tsv-ergoldsbach.de</span>
+    <span class="rollen-chip">Abteilungsleiter Fußball</span>
+  </div>
+</header>
+
+<div class="scopebar">
+  <div class="scope-item"><b>Sie sehen</b><span>412 Mitglieder der Abteilung Fußball</span></div>
+  <div class="scope-item"><b>Felder</b><span>Name, Geburtsdatum, Kontakt, Funktion</span></div>
+  <div class="scope-item gesperrt-hinweis"><b>Gesperrt</b><span>alle übrigen Mitglieder · Beiträge · Führungszeugnisse</span></div>
+  <div class="schalter">
+    <label><input type="checkbox" id="s-sperren" checked> Gesperrtes markiert zeigen</label>
+    <label><input type="checkbox" id="s-fragen" checked> Fragen an Sie</label>
+  </div>
+</div>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-view="v-kader">Meine Abteilung</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-funktionen">Trainer &amp; Funktionen</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-aufnahme">Mitglied zuordnen</button>
+  <button class="tab" role="tab" aria-selected="false" data-view="v-listen">Listen &amp; Export</button>
+  <button class="tab tab-gesperrt" role="tab" aria-selected="false" data-view="v-gesperrt">Was Sie nicht sehen</button>
+</nav>
+
+<main>
+
+<!-- ============ KADER ============ -->
+<section class="view aktiv" id="v-kader">
+  <div class="view-kopf">
+    <h2>Abteilung Fußball</h2>
+    <span class="zahl" id="trefferzahl"></span>
+    <div class="aktionen"><button class="knopf">Kontaktliste drucken</button></div>
+  </div>
+
+  <div class="zaehlkarten">
+    <div class="zaehlkarte"><div class="wert">412</div><div class="beschr">Zugeordnet</div></div>
+    <div class="zaehlkarte"><div class="wert">374</div><div class="beschr">davon aktiv</div></div>
+    <div class="zaehlkarte"><div class="wert">202</div><div class="beschr">unter 18</div></div>
+    <div class="zaehlkarte"><div class="wert">11</div><div class="beschr">Trainer &amp; Betreuer</div></div>
+  </div>
+
+  <div class="filter">
+    <input type="search" id="suche" placeholder="Name oder Nummer suchen">
+    <select id="f-funktion">
+      <option value="">Funktion: alle</option>
+      <option>Spieler</option><option>Trainer</option><option>Betreuer</option><option>Abteilungsleiter</option>
+    </select>
+    <select id="f-status">
+      <option value="">Status: alle</option>
+      <option value="aktiv" selected>nur aktive</option>
+      <option value="passiv">nur passive</option>
+    </select>
+    <select id="f-jahrgang">
+      <option value="">Altersklasse: alle</option>
+      <option value="u11">bis U11</option><option value="u15">U12–U15</option><option value="u19">U16–U19</option><option value="herren">Herren</option>
+    </select>
+  </div>
+
+  <div class="split">
+    <div class="karte">
+      <table class="tabelle">
+        <thead><tr><th>Nr.</th><th>Name</th><th>Geb.</th><th>Klasse</th><th>Funktion</th><th>seit</th><th>Status</th></tr></thead>
+        <tbody id="liste"></tbody>
+      </table>
+    </div>
+    <div class="karte detail" id="detail"></div>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 1 · Reicht dieser Ausschnitt?</span>
+    <p>Sie sehen ausschließlich Personen, die der Abteilung Fußball zugeordnet sind — und von ihnen Name, Geburtsdatum und Kontakt. Fehlt Ihnen für die tägliche Arbeit etwas Konkretes?</p>
+  </div>
+</section>
+
+<!-- ============ FUNKTIONEN ============ -->
+<section class="view" id="v-funktionen">
+  <div class="view-kopf">
+    <h2>Trainer &amp; Funktionen</h2>
+    <span class="zahl">11 Personen mit Funktion</span>
+  </div>
+
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Nr.</th><th>Name</th><th>Funktion</th><th>Mannschaft</th><th>seit</th><th>Nachweise</th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="nr">1099</td><td>Obermeier, Thomas</td><td>Abteilungsleiter</td><td>—</td><td class="num">01.07.1996</td><td><span class="marke ok">vollständig</span></td><td><button class="knopf">bearbeiten</button></td></tr>
+        <tr><td class="nr">1187</td><td>Wagner, Felix</td><td>Trainer</td><td>E-Jugend</td><td class="num">01.08.2024</td><td><span class="marke rot">fehlt etwas</span></td><td><button class="knopf">bearbeiten</button></td></tr>
+        <tr><td class="nr">1355</td><td>Schmid, Korbinian</td><td>Trainer</td><td>Herren I</td><td class="num">01.07.2022</td><td><span class="marke ok">vollständig</span></td><td><button class="knopf">bearbeiten</button></td></tr>
+        <tr><td class="nr">1288</td><td>Lehner, Julia</td><td>Betreuerin</td><td>D-Jugend</td><td class="num">01.09.2023</td><td><span class="marke warn">läuft in 2 Monaten ab</span></td><td><button class="knopf">bearbeiten</button></td></tr>
+        <tr><td class="nr">1412</td><td>Vogl, Andreas</td><td>Trainer</td><td>C-Jugend</td><td class="num">01.03.2026</td><td><span class="marke rot">fehlt etwas</span></td><td><button class="knopf">bearbeiten</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="gesperrt">
+    <h4>Bewusst nur eine Ampel — kein Inhalt</h4>
+    <p>„Vollständig“ heißt: Lizenz gültig, Erste-Hilfe-Kurs aktuell, erweitertes Führungszeugnis eingesehen und noch nicht abgelaufen. <b>Welcher</b> Nachweis fehlt und welche Daten dahinterstehen, sieht nur der Vorstand bzw. die Jugendleitung.</p>
+    <p>Im System steht ohnehin nur, <i>dass</i> ein Führungszeugnis eingesehen wurde und bis wann es gilt — niemals der Inhalt, und das Dokument selbst wird nie hochgeladen (§&nbsp;72a SGB&nbsp;VIII).</p>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 2 · Wie viel Ampel brauchen Sie?</span>
+    <p>Drei Möglichkeiten — welche wollen Sie?</p>
+    <p><b>a)</b> gar nichts, die Jugendleitung meldet sich bei Ihnen · <b>b)</b> nur die Ampel wie oben · <b>c)</b> Ampel plus Ablaufdatum, damit Sie den Trainer selbst erinnern können.</p>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 3 · Mannschaftszuordnung</span>
+    <p>„Herren I“, „E-Jugend“ steht bisher nirgends in den Daten. Wollen Sie Mannschaften im System pflegen — oder machen Sie das weiter außerhalb, und wir lassen es hier ganz weg?</p>
+  </div>
+</section>
+
+<!-- ============ ZUORDNEN ============ -->
+<section class="view" id="v-aufnahme">
+  <div class="view-kopf"><h2>Mitglied der Abteilung zuordnen</h2></div>
+
+  <div class="suchkasten">
+    <p style="margin:0 0 14px;font-size:13.5px;color:var(--tinte-weich)">Ein bestehendes Vereinsmitglied kommt zum Fußball dazu. Geben Sie <b>Mitgliedsnummer</b> oder <b>Nachname und Geburtsdatum</b> ein.</p>
+    <div class="suchzeile">
+      <div><label>Mitgliedsnummer</label><input id="q-nr" placeholder="z. B. 1044"></div>
+      <div><label>oder Nachname</label><input id="q-name" placeholder="Wagner"></div>
+      <div><label>Geburtsdatum</label><input id="q-geb" placeholder="21.11.2011"></div>
+    </div>
+    <button class="knopf primaer" id="q-los">Suchen</button>
+    <div class="treffer" id="treffer" style="display:none"></div>
+  </div>
+
+  <div class="gesperrt">
+    <h4>Keine Trefferliste über den ganzen Verein</h4>
+    <p>Die Suche gibt <b>höchstens einen</b> Treffer zurück und nur, wenn die Angaben exakt passen. Sonst wäre der Umweg offen, sich über Suchtreffer nach und nach den kompletten Mitgliederbestand anzusehen — genau das soll die Abteilungsgrenze verhindern.</p>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 4 · Neuaufnahmen</span>
+    <p>Wenn jemand <b>ganz neu</b> in den Verein eintritt und gleich zum Fußball will: Legen Sie die Person selbst an — oder geben Sie den Aufnahmeantrag wie bisher an die Mitgliederverwaltung weiter?</p>
+    <p>Für „selbst anlegen“ spricht Tempo. Dagegen spricht, dass Beitragsart, Zahlweg und Mandat ohnehin von Kasse und Verwaltung kommen müssen — die Person wäre also erst mal unvollständig im System.</p>
+  </div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 5 · Austritt aus der Abteilung</span>
+    <p>Sie können jemanden aus dem <b>Fußball</b> herausnehmen. Der <b>Vereinsaustritt</b> bleibt bei der Mitgliederverwaltung — sonst würde versehentlich eine ganze Mitgliedschaft beendet, weil jemand nur die Sportart wechselt. Ist diese Trennung so richtig?</p>
+  </div>
+</section>
+
+<!-- ============ LISTEN ============ -->
+<section class="view" id="v-listen">
+  <div class="view-kopf"><h2>Listen &amp; Export</h2></div>
+  <div class="karte">
+    <table class="tabelle">
+      <thead><tr><th>Liste</th><th>Inhalt</th><th>Wofür</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Kontaktliste Abteilung</td><td>Name, Telefon, E-Mail</td><td>Absagen, Rundmails</td><td><button class="knopf">PDF</button> <button class="knopf">CSV</button></td></tr>
+        <tr><td>Jahrgangsliste</td><td>Name, Geburtsjahr, Mannschaft</td><td>Mannschaftseinteilung, Passwesen</td><td><button class="knopf">PDF</button> <button class="knopf">CSV</button></td></tr>
+        <tr><td>Geburtstage im Monat</td><td>Name, Datum, Alter</td><td>Gratulation im Training</td><td><button class="knopf">PDF</button></td></tr>
+        <tr><td>Passive Mitglieder</td><td>Name, seit wann passiv</td><td>Nachfassen, Reaktivierung</td><td><button class="knopf">PDF</button> <button class="knopf">CSV</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="hinweis">Jeder Export wird protokolliert: wer, wann, welche Liste. Kein Absperren, sondern Nachvollziehbarkeit — wenn eine Kontaktliste auftaucht, wo sie nicht hingehört, lässt sich klären, woher sie stammt.</div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 6 · Kontaktdaten außer Haus</span>
+    <p>Eine CSV mit 412 Telefonnummern ist schnell in einer WhatsApp-Gruppe. Reicht Ihnen ein <b>PDF ohne CSV</b> — oder brauchen Sie die Daten wirklich weiterverarbeitbar?</p>
+  </div>
+</section>
+
+<!-- ============ GESPERRT ============ -->
+<section class="view" id="v-gesperrt">
+  <div class="view-kopf"><h2>Was für Ihre Rolle gesperrt ist</h2></div>
+
+  <div class="gesperrt">
+    <h4>Mitglieder anderer Abteilungen</h4>
+    <p>Turnen, Tennis und Stockschützen tauchen für Sie nirgends auf — auch nicht in Suchergebnissen oder Summen. Wer in mehreren Abteilungen ist, erscheint bei Ihnen nur mit seiner Fußball-Zugehörigkeit.</p>
+  </div>
+
+  <div class="gesperrt">
+    <h4>Beiträge, Bankdaten, Mahnungen</h4>
+    <p>Ob jemand seinen Beitrag bezahlt hat, sehen Sie nicht. Das ist Sache des Kassiers. Der Server liefert die Tabellenblätter <code>Beitragskonto</code> und <code>Sollstellung</code> an Ihren Zugang gar nicht erst aus.</p>
+  </div>
+
+  <div class="gesperrt">
+    <h4>Führungszeugnisse und Lizenzdetails</h4>
+    <p>Sie sehen die Ampel „vollständig / fehlt etwas“, nicht die dahinterliegenden Daten.</p>
+  </div>
+
+  <div class="hinweis">Wichtig für das Gespräch: Das ist keine Anzeige-Einstellung, die man aus Versehen umlegt. Der Zugang läuft über ein Programm, das nur die für Ihre Rolle erlaubten Daten überhaupt ausliefert. Die Tabelle selbst bekommt niemand direkt in die Hand.</div>
+
+  <div class="frage">
+    <span class="frage-nr">Frage 7 · Sind die Grenzen praxistauglich?</span>
+    <p>Gibt es einen Fall, in dem Sie regelmäßig etwas brauchen, das oben gesperrt ist? Lieber jetzt sagen — nachträglich Rechte aufzumachen ist unangenehmer, als sie von Anfang an richtig zu schneiden.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <b>Klick-Mockup, keine echten Daten und keine Logik.</b> Alle Namen und Zahlen sind erfunden. Zweck: klären, ob Zuschnitt und Arbeitsabläufe für die Abteilungsleitung passen, bevor programmiert wird. Gelb markiert sind die offenen Entscheidungen.
+</footer>
+
+<script>
+const kader = [
+  {id:"1187",name:"Wagner, Felix",geb:"03.05.2004",klasse:"Herren",funktion:"Trainer",seit:"01.08.2024",status:"aktiv",
+   tel:"—",mail:"felix.w@example.de",ort:"84028 Landshut",strasse:"Am Anger 7",
+   mitglied:"01.02.2018",weitere:0,nachweis:"fehlt etwas",trainer:true},
+  {id:"1044",name:"Wagner, Lena",geb:"21.11.2011",klasse:"U15",funktion:"Spielerin",seit:"01.08.2023",status:"aktiv",
+   tel:"09452 1234",mail:"—",ort:"84061 Ergoldsbach",strasse:"Rosenweg 12",
+   mitglied:"01.02.2018",weitere:1,jugend:true},
+  {id:"1042",name:"Wagner, Michael",geb:"14.03.1978",klasse:"Herren",funktion:"Spieler",seit:"01.09.2001",status:"passiv",
+   tel:"09452 1234",mail:"m.wagner@example.de",ort:"84061 Ergoldsbach",strasse:"Rosenweg 12",
+   mitglied:"01.09.2001",weitere:1},
+  {id:"1099",name:"Obermeier, Thomas",geb:"11.02.1982",klasse:"Herren",funktion:"Abteilungsleiter",seit:"01.07.1996",status:"aktiv",
+   tel:"0170 9998877",mail:"obermeier@example.de",ort:"84061 Ergoldsbach",strasse:"Schulweg 21",
+   mitglied:"01.07.1996",weitere:0,selbst:true},
+  {id:"1355",name:"Schmid, Korbinian",geb:"08.09.1995",klasse:"Herren",funktion:"Trainer",seit:"01.07.2022",status:"aktiv",
+   tel:"0151 2223344",mail:"k.schmid@example.de",ort:"84061 Ergoldsbach",strasse:"Birkenweg 5",
+   mitglied:"01.01.2010",weitere:0,trainer:true},
+  {id:"1288",name:"Lehner, Julia",geb:"24.04.1999",klasse:"Herren",funktion:"Betreuerin",seit:"01.09.2023",status:"aktiv",
+   tel:"0160 5556677",mail:"j.lehner@example.de",ort:"84061 Ergoldsbach",strasse:"Feldstraße 14",
+   mitglied:"01.09.2012",weitere:1,trainer:true},
+  {id:"1412",name:"Vogl, Andreas",geb:"30.07.1991",klasse:"Herren",funktion:"Trainer",seit:"01.03.2026",status:"aktiv",
+   tel:"0176 4443322",mail:"a.vogl@example.de",ort:"84061 Ergoldsbach",strasse:"Mühlweg 9",
+   mitglied:"01.03.2026",weitere:0,trainer:true,neu:true},
+  {id:"1490",name:"Riedl, Maximilian",geb:"12.06.2016",klasse:"U11",funktion:"Spieler",seit:"01.09.2023",status:"aktiv",
+   tel:"09452 8877",mail:"—",ort:"84061 Ergoldsbach",strasse:"Sandgrube 3",
+   mitglied:"01.09.2023",weitere:0,jugend:true},
+  {id:"1501",name:"Aigner, Sophie",geb:"19.02.2014",klasse:"U15",funktion:"Spielerin",seit:"01.09.2024",status:"aktiv",
+   tel:"09452 3344",mail:"—",ort:"84061 Ergoldsbach",strasse:"Kirchgasse 11",
+   mitglied:"01.09.2024",weitere:1,jugend:true},
+  {id:"1023",name:"Kellner, Hans",geb:"02.10.1968",klasse:"Herren",funktion:"Spieler",seit:"01.01.1985",status:"passiv",
+   tel:"09452 6543",mail:"—",ort:"84061 Ergoldsbach",strasse:"Bahnhofstraße 7",
+   mitglied:"01.01.1985",weitere:0}
+];
+
+const tbody=document.getElementById('liste');
+let gewaehlt="1044";
+
+function klasseFilter(k,f){
+  if(!f) return true;
+  if(f==="u11") return k==="U11";
+  if(f==="u15") return k==="U15";
+  if(f==="u19") return k==="U19";
+  if(f==="herren") return k==="Herren";
+  return true;
+}
+
+function renderListe(){
+  const q=document.getElementById('suche').value.toLowerCase();
+  const fu=document.getElementById('f-funktion').value;
+  const st=document.getElementById('f-status').value;
+  const ja=document.getElementById('f-jahrgang').value;
+  const t=kader.filter(m=>{
+    if(q && !(m.name.toLowerCase().includes(q)||m.id.includes(q))) return false;
+    if(fu && !m.funktion.startsWith(fu.replace(/in$/,''))) return false;
+    if(st && m.status!==st) return false;
+    if(!klasseFilter(m.klasse,ja)) return false;
+    return true;
+  });
+  tbody.innerHTML=t.map(m=>`
+    <tr class="klick ${m.id===gewaehlt?'gewaehlt':''}" data-id="${m.id}">
+      <td class="nr">${m.id}</td>
+      <td>${m.name}</td>
+      <td class="num">${m.geb}</td>
+      <td>${m.klasse}</td>
+      <td>${m.funktion}</td>
+      <td class="num">${m.seit}</td>
+      <td>${m.status==="aktiv"?'<span class="marke aktiv">aktiv</span>':'<span class="marke aus">passiv</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:#5a6b78;padding:22px 11px">Niemand in Ihrer Abteilung passt zu diesen Filtern.</td></tr>';
+  document.getElementById('trefferzahl').textContent=t.length+' von '+kader.length+' angezeigt (Beispielausschnitt)';
+}
+
+function renderDetail(){
+  const m=kader.find(x=>x.id===gewaehlt);
+  if(!m){document.getElementById('detail').innerHTML='';return;}
+  document.getElementById('detail').innerHTML=`
+  <div class="detail-kopf">
+    <h3>${m.name}</h3>
+    <div class="unter">Mitgliedsnummer ${m.id} · ${m.status==="aktiv"?'<span class="marke aktiv">aktiv</span>':'<span class="marke aus">passiv</span>'}${m.jugend?' · <span class="marke warn">minderjährig</span>':''}</div>
+  </div>
+  <div class="detail-inhalt">
+    <div class="gruppe-titel">In Ihrer Abteilung</div>
+    <dl class="feldliste">
+      <dt>Funktion</dt><dd>${m.funktion}</dd>
+      <dt>Altersklasse</dt><dd>${m.klasse}</dd>
+      <dt>Dabei seit</dt><dd class="num">${m.seit}</dd>
+      <dt>Status</dt><dd>${m.status}</dd>
+    </dl>
+    <p style="margin:12px 0 0"><button class="knopf">Funktion ändern</button> <button class="knopf">auf passiv setzen</button> <button class="knopf">aus Abteilung nehmen</button></p>
+
+    <div class="gruppe-titel">Kontakt</div>
+    <dl class="feldliste">
+      <dt>Anschrift</dt><dd>${m.strasse}<br>${m.ort}</dd>
+      <dt>Telefon</dt><dd>${m.tel}</dd>
+      <dt>E-Mail</dt><dd>${m.mail}</dd>
+      <dt>Geburtsdatum</dt><dd class="num">${m.geb}</dd>
+      <dt>Vereinsmitglied seit</dt><dd class="num">${m.mitglied}</dd>
+    </dl>
+    <p style="margin:10px 0 0;font-size:12.5px;color:var(--tinte-weich)">Kontaktdaten können Sie lesen, aber nicht ändern — Adresspflege läuft über die Mitgliederverwaltung, damit sie an einer Stelle stimmt.</p>
+
+    ${m.weitere?`<div class="gesperrt"><h4>Weitere Abteilungen</h4><p>Diese Person ist noch in ${m.weitere} weiteren Abteilung${m.weitere>1?'en':''}. Welche das ist, sehen Sie nicht.</p></div>`:''}
+
+    ${m.trainer?`<div class="gruppe-titel">Nachweise</div>
+      <dl class="feldliste"><dt>Stand</dt><dd>${m.nachweis==="fehlt etwas"?'<span class="marke rot">fehlt etwas</span>':'<span class="marke ok">vollständig</span>'}</dd></dl>
+      <div class="gesperrt"><h4>Details nur für Vorstand / Jugendleitung</h4><p>Lizenzstufe, Erste-Hilfe-Kurs und der Vermerk zum erweiterten Führungszeugnis sind hier nicht abrufbar.</p></div>`:''}
+
+    <div class="gesperrt"><h4>Beitrag</h4><p>Beitragsart, Zahlweg und offene Beträge sind für Ihre Rolle nicht geladen.</p></div>
+
+    ${m.jugend?`<div class="frage"><span class="frage-nr">Frage 8 · Eltern erreichen</span><p>Bei Minderjährigen steht hier die Festnetznummer der Familie. Brauchen Sie zusätzlich einen benannten Ansprechpartner mit Handynummer — für kurzfristige Absagen?</p></div>`:''}
+    ${m.selbst?`<div class="hinweis">Das sind Sie selbst. Auch der eigene Datensatz zeigt keine Beitragsdaten — die Rolle gilt ohne Ausnahme.</div>`:''}
+  </div>`;
+}
+
+tbody.addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-id]');
+  if(!tr) return;
+  gewaehlt=tr.dataset.id; renderListe(); renderDetail();
+});
+['suche','f-funktion','f-status','f-jahrgang'].forEach(id=>document.getElementById(id).addEventListener('input',renderListe));
+
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected','false'));
+  t.setAttribute('aria-selected','true');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('aktiv'));
+  document.getElementById(t.dataset.view).classList.add('aktiv');
+  window.scrollTo({top:0,behavior:'instant'});
+}));
+document.getElementById('s-sperren').addEventListener('change',e=>document.body.classList.toggle('sperren-aus',!e.target.checked));
+document.getElementById('s-fragen').addEventListener('change',e=>document.body.classList.toggle('fragen-aus',!e.target.checked));
+
+document.getElementById('q-los').addEventListener('click',()=>{
+  const nr=document.getElementById('q-nr').value.trim();
+  const nm=document.getElementById('q-name').value.trim().toLowerCase();
+  const gb=document.getElementById('q-geb').value.trim();
+  const box=document.getElementById('treffer');
+  box.style.display='block';
+  if(nr==="1044"||(nm==="wagner"&&gb==="21.11.2011")){
+    box.innerHTML=`<p style="margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--tinte-weich)">Ein Treffer</p>
+      <table class="tabelle" style="border:1px solid var(--linie)"><thead><tr><th>Nr.</th><th>Name</th><th>Geb.</th><th></th></tr></thead>
+      <tbody><tr><td class="nr">1044</td><td>Wagner, Lena</td><td class="num">21.11.2011</td><td><button class="knopf primaer">Zum Fußball zuordnen</button></td></tr></tbody></table>
+      <p style="margin:10px 0 0;font-size:12.5px;color:var(--tinte-weich)">Ist bereits zugeordnet — das Beispiel zeigt nur, wie ein Treffer aussieht.</p>`;
+  } else if(!nr && !nm && !gb){
+    box.innerHTML='<p style="margin:0;font-size:13.5px">Bitte eine Mitgliedsnummer eingeben — oder Nachname und Geburtsdatum zusammen.</p>';
+  } else {
+    box.innerHTML='<p style="margin:0;font-size:13.5px">Kein Treffer. Prüfen Sie die Schreibweise. Wenn die Person noch gar nicht im Verein ist, muss sie zuerst von der Mitgliederverwaltung aufgenommen werden.</p><p style="margin:8px 0 0;font-size:12.5px;color:var(--tinte-weich)">Probieren Sie zum Testen: Nummer <b>1044</b>, oder <b>Wagner</b> + <b>21.11.2011</b>.</p>';
+  }
+});
+
+renderListe(); renderDetail();
+</script>
+</body>
+</html>
