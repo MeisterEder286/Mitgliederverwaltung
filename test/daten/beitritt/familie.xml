@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETISCH – alle Angaben erfunden. Format wie Access-Export (ImportXML), Feldnamen mit _x0020_. -->
+<dataroot xmlns:od="urn:schemas-microsoft-com:officedata" generated="2026-10-20T10:00:00">
+<Daten16>
+<Anrede>Herr</Anrede>
+<Nachname>Beispielhuber</Nachname>
+<Vorname>Max</Vorname>
+<Strasse>Rosenweg 12a</Strasse>
+<Plz>84061</Plz>
+<Ort>Ergoldsbach</Ort>
+<GebDat>1980-05-01T00:00:00</GebDat>
+<EinDat>2026-10-01T00:00:00</EinDat>
+<Telefon>09452 9999</Telefon>
+<email>max.beispielhuber@example.de</email>
+<ReZiff>0</ReZiff>
+<BANK>Testbank</BANK>
+<IBAN>DE89 3704 0044 0532 0130 00</IBAN>
+<BIC>COBADEFFXXX</BIC>
+<Kontoinhaber>Beispielhuber, Max</Kontoinhaber>
+<Gesamtbeitrag>180</Gesamtbeitrag>
+<Zahler>0</Zahler>
+<Bemerkung>Antrag über die Homepage</Bemerkung>
+<Abteilung_x0020_1>Fussball</Abteilung_x0020_1>
+<Status_x0020_Abteilung_x0020_1>aktiv</Status_x0020_Abteilung_x0020_1>
+<Betrag_x0020_1>180</Betrag_x0020_1>
+</Daten16>
+<Daten16>
+<Anrede>Frau</Anrede>
+<Nachname>Beispielhuber</Nachname>
+<Vorname>Anna</Vorname>
+<Strasse>Rosenweg 12a</Strasse>
+<Plz>84061</Plz>
+<Ort>Ergoldsbach</Ort>
+<GebDat>1982-08-15T00:00:00</GebDat>
+<EinDat>2026-10-01T00:00:00</EinDat>
+<email>anna.beispielhuber@example.de</email>
+<Gesamtbeitrag>0</Gesamtbeitrag>
+<Zahler>0</Zahler>
+<Abteilung_x0020_1>Turnen</Abteilung_x0020_1>
+<Status_x0020_Abteilung_x0020_1>aktiv</Status_x0020_Abteilung_x0020_1>
+</Daten16>
+<Daten16>
+<Nachname>Beispielhuber</Nachname>
+<Vorname>Lena</Vorname>
+<Strasse>Rosenweg 12a</Strasse>
+<Plz>84061</Plz>
+<Ort>Ergoldsbach</Ort>
+<GebDat>2015-03-03T00:00:00</GebDat>
+<EinDat>2026-10-01T00:00:00</EinDat>
+<Geschlecht>w</Geschlecht>
+<Gesamtbeitrag>0</Gesamtbeitrag>
+<Zahler>0</Zahler>
+<Abteilung_x0020_1>Turnen</Abteilung_x0020_1>
+<Abteilung_x0020_2>Fussball</Abteilung_x0020_2>
+</Daten16>
+</dataroot>

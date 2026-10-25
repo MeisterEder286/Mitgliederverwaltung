@@ -194,6 +194,17 @@ function apiMitgliedSpeichern(id, version, werte) {
 ```
 Feldfehler: `throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld, meldung }])` – der Browser zeigt sie am Feld.
 
+### Beitritts-Import (`src/lib/beitritt.js` rein, `src/modul/Beitritt.js`, `src/api/Beitritt.js`, `client/ansicht_beitritt`)
+Nachfolger des Access-Moduls „BeitrittsXmlImportieren“. Der Browser liest die Dateien (`/dataroot/Daten16`, Elementnamen
+mit `_x0020_` entschlüsselt) und schickt je Antrag `{ datei, personen: [{ Feld: 'Text' }] }` an `apiBeitrittVorschau` bzw.
+`apiBeitrittImportieren(antraege, entscheidungen)` (Recht `mitglied_anlegen` und zusätzlich `konto_bearbeiten`;
+Grenzen 50 Anträge × 20 Personen). `Beitritt.plane` nutzt `Migration.migriere` mit vorläufigen IDs/Nummern (Person 1 =
+Zahler) und liefert Personen, Konto (IBAN maskiert), Gemeinschaft, Dubletten und Warnungen; `Beitritt.fuerBrowser` entfernt
+die internen Zeilen. Der Import läuft je Antrag in einem eigenen `DB.mitSperre` mit frisch gelesenen Daten: Nummern aus
+`Beitritt.nummernkreis` (max + 1, mindestens `_Konfig.mitgliedsnummer_naechste`, danach fortgeschrieben), Mandatsreferenz
+`TSV-<Jahr>-<Nr. Person 1>`, Prüfung erwartet = angelegt; bei jedem Fehler werden die neuen Zeilen per `DB.entfernen`
+zurückgenommen (Änderungen an Bestandszeilen – Wiedereintritt – erst nach allen Prüfungen). Protokoll ohne Klartext-IBAN.
+
 ### Wartung (`src/modul/Wartung.js`, Trigger in `src/api/Wartung.js`)
 `wartungNachts()` (täglich gegen 02:00, nur Funktionskonto) erledigt nacheinander, jeder Schritt für sich abgesichert:
 `status` (Mitglied.status an `Mitgliedschaft.status` angleichen), `fristen` (FZ-Fristen, `NachweiseModul.fristenAktualisieren`),

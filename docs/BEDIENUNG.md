@@ -37,6 +37,16 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 ## Mitgliederverwaltung / Vorstand
 - **Neues Mitglied:** Mitglieder → „Neues Mitglied“. Nummer wird automatisch vergeben; bei Namensgleichheit mit gleichem
   Geburtsdatum erscheint ein Hinweis (oft ein Wiedereintritt → „Wiedereintritt“ statt neu anlegen).
+- **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
+  bearbeiten). Eine oder mehrere Antrags-Dateien (XML wie bisher aus Access) auswählen – sie werden nur im Browser gelesen.
+  Die Vorschau zeigt je Antrag die Personen mit vorläufiger Nummer, das Konto (IBAN nur maskiert), ggf. den
+  Familienbeitrag und Warnungen. Wie in Access zahlt Person 1 selbst, alle weiteren über Person 1; die Bankdaten von
+  Person 1 werden übernommen, die Mitgliedsnummern immer **neu** vergeben (höchste + 1). Ungültige IBAN → Konto wird
+  „Überweisung“ mit Hinweis. Gibt es Name + Vorname (+ Geburtsdatum) schon, bitte je Person wählen: „Trotzdem neu
+  anlegen“ oder „Wiedereintritt“ (nur bei Ausgetretenen; die alte Nummer bleibt). Einzelne Anträge lassen sich abwählen.
+  Jeder Antrag wird ganz oder gar nicht gespeichert; der Bericht nennt je Datei die vergebenen Nummern und was nicht
+  importiert wurde. Danach „Aufnahmebestätigungen erstellen“. Mandatsdatum = Eintrittsdatum – mit dem unterschriebenen
+  Mandat abgleichen.
 - **Austritt:** im Mitglied → „Austritt“. Ist die Person Zahler für andere, fragt das System, wie es mit dem Konto weitergeht.
 - **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!).
 - **Familien:** einmal im Herbst „Fallen heraus“ für das nächste Jahr prüfen. Wer Schule/Studium/Ausbildung nachweist,

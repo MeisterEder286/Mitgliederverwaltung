@@ -163,7 +163,8 @@ test('Großer synthetischer Verein (~1.200): Klärliste, Plan 2027, Lauf, XSD-va
   const x = g.Sepa.xml(l, GLAEUBIGER, { erstelltAm: '2026-10-25T12:00:00' });
   assert.strictEqual(x.ok, true, JSON.stringify(x.fehler));
   const ms = Date.now() - t0;
-  assert.ok(ms < 5000, 'Laufzeit ' + ms + ' ms');
+  // Großzügige Grenze: der Test läuft parallel zu anderen; er soll grobe Ausreißer finden, nicht Millisekunden messen.
+  assert.ok(ms < 20000, 'Laufzeit ' + ms + ' ms');
   if (!hatXmllint()) return;
   const datei = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sepa-')), 'gross.xml');
   fs.writeFileSync(datei, x.xml);

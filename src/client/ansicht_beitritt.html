@@ -1,0 +1,172 @@
+<!--
+  ansicht_beitritt – Beitritte aus XML-Dateien importieren (Nachfolger des Access-Moduls „BeitrittsXmlImportieren“).
+
+  Zweck:      Eine oder mehrere Beitritts-XML-Dateien (Access-Format /dataroot/Daten16) auswählen → Vorschau je Antrag
+              (vorläufige Nummern, Konto, Familie, Dubletten, Warnungen) → Entscheidungen → Importieren → Bericht mit
+              Links zu den Personen und „Aufnahmebestätigungen erstellen“.
+  Datenquelle: Die Dateien liest NUR dieser Browser (FileReader + DOMParser); geschickt werden je Person die Felder als
+              Texte an apiBeitrittVorschau / apiBeitrittImportieren. Nichts wird als Datei gespeichert.
+  Wer darf:   mitglied_anlegen und konto_bearbeiten (Bankdaten werden übernommen) – serverseitig erzwungen.
+  Besonderheiten: Je Antrag zahlt Person 1 selbst, alle weiteren über Person 1 (wie in Access). Mitgliedsnummern werden
+              immer NEU vergeben (höchste + 1). Die IBAN zeigt die Vorschau nur maskiert.
+-->
+<style>
+  .bt-datei { max-width: 100%; min-height: 44px; margin: 6px 0 12px; }
+  .bt-antrag h2 { margin: 0 0 6px; font-size: 1.05rem; overflow-wrap: anywhere; }
+  .bt-person { border-top: 1px solid var(--rand); padding: 8px 0; }
+  .bt-person:first-of-type { border-top: 0; }
+  .bt-person select { min-height: 44px; max-width: 100%; margin-top: 4px; }
+  .bt-warnung { color: #7a5600; font-size: 0.88rem; margin: 2px 0; }
+  .bt-zeile { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 6px 0; }
+  .bt-zeile label { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; }
+  .bt-bericht li { margin: 4px 0; }
+</style>
+<script>
+(function () {
+  'use strict';
+  var A = window.App;
+  var MAX_DATEI = 500000;
+
+  /** Access-XML-Elementnamen entschlüsseln: „Abteilung_x0020_1“ → „Abteilung 1“. */
+  function xmlName(n) { return String(n).replace(/_x([0-9A-Fa-f]{4})_/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); }); }
+
+  /** Eine Datei zerlegen → { datei, personen: [{ Feld: 'Text' }] } oder { datei, fehler }. */
+  function zerlege(name, text) {
+    var doc;
+    try { doc = new DOMParser().parseFromString(String(text || ''), 'application/xml'); } catch (e) { return { datei: name, fehler: 'Datei nicht lesbar.' }; }
+    if (!doc || doc.getElementsByTagName('parsererror').length) return { datei: name, fehler: 'Keine gültige XML-Datei.' };
+    var eintraege = doc.getElementsByTagName('Daten16');
+    if (!eintraege.length) return { datei: name, fehler: 'Keine Datensätze (<Daten16>) in der Datei.' };
+    var personen = Array.prototype.map.call(eintraege, function (e) {
+      var o = {};
+      Array.prototype.forEach.call(e.children, function (k) { o[xmlName(k.tagName)] = (k.textContent || '').trim(); });
+      return o;
+    });
+    return { datei: name, personen: personen };
+  }
+  A.beitrittXml = { zerlege: zerlege };   // für Tests und Nachfolger
+
+  function liesDateien(dateien) {
+    return Promise.all(Array.prototype.map.call(dateien, function (f) {
+      return new Promise(function (ok) {
+        if (f.size > MAX_DATEI) { ok({ datei: f.name, fehler: 'Datei zu groß.' }); return; }
+        var r = new FileReader();
+        r.onload = function () { ok(zerlege(f.name, r.result)); };
+        r.onerror = function () { ok({ datei: f.name, fehler: 'Datei nicht lesbar.' }); };
+        r.readAsText(f, 'utf-8');
+      });
+    }));
+  }
+
+  function zeichne(ziel) {
+    ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
+    ziel.appendChild(A.el('h1', 'Beitritte aus XML importieren'));
+    ziel.appendChild(A.el('p', 'Beitrittsanträge im XML-Format (wie bisher in Access) auswählen – auch mehrere auf einmal. Je Antrag zahlt Person 1 ' +
+      'selbst, alle weiteren über Person 1. Die Mitgliedsnummern werden neu vergeben. Die Dateien werden nur in diesem Browser gelesen.', { className: 'leise' }));
+    var eingabe = A.el('input', null, { type: 'file', accept: '.xml,application/xml,text/xml', multiple: true, className: 'bt-datei' });
+    eingabe.setAttribute('aria-label', 'Beitritts-XML-Dateien auswählen');
+    var bereich = A.el('div');
+    ziel.appendChild(eingabe);
+    ziel.appendChild(bereich);
+    eingabe.addEventListener('change', function () {
+      A.leere(bereich);
+      if (!eingabe.files || !eingabe.files.length) return;
+      bereich.appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
+      liesDateien(eingabe.files).then(function (liste) {
+        var lesbar = liste.filter(function (x) { return !x.fehler; });
+        var kaputt = liste.filter(function (x) { return x.fehler; });
+        A.leere(bereich);
+        kaputt.forEach(function (x) { bereich.appendChild(A.el('p', 'NICHT lesbar: ' + x.datei + ' – ' + x.fehler, { className: 'meldung' })); });
+        if (!lesbar.length) return;
+        A.rufe('apiBeitrittVorschau', lesbar).then(function (v) { zeigeVorschau(bereich, lesbar, v); }, function () {});
+      });
+    });
+  }
+
+  function zeigeVorschau(bereich, antraege, v) {
+    var entscheidungen = antraege.map(function (a, i) { return { index: i, ueberspringen: false, gemeinschaft: true, personen: {} }; });
+    if (v.hinweis) bereich.appendChild(A.el('p', v.hinweis, { className: 'leise' }));
+    v.antraege.forEach(function (a, i) {
+      var e = entscheidungen[i];
+      var karte = A.el('section', null, { className: 'karte bt-antrag' });
+      karte.appendChild(A.el('h2', a.datei + ' – ' + a.personen.length + ' Person(en)'));
+      var mit = A.el('input', null, { type: 'checkbox', checked: true });
+      mit.addEventListener('change', function () { e.ueberspringen = !mit.checked; });
+      karte.appendChild(A.el('div', null, { className: 'bt-zeile' }, [A.el('label', null, null, [mit, A.el('span', 'Diesen Antrag importieren')])]));
+      if (a.konto) {
+        karte.appendChild(A.details([
+          ['Konto (Person 1)', [a.konto.inhaber, a.konto.zahlweg, a.konto.iban_maskiert].filter(Boolean).join(' · ')],
+          ['Mandatsdatum', a.konto.mandatsdatum ? A.datum(a.konto.mandatsdatum) : '–']
+        ]));
+      }
+      if (a.gemeinschaft) {
+        var gm = A.el('input', null, { type: 'checkbox', checked: true });
+        gm.addEventListener('change', function () { e.gemeinschaft = gm.checked; });
+        karte.appendChild(A.el('div', null, { className: 'bt-zeile' }, [A.el('label', null, null, [gm,
+          A.el('span', 'Als ' + a.gemeinschaft.bezeichnung + ' (' + A.betrag(a.gemeinschaft.festbetrag) + ' gemeinsam) führen')])]));
+      }
+      a.warnungen.forEach(function (w) { karte.appendChild(A.el('p', '⚠ ' + w, { className: 'bt-warnung' })); });
+      a.personen.forEach(function (p) {
+        var box = A.el('div', null, { className: 'bt-person' });
+        var art = (A.daten.liste('beitragsarten').filter(function (b) { return b.beitragsart_id === p.beitragsart_id; })[0] || {}).bezeichnung;
+        box.appendChild(A.el('strong', 'Nr. ' + p.nummer_vorlaeufig + ' (vorläufig) · ' + p.name));
+        box.appendChild(A.el('div', [p.geburtsdatum ? 'geb. ' + A.datum(p.geburtsdatum) : null, p.rolle,
+          p.in_gemeinschaft ? 'Familienbeitrag' : (art ? art : 'Beitragsart offen')].filter(Boolean).join(' · '), { className: 'leise' }));
+        p.warnungen.forEach(function (w) { box.appendChild(A.el('p', '⚠ ' + w, { className: 'bt-warnung' })); });
+        if (p.dubletten.length) {
+          var d = p.dubletten[0];
+          box.appendChild(A.el('p', 'Bereits vorhanden als Nr. ' + d.mitgliedsnummer + (d.status === 'aktiv' ? ' (aktiv)' : d.ausgetreten_am ? ' (ausgetreten ' + A.datum(d.ausgetreten_am) + ')' : ' (' + (d.status || '–') + ')'), { className: 'bt-warnung' }));
+          var wahl = A.el('select');
+          wahl.setAttribute('aria-label', 'Entscheidung für ' + p.name);
+          [['', 'Bitte wählen …'], ['neu', 'Trotzdem als neue Person anlegen'], ['wiedereintritt', 'Wiedereintritt bei Nr. ' + d.mitgliedsnummer]].forEach(function (o) {
+            wahl.appendChild(A.el('option', o[1], { value: o[0] }));
+          });
+          wahl.addEventListener('change', function () { e.personen[p.index] = wahl.value; });
+          box.appendChild(wahl);
+        }
+        karte.appendChild(box);
+      });
+      bereich.appendChild(karte);
+    });
+    var los = A.knopf('Importieren', function () {
+      los.disabled = true;
+      A.rufe('apiBeitrittImportieren', antraege, entscheidungen).then(function (r) {
+        A.daten.uebernehme(r.aenderung);
+        A.leere(bereich);
+        zeigeBericht(bereich, r);
+      }, function () { los.disabled = false; });
+    });
+    bereich.appendChild(A.el('div', null, { className: 'knopfleiste' }, [los]));
+  }
+
+  function zeigeBericht(bereich, r) {
+    bereich.appendChild(A.el('h2', 'Ergebnis'));
+    bereich.appendChild(A.el('p', r.kopf, { className: 'meldung ' + (r.ergebnisse.every(function (x) { return x.ok; }) ? 'ok' : 'hinweis') }));
+    r.ergebnisse.forEach(function (x) {
+      var k = A.el('section', null, { className: 'karte' });
+      if (!x.ok) { k.appendChild(A.el('p', 'NICHT importiert: ' + x.datei + ' – ' + x.grund)); bereich.appendChild(k); return; }
+      k.appendChild(A.el('strong', 'Datei: ' + x.datei + ' (' + x.personen.length + ' Person(en))' + (x.gemeinschaft ? ' · ' + x.gemeinschaft : '')));
+      var ul = A.el('ul', null, { className: 'liste bt-bericht' });
+      x.personen.forEach(function (p) {
+        var li = A.el('li');
+        var a = A.el('a', 'Nr. ' + p.nummer + '  ' + p.name, { href: '#' });
+        a.addEventListener('click', function (ev) { ev.preventDefault(); A.zeige('mitglied', { id: p.mitglied_id }); });
+        li.appendChild(a);
+        li.appendChild(document.createTextNode('  (' + p.rolle + (p.wiedereintritt ? ', Wiedereintritt' : '') + ')'));
+        ul.appendChild(li);
+      });
+      k.appendChild(ul);
+      (x.warnungen || []).forEach(function (w) { k.appendChild(A.el('p', '⚠ ' + w, { className: 'bt-warnung' })); });
+      if (x.konto_id) k.appendChild(A.knopf('Konto ' + x.konto_id + ' öffnen', function () { A.zeige('konto', { id: x.konto_id }); }, 'zweit klein'));
+      bereich.appendChild(k);
+    });
+    if (r.mitglied_ids.length && A.darf('anschreiben_erstellen')) {
+      bereich.appendChild(A.knopf('Aufnahmebestätigungen erstellen', function () {
+        A.zeige('korrespondenz', { anlass: 'Aufnahmebestätigung', mitglied_ids: r.mitglied_ids });
+      }));
+    }
+  }
+
+  A.registriere('beitritt', { titel: 'Beitritte importieren', aktion: 'mitglied_anlegen', versteckt: true, gehoertZu: 'mitglieder', zeichne: zeichne });
+})();
+</script>

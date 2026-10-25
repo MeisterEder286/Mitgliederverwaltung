@@ -230,6 +230,7 @@
     var titelText = istAL() ? 'Meine Abteilung' : 'Mitglieder';
     var knoepfe = [];
     if (A.darf('mitglied_anlegen')) knoepfe.push(A.knopf('Neues Mitglied', function () { A.zeige('mitglied_neu'); }));
+    if (A.darf('mitglied_anlegen') && A.darf('konto_bearbeiten')) knoepfe.push(A.knopf('Beitritte aus XML importieren', function () { A.zeige('beitritt'); }, 'zweit'));
     ziel.appendChild(A.abschnitt(titelText, knoepfe, 'h1'));
 
     var zl = zuletzt().map(mitglied).filter(Boolean);

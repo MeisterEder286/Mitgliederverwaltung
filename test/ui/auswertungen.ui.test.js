@@ -1,6 +1,6 @@
 /**
  * Oberflächentest Auswertungen: Reiter je Rolle, Export mit Protokoll, BLSV-Nachmeldung, Eingabehilfen im Formular
- * „Neues Mitglied“ (Anrede → Geschlecht, PLZ → Ort) und XML-Import ohne Übernahme der Bankdaten. Mobil 360 px.
+ * „Neues Mitglied“ (Anrede → Geschlecht, PLZ → Ort) und Verweis auf den Beitritts-Import. Mobil 360 px.
  * Läuft mit npm run test:ui.
  */
 'use strict';
@@ -8,31 +8,6 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { starteOberflaeche } = require('./harness');
 
-const XML = `<?xml version="1.0" encoding="UTF-8"?>
-<dataroot xmlns:od="urn:schemas-microsoft-com:officedata">
-  <Daten16>
-    <Anrede>Frau</Anrede>
-    <Nachname>Testerin</Nachname>
-    <Vorname>Xenia</Vorname>
-    <Strasse>Am Anger 7a</Strasse>
-    <Plz>84061</Plz>
-    <Ort>Ergoldsbach</Ort>
-    <Telefon>09452 1111</Telefon>
-    <email>x.testerin@example.de</email>
-    <GebDat>2001-04-03T00:00:00</GebDat>
-    <EinDat>2026-11-01T00:00:00</EinDat>
-    <BANK>Sparkasse</BANK>
-    <IBAN>DE89370400440532013000</IBAN>
-    <BIC>COBADEFFXXX</BIC>
-    <Kontoinhaber>Testerin Xenia</Kontoinhaber>
-    <Gesamtbeitrag>100</Gesamtbeitrag>
-    <Zahler>0</Zahler>
-    <ReZiff>0</ReZiff>
-    <Abteilung_x0020_1>Fussball</Abteilung_x0020_1>
-    <Status_x0020_Abteilung_x0020_1>aktiv</Status_x0020_Abteilung_x0020_1>
-    <Betrag_x0020_1>100</Betrag_x0020_1>
-  </Daten16>
-</dataroot>`;
 
 test('Auswertungen als Mitgliederverwalter: alle Reiter, Export protokolliert, 360 px ohne Querscrollen', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
@@ -94,12 +69,12 @@ test('BLSV-Nachmeldung in Berichte', async () => {
   } finally { await ui.schliessen(); }
 });
 
-test('Neues Mitglied: XML-Import füllt vor (ohne Bankdaten), Anrede → Geschlecht, PLZ → Ort', async () => {
+test('Neues Mitglied: Anrede → Geschlecht, PLZ → Ort, Verweis auf den Beitritts-Import', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   const p = ui.page;
   try {
     await p.evaluate(() => App.zeige('mitglied_neu'));
-    await p.waitForSelector('text=Aus XML-Datei übernehmen');
+    await p.waitForSelector('text=Beitrittsanträge aus XML-Dateien importieren');
     // Anrede → Geschlecht (Divers → d; Access hätte „w“ gesetzt)
     await p.getByLabel('Anrede', { exact: true }).selectOption('Divers');
     assert.strictEqual(await p.getByLabel('Geschlecht', { exact: true }).inputValue(), 'd');
@@ -108,23 +83,9 @@ test('Neues Mitglied: XML-Import füllt vor (ohne Bankdaten), Anrede → Geschle
     assert.ok((await p.getByLabel('Ort', { exact: true }).inputValue()).length > 0);
     await p.getByLabel('Ort', { exact: true }).fill('');
     await p.getByLabel('Geschlecht', { exact: true }).selectOption('');
-    // XML-Import
-    await p.getByLabel('XML-Datei des Mitgliedsantrags').setInputFiles({ name: 'antrag.xml', mimeType: 'text/xml', buffer: Buffer.from(XML, 'utf8') });
-    await p.waitForSelector('text=Übernommen:');
-    assert.strictEqual(await p.getByLabel('Nachname *', { exact: true }).inputValue(), 'Testerin');
-    assert.strictEqual(await p.getByLabel('Hausnummer', { exact: true }).inputValue(), '7a');
-    assert.strictEqual(await p.getByLabel('Geburtsdatum', { exact: true }).inputValue(), '03.04.2001');
-    assert.strictEqual(await p.getByLabel('Geschlecht', { exact: true }).inputValue(), 'w');
-    const fussball = p.locator('.mv-abteilungswahl label', { hasText: 'Fußball' }).locator('input[type=checkbox]');
-    assert.strictEqual(await fussball.isChecked(), true);
-    // Bankdaten nur als Hinweis, in keinem Eingabefeld
-    assert.ok(await p.isVisible('text=wurden NICHT übernommen'));
-    const werte = await p.$$eval('input, select, textarea', l => l.map(e => e.value).join('|'));
-    assert.ok(!werte.includes('DE89370400440532013000'), 'IBAN in einem Feld');
-    assert.ok(!(await p.content()).includes('DE89370400440532013000'), 'IBAN im Klartext auf der Seite');
-    // Parser direkt: kaputte Datei
-    const kaputt = await p.evaluate(() => App.xmlAntrag.lese('<kein xml'));
-    assert.ok(kaputt.fehler);
+    // XML-Import liegt jetzt in der Ansicht „Beitritte importieren“
+    await p.locator('a', { hasText: 'Beitrittsanträge aus XML-Dateien importieren' }).click();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'beitritt');
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });

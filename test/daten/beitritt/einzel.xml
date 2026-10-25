@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETISCH – alle Angaben erfunden. Format wie Access-Export (ImportXML). -->
+<dataroot xmlns:od="urn:schemas-microsoft-com:officedata" generated="2026-10-21T09:00:00">
+<Daten16>
+<Anrede>Frau</Anrede>
+<Titel>Dr.</Titel>
+<Nachname>Musterfrau</Nachname>
+<Vorname>Erika</Vorname>
+<Strasse>Am Anger 7</Strasse>
+<Plz>84028</Plz>
+<Ort>Landshut</Ort>
+<GebDat>1990-12-24T00:00:00</GebDat>
+<EinDat>2026-11-01T00:00:00</EinDat>
+<Handy>0151 1234567</Handy>
+<email>erika.musterfrau@example.de</email>
+<IBAN>DE02120300000000202051</IBAN>
+<Kontoinhaber></Kontoinhaber>
+<Gesamtbeitrag>100</Gesamtbeitrag>
+<Zahler>0</Zahler>
+<Abteilung_x0020_1>Tennis</Abteilung_x0020_1>
+<Status_x0020_Abteilung_x0020_1>aktiv</Status_x0020_Abteilung_x0020_1>
+</Daten16>
+</dataroot>

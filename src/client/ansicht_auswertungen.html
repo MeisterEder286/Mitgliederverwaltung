@@ -1,7 +1,7 @@
 <!--
   ansicht_auswertungen – Auswertungen und Listen (Nachfolger der Access-Abfragen/Berichte AltersgruppenA,
   Gesamtmitglieder, Statistik, Jug19A, 65neuA, SchiriA, MitgliederlisteB, Mitgliederliste-kurz) sowie Eingabehilfen
-  aus dem Access-Formular „Personalien“ (Anrede → Geschlecht, PLZ → Ort, XML-Import eines Antrags).
+  aus dem Access-Formular „Personalien“ (Anrede → Geschlecht, PLZ → Ort; der XML-Import liegt in ansicht_beitritt).
 
   Zweck:      Ein Aufruf (apiAuswertungen) liefert alle Zahlen; danach wird lokal zwischen den Reitern umgeschaltet.
               Mitgliederlisten entstehen direkt aus dem lokalen Datenbestand (App.daten).
@@ -11,9 +11,8 @@
   Besonderheiten:
     - Jeder Export (CSV/Druck) wird protokolliert (apiAuswertungExportVermerken, ohne Personendaten im Protokoll).
     - Diagramme ohne Bibliothek (SVG); dieselben Zahlen stehen immer auch als Tabelle daneben (barrierearm).
-    - XML-Import: Die Datei wird NUR im Browser gelesen (FileReader/DOMParser), nichts wird hochgeladen. Bankdaten aus
-      der Datei werden bewusst NICHT übernommen (Sicherheitsregel D3: keine IBAN über Webformulare – Erfassung erst
-      vom unterschriebenen Formular im Bereich Finanzen).
+    - Beitritte aus XML-Dateien (mit Bankdaten und neuer Mitgliedsnummer, Entscheidung 10/2026) importiert die Ansicht
+      „Beitritte importieren“ (client/ansicht_beitritt); hier steht im Formular „Neues Mitglied“ nur ein Verweis darauf.
 -->
 <style>
   .aw-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0 0 12px; }
@@ -23,7 +22,6 @@
   .aw-diagramm text { font: 15px system-ui, sans-serif; fill: var(--text); }
   td.aw-summe { font-weight: 700; border-top: 2px solid var(--text); }
   .aw-xml { border: 1px dashed var(--rand); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px; }
-  .aw-xml input[type=file] { max-width: 100%; min-height: 44px; margin-top: 6px; }
   .aw-hinweis { font-size: 0.85rem; color: var(--text-leise); margin: 4px 0 0; }
 </style>
 <script>
@@ -367,129 +365,13 @@
       plz.addEventListener('change', pruefe);
       plz.addEventListener('input', pruefe);
     }
-    if (modus === 'neu') ziel.insertBefore(xmlImportBox(formular, ziel), formular.element);
+    // Beitritte aus XML (mit Bankdaten, neuer Nummer, Familien) laufen über die eigene Ansicht „Beitritte importieren“
+    if (modus === 'neu' && A.darf('konto_bearbeiten')) {
+      var link = A.el('a', 'Beitrittsanträge aus XML-Dateien importieren', { href: '#' });
+      link.addEventListener('click', function (e) { e.preventDefault(); A.zeige('beitritt'); });
+      ziel.insertBefore(A.el('p', null, { className: 'aw-xml' }, [A.el('span', 'Antrag als XML-Datei? '), link]), formular.element);
+    }
   });
 
-  // ================================================================== XML-Import (Access „Befehl1011“)
-
-  /** _x0020_ usw. aus Access-XML-Elementnamen entschlüsseln: „Abteilung_x0020_1“ → „Abteilung 1“. */
-  function xmlName(n) { return String(n).replace(/_x([0-9A-Fa-f]{4})_/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); }); }
-  function schluessel(n) { return A.falte(xmlName(n)).replace(/[^a-z0-9]/g, ''); }
-  function isoAus(t) {
-    if (!t) return null;
-    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
-    if (m) return m[1] + '-' + m[2] + '-' + m[3];
-    return A.isoDatum(String(t).split(' ')[0]);
-  }
-
-  /**
-   * Liest einen Mitgliedsantrag im XML-Format des Access-Exports (/dataroot/Daten16). Rein im Browser.
-   * Ergebnis: { felder: { name: wert }, abteilungen: [{ name, status }], gesamtbeitrag, bank: {...}, unbekannt: [..] }
-   * oder { fehler: 'Text' }. Bankdaten werden nur gemeldet, nie in Felder übernommen (Sicherheitsregel D3).
-   */
-  function leseXml(text) {
-    var doc;
-    try { doc = new DOMParser().parseFromString(String(text || ''), 'application/xml'); } catch (e) { return { fehler: 'Die Datei konnte nicht gelesen werden.' }; }
-    if (!doc || doc.getElementsByTagName('parsererror').length) return { fehler: 'Die Datei ist keine gültige XML-Datei.' };
-    var person = doc.getElementsByTagName('Daten16')[0];
-    if (!person) return { fehler: 'In der Datei wurde kein Eintrag „Daten16“ gefunden.' };
-    var w = {};
-    Array.prototype.forEach.call(person.children, function (k) { w[schluessel(k.tagName)] = (k.textContent || '').trim(); });
-    var genutzt = {};
-    function hole(n) { var k = schluessel(n); genutzt[k] = true; return w[k] || null; }
-    var strasse = hole('Strasse'), hausnummer = null;
-    if (strasse) {
-      var m = /^(.*?\D)\s*(\d+\s*[a-zA-Z]?(?:\s*[-\/]\s*\d+\s*[a-zA-Z]?)?(?:\s+\d\/\d)?)$/.exec(strasse);
-      if (m && !/\d/.test(m[1].replace(/\d+\.\s/, ''))) { strasse = m[1].trim(); hausnummer = m[2].trim(); }
-    }
-    var g = (hole('Geschlecht') || '').toLowerCase();
-    var anrede = hole('Anrede');
-    var felder = {
-      anrede: anrede, titel: hole('Titel'), vorname: hole('Vorname'), nachname: hole('Nachname'),
-      strasse: strasse, hausnummer: hausnummer, plz: hole('Plz'), ort: hole('Ort'),
-      telefon: hole('Telefon'), handy: hole('Handy'), email: hole('email'),
-      geschlecht: g === 'm' || g === 'männlich' || g === 'maennlich' ? 'm' : g === 'w' || g === 'weiblich' ? 'w' : g === 'd' || g === 'divers' ? 'd' : geschlechtAusAnrede(anrede),
-      geburtsdatum: isoAus(hole('GebDat')), eintrittsdatum: isoAus(hole('EinDat')), bemerkung: hole('Bemerkung')
-    };
-    var abteilungen = [];
-    for (var i = 1; i <= 4; i++) {
-      var name = hole('Abteilung ' + i);
-      if (name) abteilungen.push({ name: name, status: i === 1 && /passiv/i.test(hole('Status Abteilung 1') || '') ? 'passiv' : 'aktiv' });
-    }
-    if (!abteilungen.length) hole('Status Abteilung 1');
-    var bank = { iban: hole('IBAN'), bic: hole('BIC'), kontoinhaber: hole('Kontoinhaber'), bank: hole('BANK') };
-    var gesamt = hole('Gesamtbeitrag');
-    ['ID', 'MitglNr', 'ReZiff', 'BLZ', 'KONTO', 'Zahler', 'Arbeitsdatum', 'Zahlung', 'AusDat'].forEach(hole);
-    for (var j = 1; j <= 4; j++) { hole('Betrag ' + j); hole('Beitrag Abt ' + j); }
-    var unbekannt = Object.keys(w).filter(function (k) { return !genutzt[k] && w[k]; });
-    return { felder: felder, abteilungen: abteilungen, gesamtbeitrag: gesamt ? Number(String(gesamt).replace(',', '.')) : null, bank: bank, unbekannt: unbekannt };
-  }
-  A.xmlAntrag = { lese: leseXml, geschlechtAusAnrede: geschlechtAusAnrede };   // für Tests und Nachfolger
-
-  function maskiere(iban) {
-    var s = String(iban || '').replace(/\s/g, '');
-    return s.length > 8 ? s.slice(0, 4) + ' •••• ' + s.slice(-4) : (s ? '••••' : '');
-  }
-
-  function xmlImportBox(formular, ziel) {
-    var datei = A.el('input', null, { type: 'file', accept: '.xml,application/xml,text/xml' });
-    datei.setAttribute('aria-label', 'XML-Datei des Mitgliedsantrags');
-    var ergebnis = A.el('div');
-    var box = A.el('div', null, { className: 'aw-xml' }, [
-      A.el('strong', 'Aus XML-Datei übernehmen'),
-      A.el('p', 'Mitgliedsantrag im XML-Format (wie bisher aus Access). Die Datei wird nur in diesem Browser gelesen und nicht gespeichert.', { className: 'aw-hinweis' }),
-      datei, ergebnis]);
-    datei.addEventListener('change', function () {
-      var f = datei.files && datei.files[0];
-      A.leere(ergebnis);
-      if (!f) return;
-      if (f.size > 200000) { ergebnis.appendChild(A.el('p', 'Die Datei ist zu groß für einen einzelnen Antrag.', { className: 'feldfehler' })); return; }
-      var leser = new FileReader();
-      leser.onload = function () { uebernimm(leseXml(leser.result), formular, ziel, ergebnis); };
-      leser.onerror = function () { ergebnis.appendChild(A.el('p', 'Die Datei konnte nicht gelesen werden.', { className: 'feldfehler' })); };
-      leser.readAsText(f, 'utf-8');
-    });
-    return box;
-  }
-
-  function uebernimm(x, formular, ziel, ergebnis) {
-    if (x.fehler) { ergebnis.appendChild(A.el('p', x.fehler, { className: 'feldfehler' })); return; }
-    var uebernommen = [];
-    Object.keys(x.felder).forEach(function (n) {
-      var v = x.felder[n];
-      if (v === null || v === '') return;
-      var e = formular.feld(n);
-      if (!e) return;
-      var wert = (n === 'geburtsdatum' || n === 'eintrittsdatum') ? A.datum(v) : v;
-      if (setze(formular, n, wert)) uebernommen.push(n);
-    });
-    // Abteilungen: Namen tolerant (Fussball = Fußball) den Ankreuzfeldern zuordnen
-    var abtNichtGefunden = [];
-    x.abteilungen.forEach(function (a) {
-      var ziel_ = A.falte(a.name).replace(/[^a-z]/g, '');
-      var treffer = null;
-      Array.prototype.forEach.call(ziel.querySelectorAll('.mv-abteilungswahl label'), function (l) {
-        var t = A.falte(l.textContent).replace(/aktiv|passiv/g, '').replace(/[^a-z]/g, '');
-        if (t === ziel_ || t.replace(/ss/g, 's') === ziel_.replace(/ss/g, 's')) treffer = l;
-      });
-      if (!treffer) { abtNichtGefunden.push(a.name); return; }
-      var cb = treffer.querySelector('input[type=checkbox]'), st = treffer.querySelector('select');
-      if (cb) cb.checked = true;
-      if (st) st.value = a.status;
-      uebernommen.push('Abteilung ' + a.name);
-    });
-    // Gesamtbeitrag → Beitragsart-Vorschlag
-    if (x.gesamtbeitrag !== null && formular.feld('beitragsart_id') && !formular.feld('beitragsart_id').value) {
-      var art = A.daten.liste('beitragsarten').filter(function (b) { return b.aktiv !== false && Number(b.betrag) === x.gesamtbeitrag; })[0];
-      if (art && setze(formular, 'beitragsart_id', art.beitragsart_id)) uebernommen.push('Beitragsart ' + art.bezeichnung);
-    }
-    ergebnis.appendChild(A.el('p', 'Übernommen: ' + (uebernommen.length ? uebernommen.length + ' Angaben – bitte prüfen und ergänzen.' : 'nichts.'), { className: 'meldung ok' }));
-    if (abtNichtGefunden.length) ergebnis.appendChild(A.el('p', 'Abteilung nicht zugeordnet: ' + abtNichtGefunden.join(', '), { className: 'aw-hinweis' }));
-    if (x.bank && (x.bank.iban || x.bank.kontoinhaber)) {
-      ergebnis.appendChild(A.el('p', 'Bankdaten in der Datei (' + [x.bank.kontoinhaber, maskiere(x.bank.iban)].filter(Boolean).join(', ') +
-        ') wurden NICHT übernommen: Bankverbindung und Mandat werden erst vom unterschriebenen Formular erfasst (Sicherheitsregel D3) – im Bereich Finanzen.', { className: 'meldung hinweis' }));
-    }
-    if (x.unbekannt.length) ergebnis.appendChild(A.el('p', 'Nicht verwendete Angaben: ' + x.unbekannt.join(', '), { className: 'aw-hinweis' }));
-  }
 })();
 </script>
