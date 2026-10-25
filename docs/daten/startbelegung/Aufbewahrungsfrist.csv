@@ -10,3 +10,4 @@ aufbewahrungsfrist_id,datenkategorie,betrifft_tab,dauer_monate,bezugspunkt,recht
 7,Eingefrorene Jahresstatistik,Statistik_Jahr,,Ende Geschäftsjahr,Kein Personenbezug — keine Frist nötig,ja,Anonyme Summen. Genau deshalb dürfen Einzeldaten darunter verschwinden.
 10,Anschreiben (Geschäftsbriefe),Anschreiben,72,Ende Geschäftsjahr,§ 257 HGB (6 Jahre) — VORSCHLAG,ja,"Danach Inhalt leeren, Datum/Anlass behalten."
 11,"Dokument-Links (Antrag, Mandat)",Dokument,120,Austritt,wie Aufnahmeantrag/Mandat — VORSCHLAG,ja,"Link löschen, wenn die Datei im Drive-Ordner gelöscht wird."
+12,Interne Notizen,Notiz,36,Austritt,"Berechtigtes Interesse, Nachvollziehbarkeit — VORSCHLAG",ja,Bei Anonymisierung entfernt; erledigte Rückfragen können früher gelöscht werden.

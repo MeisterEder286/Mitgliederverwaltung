@@ -21,6 +21,7 @@ Betroffenenanfrage,transaktional,anfrage_id,,"Anfragen nach Kapitel III DSGVO �
 Dokument,transaktional / SENSIBEL,dokument_id,,"Links auf unterschriebene Dokumente (Aufnahmeantrag, SEPA-Mandat …) im eingeschränkten Drive-Ordner. Keine Dateien in der WebApp."
 Vorlage,Stammdaten,vorlage_id,,Briefvorlagen mit Platzhaltern für Anschreiben und Serienbriefe.
 Anschreiben,transaktional / SENSIBEL,anschreiben_id,,"Alle Anschreiben, die für eine Person erstellt wurden – mit Text, Datum, Anlass."
+Notiz,transaktional,notiz_id,,"Interne Notizen, Rückfragen und Wiedervorlagen je Person oder Konto – mit festgelegtem Leserkreis."
 Statistik_Jahr,technisch / anonym,statistik_id,,"Eingefrorene Jahreszahlen ohne jeden Personenbezug. Der Grund, warum Löschungen die Vereinsstatistik nicht mehr verfälschen können."
 _Konfig,technisch,,schluessel,"Laufendes Beitragsjahr, Vereinsdaten, Fristen und die ID-Zähler je Tabelle."
 _Protokoll,technisch,protokoll_id,,"Append-only. Nur anhängen, nie ändern, nie löschen."

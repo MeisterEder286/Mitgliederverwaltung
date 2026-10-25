@@ -381,6 +381,24 @@ Anschreiben,versandart,Auswahl,nein,versandart,finanz,Post oder E-Mail.
 Anschreiben,serie,Text,nein,,finanz,Kennung eines Serienbriefs (gleiche Kennung = gleicher Lauf).
 Anschreiben,dokument_link,Text,nein,,finanz,Optional: Link auf die abgelegte PDF im Drive-Ordner.
 Anschreiben,bemerkung,Langtext,nein,,finanz,—
+Anschreiben,email_an,Text,nein,,finanz,"E-Mail-Adresse, an die gesendet wurde (bei Versand per E-Mail)."
+Anschreiben,gesendet_am,Zeitpunkt,nein,,finanz,Zeitpunkt des E-Mail-Versands.
+Anschreiben,mail_status,Auswahl,nein,mail_status,finanz,entwurf / gesendet / fehlgeschlagen / testmodus.
 Anschreiben,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
 Anschreiben,geaendert_am,Zeitpunkt,auto,,finanz,Letzte Änderung. Nur vom Skript. (V1)
 Anschreiben,geaendert_von,Text,auto,,finanz,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Notiz,notiz_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Notiz,mitglied_id,FK,nein,,intern,"→ Mitglied, worauf sich die Notiz bezieht."
+Notiz,beitragskonto_id,FK,nein,,intern,→ Beitragskonto (z. B. Rückfrage „auf wen abbuchen“).
+Notiz,art,Auswahl,ja,notiz_art,intern,"Notiz, Telefonat, Rückfrage, Wiedervorlage."
+Notiz,text,Langtext,ja,,intern,"Interner Vermerk. Sachlich, keine Gesundheits- oder sonstigen besonders schützenswerten Angaben (Art. 9 DSGVO)."
+Notiz,sichtbar_fuer,Auswahl,ja,notiz_sichtbarkeit,intern,"Wer die Notiz sieht: Verwaltung, Finanzen oder die Abteilung (abteilung_id)."
+Notiz,abteilung_id,FK,nein,,intern,"→ Abteilung, nur bei sichtbar_fuer = Abteilung."
+Notiz,wiedervorlage_am,Datum,nein,,intern,Erscheint ab diesem Tag unter „Zu erledigen“.
+Notiz,erledigt_am,Datum,nein,,intern,Leer = offen.
+Notiz,ergebnis,Text,nein,,intern,Kurzes Ergebnis beim Erledigen (z. B. „zahlt weiter über Konto der Eltern“).
+Notiz,anschreiben_id,FK,nein,,intern,"→ Anschreiben, z. B. die Rückfrage-Mail."
+Notiz,erstellt_von,Text,auto,,intern,E-Mail des Verfassers. Nur vom Skript.
+Notiz,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Notiz,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Notiz,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)

@@ -24,7 +24,8 @@ var Rechte = (function () {
     'austritt_erfassen', 'zugehoerigkeit_bearbeiten', 'funktion_bearbeiten', 'qualifikation_lesen',
     'qualifikation_erfassen', 'konto_lesen', 'konto_bearbeiten', 'iban_aufdecken', 'sollstellung_bearbeiten',
     'sepa_lauf', 'ehrung_bearbeiten', 'export', 'protokoll_lesen', 'benutzer_verwalten', 'konfig_aendern',
-    'messung_lesen', 'datenschutz_bearbeiten', 'stammdaten_bearbeiten', 'anschreiben_erstellen', 'dokumente_verwalten'
+    'messung_lesen', 'datenschutz_bearbeiten', 'stammdaten_bearbeiten', 'anschreiben_erstellen', 'dokumente_verwalten',
+    'mail_senden', 'notiz_lesen', 'notiz_schreiben'
   ];
 
   // Rangfolge der Zeilensicht: die weiteste Sicht gewinnt bei Mehrfachrollen.
@@ -38,12 +39,13 @@ var Rechte = (function () {
       sicht: ['intern', 'kontakt', 'finanz'],
       // OFFEN: kein konto_bearbeiten – Kassier ändert keine IBAN (Datenmodell/Mockup). Bestätigung ausstehend.
       aktionen: ['start', 'mitglied_lesen', 'konto_lesen', 'iban_aufdecken', 'sollstellung_bearbeiten',
-        'sepa_lauf', 'export', 'protokoll_lesen', 'anschreiben_erstellen', 'dokumente_verwalten'],
+        'sepa_lauf', 'export', 'protokoll_lesen', 'anschreiben_erstellen', 'dokumente_verwalten',
+        'mail_senden', 'notiz_lesen', 'notiz_schreiben'],
       zeilen: 'alle'
     },
     Jugendleiter: {
       sicht: ['intern', 'kontakt', 'hochsensibel'],
-      aktionen: ['start', 'mitglied_lesen', 'qualifikation_lesen', 'qualifikation_erfassen', 'export'],
+      aktionen: ['start', 'mitglied_lesen', 'qualifikation_lesen', 'qualifikation_erfassen', 'export', 'notiz_lesen', 'notiz_schreiben'],
       zeilen: 'jugend'
     },
     Abteilungsleiter: {
@@ -53,7 +55,7 @@ var Rechte = (function () {
       sicht: ['intern', 'kontakt', 'hochsensibel'],
       // Kein austritt_erfassen: Der Vereinsaustritt bleibt bei der Mitgliederverwaltung.
       aktionen: ['start', 'mitglied_lesen', 'mitglied_suchen_exakt', 'zugehoerigkeit_bearbeiten',
-        'funktion_bearbeiten', 'qualifikation_lesen', 'qualifikation_erfassen', 'export'],
+        'funktion_bearbeiten', 'qualifikation_lesen', 'qualifikation_erfassen', 'export', 'notiz_lesen', 'notiz_schreiben'],
       zeilen: 'abteilung'
     }
   };

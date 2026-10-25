@@ -452,9 +452,32 @@ var Schema = (function () {
         {"name":"serie","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"dokument_link","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"email_an","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"gesendet_am","typ":"Zeitpunkt","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"mail_status","typ":"Auswahl","pflicht":"nein","liste":"mail_status","sicht":"finanz"},
         {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"finanz"},
         {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"finanz"},
         {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"finanz"}
+      ]
+    },
+    "Notiz": {
+      gruppe: "transaktional", idSpalte: "notiz_id", eindeutig: [],
+      spalten: [
+        {"name":"notiz_id","typ":"Ganzzahl","pflicht":"PK","liste":null,"sicht":"intern"},
+        {"name":"mitglied_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"beitragskonto_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"art","typ":"Auswahl","pflicht":"ja","liste":"notiz_art","sicht":"intern"},
+        {"name":"text","typ":"Langtext","pflicht":"ja","liste":null,"sicht":"intern"},
+        {"name":"sichtbar_fuer","typ":"Auswahl","pflicht":"ja","liste":"notiz_sichtbarkeit","sicht":"intern"},
+        {"name":"abteilung_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"wiedervorlage_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"erledigt_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"ergebnis","typ":"Text","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"anschreiben_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"erstellt_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"},
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
       ]
     },
     "Statistik_Jahr": {
@@ -554,7 +577,10 @@ var Schema = (function () {
     "einwilligung_form": ["Aufnahmeantrag","gesondert schriftlich","digital","mündlich"],
     "ausbildung_art": ["Schule","Studium","Ausbildung","Freiwilligendienst","Sonstiges"],
     "dokument_art": ["Aufnahmeantrag","SEPA-Mandat","Kündigung","Einwilligung","Ausbildungsnachweis","Schriftverkehr","Sonstiges"],
-    "vorlage_anlass": ["Aufnahmebestätigung","Austrittsbestätigung","Rechnung","Mahnung","SEPA-Vorabinformation","Beitragsänderung","Umstellung Einzelbeitrag","Ausbildungsnachweis anfordern","Ehrung","Geburtstag","Allgemein"]
+    "vorlage_anlass": ["Aufnahmebestätigung","Austrittsbestätigung","Rechnung","Mahnung","SEPA-Vorabinformation","Beitragsänderung","Umstellung Einzelbeitrag","Ausbildungsnachweis anfordern","Ehrung","Geburtstag","Allgemein","Rückfrage Zahler","Kündigungseingang","Bankverbindung geändert","Rücklastschrift","Willkommen"],
+    "mail_status": ["entwurf","gesendet","fehlgeschlagen","testmodus"],
+    "notiz_art": ["Notiz","Telefonat","Rückfrage","Wiedervorlage"],
+    "notiz_sichtbarkeit": ["Verwaltung","Finanzen","Abteilung","Jugendleitung"]
   };
   return { TABELLEN: TABELLEN, LISTEN: LISTEN };
 })();

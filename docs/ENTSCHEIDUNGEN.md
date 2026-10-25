@@ -16,6 +16,8 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 | 10/2026 | Reihenfolge | erst das komplette System (Phasen 3–5), **Migration ganz am Schluss** | Johann |
 | 10/2026 | Erweiterung | Bezahlhistorie, Umstellung auf Einzelbeitrag beim Ausscheiden aus der Familie, Verlängerung bei Schule/Studium/Ausbildung mit prognostiziertem Ende, Links zu Antrag/Mandat, alle Anschreiben je Person, Auswertungen und Funktionen aus dem Access-VBA | Johann |
 | 10/2026 | Datenmodell | neue Felder `Mitglied.ausbildung_art/ausbildung_bis/ausbildung_nachweis_am`; neue Tabs `Dokument`, `Vorlage`, `Anschreiben`; `_Konfig` familie_*, brief_*; CSV ist ab jetzt allein maßgeblich (xlsx-Export nur mit `--ueberschreiben`) | Umsetzung |
+| 10/2026 | E-Mail-Versand | WebApp versendet E-Mails direkt (Briefkopf, Austritts-/Aufnahmebestätigung, Vorabinformation, Rückfrage Zahler …). **Neuer Scope `script.send_mail`** (engster Scope für Versand, kein Postfachzugriff; A5). Absender Funktionskonto, `replyTo` fachlich (C5), Hauptschalter `mail_aktiv` (Standard aus), Testmodus `mail_test_an`, Kontingentprüfung (C4) | Johann |
+| 10/2026 | Interne Notizen | Notizen/Rückfragen/Wiedervorlagen je Person oder Konto mit Leserkreis (Verwaltung, Finanzen, Abteilung, Jugendleitung); Teil von Auskunft, Anonymisierung und Löschfrist | Johann |
 
 ## Gemeldete Widersprüche aus dem Access-VBA (nicht stillschweigend aufgelöst)
 

@@ -130,3 +130,20 @@ vorlage_anlass,Ausbildungsnachweis anfordern
 vorlage_anlass,Ehrung
 vorlage_anlass,Geburtstag
 vorlage_anlass,Allgemein
+mail_status,entwurf
+mail_status,gesendet
+mail_status,fehlgeschlagen
+mail_status,testmodus
+notiz_art,Notiz
+notiz_art,Telefonat
+notiz_art,Rückfrage
+notiz_art,Wiedervorlage
+notiz_sichtbarkeit,Verwaltung
+notiz_sichtbarkeit,Finanzen
+notiz_sichtbarkeit,Abteilung
+notiz_sichtbarkeit,Jugendleitung
+vorlage_anlass,Rückfrage Zahler
+vorlage_anlass,Kündigungseingang
+vorlage_anlass,Bankverbindung geändert
+vorlage_anlass,Rücklastschrift
+vorlage_anlass,Willkommen

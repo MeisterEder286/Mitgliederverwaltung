@@ -20,7 +20,8 @@ const SRC = path.join(__dirname, '..', 'src');
 const ERLAUBTE_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/script.scriptapp'
+  'https://www.googleapis.com/auth/script.scriptapp',
+  'https://www.googleapis.com/auth/script.send_mail'   // E-Mail-Versand (Entscheidung 10/2026, A5: engster Scope, kein Postfachzugriff)
 ];
 
 const fehler = [];

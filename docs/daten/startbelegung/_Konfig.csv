@@ -72,3 +72,14 @@ ausbildungsnachweis_vorlauf_monate,2,So viele Monate vor ausbildung_bis wird ein
 brief_absender,TSV Ergoldsbach e. V. · Mitgliederverwaltung,Absenderzeile über der Anschrift in Anschreiben
 brief_unterschrift,Mitgliederverwaltung TSV Ergoldsbach e. V.,Grußzeile/Unterschrift unter Anschreiben
 brief_ort,Ergoldsbach,Ort vor dem Datum in Anschreiben
+mail_aktiv,nein,Hauptschalter E-Mail-Versand: ja = Mails werden wirklich gesendet. Erst nach Test einschalten.
+mail_test_an,,"Testmodus: Ist hier eine Adresse eingetragen, gehen ALLE Mails nur an diese Adresse (Betreff mit [TEST]). Für die Testumgebung (C2)."
+mail_absendername,TSV Ergoldsbach e. V. – Mitgliederverwaltung,"Angezeigter Absendername (Absender ist immer das Funktionskonto, C5)."
+mail_antwort_an,,"Antwortadresse (replyTo) für allgemeine Schreiben, z. B. verwaltung@… – PRÜFEN"
+mail_antwort_an_finanzen,,"Antwortadresse für Rechnung, Mahnung, Vorabinformation, Rückfrage Zahler, z. B. kassier@… – PRÜFEN"
+mail_briefkopf,TSV Ergoldsbach e. V.|Mitgliederverwaltung,"Briefkopf der E-Mails: Zeilen durch | getrennt (reiner Text, kein HTML)."
+mail_logo_url,,Optional: https-Adresse eines Vereinslogos für den Briefkopf (wird vom Mailprogramm des Empfängers geladen).
+mail_fusszeile,TSV Ergoldsbach e. V. · Impressum und Datenschutz: www.tsv-ergoldsbach.de,"Fußzeile der E-Mails (reiner Text, Zeilen durch | getrennt)."
+mail_pdf_anhang,ja,"ja = Bestätigungen (Austritt, Aufnahme) zusätzlich als PDF anhängen."
+mail_max_je_lauf,100,Höchstens so viele Mails je Sammelversand (Kontingent C4).
+rueckfrage_wiedervorlage_tage,21,Nach so vielen Tagen erscheint eine unbeantwortete Rückfrage unter „Zu erledigen“.

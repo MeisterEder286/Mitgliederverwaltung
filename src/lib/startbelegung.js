@@ -30,7 +30,8 @@ var Startbelegung = {
       ["9","Abgelehnte und zurückgezogene Anträge","Aufnahmeantrag","6","Eingang des Antrags","Kein Vertrag zustande gekommen — VORSCHLAG","ja","Kurz aufbewahren für Rückfragen, dann restlos löschen — Zeile im Archiv UND Datei im Drive-Ordner."],
       ["7","Eingefrorene Jahresstatistik","Statistik_Jahr","","Ende Geschäftsjahr","Kein Personenbezug — keine Frist nötig","ja","Anonyme Summen. Genau deshalb dürfen Einzeldaten darunter verschwinden."],
       ["10","Anschreiben (Geschäftsbriefe)","Anschreiben","72","Ende Geschäftsjahr","§ 257 HGB (6 Jahre) — VORSCHLAG","ja","Danach Inhalt leeren, Datum/Anlass behalten."],
-      ["11","Dokument-Links (Antrag, Mandat)","Dokument","120","Austritt","wie Aufnahmeantrag/Mandat — VORSCHLAG","ja","Link löschen, wenn die Datei im Drive-Ordner gelöscht wird."]
+      ["11","Dokument-Links (Antrag, Mandat)","Dokument","120","Austritt","wie Aufnahmeantrag/Mandat — VORSCHLAG","ja","Link löschen, wenn die Datei im Drive-Ordner gelöscht wird."],
+      ["12","Interne Notizen","Notiz","36","Austritt","Berechtigtes Interesse, Nachvollziehbarkeit — VORSCHLAG","ja","Bei Anonymisierung entfernt; erledigte Rückfragen können früher gelöscht werden."]
     ]
   },
   "Beitragsart": {
@@ -176,7 +177,18 @@ var Startbelegung = {
       ["ausbildungsnachweis_vorlauf_monate","2","So viele Monate vor ausbildung_bis wird ein neuer Nachweis angefordert"],
       ["brief_absender","TSV Ergoldsbach e. V. · Mitgliederverwaltung","Absenderzeile über der Anschrift in Anschreiben"],
       ["brief_unterschrift","Mitgliederverwaltung TSV Ergoldsbach e. V.","Grußzeile/Unterschrift unter Anschreiben"],
-      ["brief_ort","Ergoldsbach","Ort vor dem Datum in Anschreiben"]
+      ["brief_ort","Ergoldsbach","Ort vor dem Datum in Anschreiben"],
+      ["mail_aktiv","nein","Hauptschalter E-Mail-Versand: ja = Mails werden wirklich gesendet. Erst nach Test einschalten."],
+      ["mail_test_an","","Testmodus: Ist hier eine Adresse eingetragen, gehen ALLE Mails nur an diese Adresse (Betreff mit [TEST]). Für die Testumgebung (C2)."],
+      ["mail_absendername","TSV Ergoldsbach e. V. – Mitgliederverwaltung","Angezeigter Absendername (Absender ist immer das Funktionskonto, C5)."],
+      ["mail_antwort_an","","Antwortadresse (replyTo) für allgemeine Schreiben, z. B. verwaltung@… – PRÜFEN"],
+      ["mail_antwort_an_finanzen","","Antwortadresse für Rechnung, Mahnung, Vorabinformation, Rückfrage Zahler, z. B. kassier@… – PRÜFEN"],
+      ["mail_briefkopf","TSV Ergoldsbach e. V.|Mitgliederverwaltung","Briefkopf der E-Mails: Zeilen durch | getrennt (reiner Text, kein HTML)."],
+      ["mail_logo_url","","Optional: https-Adresse eines Vereinslogos für den Briefkopf (wird vom Mailprogramm des Empfängers geladen)."],
+      ["mail_fusszeile","TSV Ergoldsbach e. V. · Impressum und Datenschutz: www.tsv-ergoldsbach.de","Fußzeile der E-Mails (reiner Text, Zeilen durch | getrennt)."],
+      ["mail_pdf_anhang","ja","ja = Bestätigungen (Austritt, Aufnahme) zusätzlich als PDF anhängen."],
+      ["mail_max_je_lauf","100","Höchstens so viele Mails je Sammelversand (Kontingent C4)."],
+      ["rueckfrage_wiedervorlage_tage","21","Nach so vielen Tagen erscheint eine unbeantwortete Rückfrage unter „Zu erledigen“."]
     ]
   }
 };
