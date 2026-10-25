@@ -144,6 +144,7 @@
   }
   .filterleiste select { width: auto; max-width: 100%; }
   .formular { display: grid; grid-template-columns: 1fr; gap: 10px 16px; margin: 0 0 12px; }
+  .feldgruppe { grid-column: 1 / -1; font-size: 1rem; margin: 12px 0 0; padding-top: 8px; border-top: 1px solid var(--rand); }
   .feld { display: flex; flex-direction: column; gap: 4px; }
   .feld label { font-weight: 600; font-size: 0.9rem; }
   .feld .hilfe { font-size: 0.8rem; }
@@ -155,7 +156,7 @@
   .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 0 0 12px; }
   .kachel { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--rand); border-radius: var(--radius); background: var(--grund); text-align: left; font: inherit; color: inherit; }
   button.kachel { cursor: pointer; }
-  .kachel-zahl { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kachel-zahl { font-size: clamp(1.1rem, 5.2vw, 1.5rem); white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
   .kachel-text { font-size: 0.85rem; color: var(--text-leise); }
   .kachel.warnung { border-color: #d39b00; background: #fffaeb; }
   .kachel.fehler { border-color: var(--fehler-text); background: var(--fehler-grund); }
@@ -163,10 +164,15 @@
   .ampel.gruen { color: #135c2c; } .ampel.gelb { color: #7a5600; } .ampel.rot { color: var(--fehler-text); } .ampel.grau { color: var(--text-leise); }
   .marke { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: var(--flaeche); border: 1px solid var(--rand); margin: 0 4px 2px 0; }
   .dialog { border: 1px solid var(--rand); border-radius: var(--radius); padding: var(--abstand); max-width: min(640px, calc(100vw - 24px)); width: 100%; }
+  /* Lange Dialoge scrollen innen; die Knopfleiste bleibt unten sichtbar */
+  .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
+  .dialog > .knopfleiste { position: sticky; bottom: calc(-1 * var(--abstand)); background: var(--grund); padding: 10px 0 var(--abstand); margin-top: 8px; border-top: 1px solid var(--rand); }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; accent-color: var(--akzent); }
   .dialog::backdrop { background: rgba(0,0,0,0.4); }
-  .reiter { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--rand); margin: 0 0 12px; }
-  .reiter button { min-height: 40px; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0; background: none; font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; }
-  .reiter button[aria-selected="true"] { border-color: var(--rand); background: var(--grund); font-weight: 600; margin-bottom: -1px; }
+  /* Reiter: eine Zeile, auf dem Handy waagrecht wischbar (statt mehrzeilig umzubrechen) */
+  .reiter { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; border-bottom: 1px solid var(--rand); margin: 0 0 12px; }
+  .reiter button { min-height: 44px; white-space: nowrap; flex: 0 0 auto; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0; background: none; font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; }
+  .reiter button[aria-selected="true"] { font-weight: 600; color: var(--akzent); box-shadow: inset 0 -3px 0 var(--akzent); }
   @media print { .kopf, .navigation, .fuss, .knopfleiste, .filterleiste, .meldung { display: none !important; } }
 
   @media (min-width: 720px) {

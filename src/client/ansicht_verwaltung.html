@@ -167,7 +167,7 @@
       ziel.appendChild(A.el('p', 'Zugang entziehen = „aktiv: nein“ setzen (nicht löschen). Wer zwei Rollen hat, bekommt zwei Zeilen.', { className: 'leise' }));
 
       ziel.appendChild(A.el('h2', 'Rechte je Rolle'));
-      ziel.appendChild(A.el('p', 'Die Rechte stehen bewusst im Programmcode (src/lib/rechte.js) und werden nur über eine geprüfte Code-Änderung angepasst (V5).', { className: 'leise' }));
+      ziel.appendChild(A.el('p', 'Welche Rolle was sehen und ändern darf, ist fest im Programm hinterlegt und wird nur über eine geprüfte Programmänderung angepasst. Hier vergeben Sie nur, wer welche Rolle hat.', { className: 'leise' }));
       ziel.appendChild(A.tabelle([
         { feld: 'rolle', titel: 'Rolle' },
         { feld: 'zeilen', titel: 'sieht Personen', wert: function (r) { return { alle: 'alle', abteilung: 'eigene Abteilung', jugend: 'Jugend + Nachweispflichtige' }[r.zeilen] || r.zeilen; } },
@@ -286,6 +286,8 @@
         A.kachel(A.zahl(z.hinweis), 'Hinweise', '')
       ]);
       ziel.appendChild(kacheln);
+      // Datumsangaben in Meldungen der Prüfregeln (JJJJ-MM-TT) für die Anzeige als TT.MM.JJJJ schreiben
+      d.befunde.forEach(function (b) { b.meldung = String(b.meldung || '').replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3.$2.$1'); });
       var regeln = Object.keys(z.je_regel).map(function (r) { return { wert: r, text: z.je_regel[r].titel + ' (' + z.je_regel[r].anzahl + ')' }; });
       var tabelle = null;
       var leiste = A.filterleiste([

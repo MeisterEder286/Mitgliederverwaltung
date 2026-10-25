@@ -25,8 +25,14 @@
   .mv-warnung { background: #fff6dc; color: #5c4400; border-radius: 6px; padding: 10px; margin: 0 0 10px; }
   .mv-optionen label { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }
   .mv-abteilungswahl { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
-  .mv-abteilungswahl label { display: flex; gap: 8px; align-items: center; min-height: 36px; }
-  .mv-kontakt a { margin-right: 12px; }
+  .mv-abteilungswahl label { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .mv-abteilungswahl select { min-height: 40px; padding: 4px 8px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); }
+  .mv-kontakt { display: flex; flex-direction: column; gap: 2px; }
+  .mv-kontakt a { display: inline-flex; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+  .mv-listen { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .mv-listen h3 { margin: 0 0 4px; font-size: 1rem; }
+  .mv-listen p { margin: 0 0 8px; }
+  .mv-listen select { min-height: 44px; }
   .mv-filter { margin: 0 0 12px; }
   .mv-filter summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
 </style>
@@ -298,7 +304,9 @@
     aktualisiere(leiste.zustand);
     setTimeout(function () { try { suchfeld.focus(); } catch (e) { /* egal */ } }, 0);
 
-    if (A.darf('mitglied_suchen_exakt')) zeichneZuordnen(ziel);
+    // Nur sinnvoll für Rollen mit eingeschränkter Sicht (Abteilungsleitung); wer alle sieht, findet jeden über die Liste.
+    var siehtAlle = ((A.startdaten.benutzer || {}).rollen || []).some(function (r) { return ['Vorstand', 'Mitgliederverwalter', 'Kassier'].indexOf(r) >= 0; });
+    if (A.darf('mitglied_suchen_exakt') && !siehtAlle) zeichneZuordnen(ziel);
     if (A.darf('export')) zeichneListenExport(ziel, function () { return gefiltert(leiste.zustand); });
   }
 
@@ -306,16 +314,17 @@
 
   function zeichneZuordnen(ziel) {
     ziel.appendChild(A.abschnitt('Mitglied der Abteilung zuordnen'));
-    ziel.appendChild(A.el('p', 'Ein bestehendes Vereinsmitglied kommt zu Ihrer Abteilung dazu: Mitgliedsnummer oder Nachname und Geburtsdatum eingeben. Die Suche liefert höchstens einen Treffer und nur bei exakter Übereinstimmung.', { className: 'leise' }));
+    ziel.appendChild(A.el('p', 'Ein bestehendes Vereinsmitglied kommt zu Ihrer Abteilung dazu: Nachname und dazu Mitgliedsnummer oder Geburtsdatum eingeben. Die Suche liefert höchstens einen Treffer und nur bei exakter Übereinstimmung.', { className: 'leise' }));
     var f = A.formular([
+      { name: 'nachname', titel: 'Nachname', typ: 'text', pflicht: true },
       { name: 'mitgliedsnummer', titel: 'Mitgliedsnummer', typ: 'text' },
-      { name: 'nachname', titel: 'oder Nachname', typ: 'text' },
-      { name: 'geburtsdatum', titel: 'und Geburtsdatum', typ: 'datum' }
+      { name: 'geburtsdatum', titel: 'oder Geburtsdatum', typ: 'datum' }
     ], {});
     var ergebnis = A.el('div');
     var suchen = A.knopf('Suchen', function () {
       var w = f.werte();
-      var kriterien = w.mitgliedsnummer ? { mitgliedsnummer: w.mitgliedsnummer } : { nachname: w.nachname, geburtsdatum: w.geburtsdatum };
+      // Immer zwei Merkmale (Sicherheitsprüfung H1/M3); die Prüfung macht der Server.
+      var kriterien = { nachname: w.nachname, mitgliedsnummer: w.mitgliedsnummer, geburtsdatum: w.geburtsdatum };
       suchen.disabled = true;
       A.leere(ergebnis);
       A.rufe('apiMitgliedSucheExakt', kriterien).then(function (d) {
@@ -328,7 +337,7 @@
         var status = A.el('select', null, { aria: { label: 'Status' } }, [A.el('option', 'aktiv', { value: 'aktiv' }), A.el('option', 'passiv', { value: 'passiv' })]);
         var zuordnen = A.knopf('Zuordnen', function () {
           zuordnen.disabled = true;
-          A.rufe('apiMitgliedZuordnen', kriterien, Number(auswahl.value), status.value).then(function (r) {
+          A.rufe('apiMitgliedZuordnen', d.treffer.token, Number(auswahl.value), status.value).then(function (r) {
             A.daten.uebernehme(r);
             A.meldung(t.name + ' ist jetzt der Abteilung zugeordnet.', 'ok');
             if (r.mitglied_id) A.zeige('mitglied', { id: r.mitglied_id });
@@ -385,19 +394,18 @@
     });
     monatWahl.value = String(Number(String(heute()).slice(5, 7)));
 
-    var tab = A.tabelle([
-      { titel: 'Liste', feld: 'titel', sortierbar: false },
-      { titel: 'Inhalt', feld: 'text', sortierbar: false },
-      { titel: 'Ausgabe', sortierbar: false, wert: function (l) {
-        var leiste = A.el('div', null, { className: 'knopfleiste' });
-        if (l.monat) leiste.appendChild(monatWahl);
-        var daten = function () { return l.monat ? l.zeilen(Number(monatWahl.value)) : l.zeilen(); };
-        var unter = function () { return l.monat ? monatWahl.options[monatWahl.selectedIndex].text : (istAL() ? 'Abteilung ' + eigeneAbteilungen().map(abteilungsname).join(', ') : ''); };
-        leiste.appendChild(A.knopf('Drucken', function (e) { e.stopPropagation(); exportiere(l.art, l.titel, l.spalten(), daten(), unter(), true); }, 'zweit klein'));
-        leiste.appendChild(A.knopf('CSV', function (e) { e.stopPropagation(); exportiere(l.art, l.titel, l.spalten(), daten(), unter(), false); }, 'zweit klein'));
-        return leiste;
-      } }
-    ], listen, { block: 20 });
+    // Als Karten statt Tabelle: auf dem Handy sind Titel, Inhalt und Knöpfe so ohne waagrechtes Wischen erreichbar.
+    var karten = A.el('div', null, { className: 'mv-listen' });
+    listen.forEach(function (l) {
+      var leiste = A.el('div', null, { className: 'knopfleiste' });
+      if (l.monat) leiste.appendChild(monatWahl);
+      var daten = function () { return l.monat ? l.zeilen(Number(monatWahl.value)) : l.zeilen(); };
+      var unter = function () { return l.monat ? monatWahl.options[monatWahl.selectedIndex].text : (istAL() ? 'Abteilung ' + eigeneAbteilungen().map(abteilungsname).join(', ') : ''); };
+      leiste.appendChild(A.knopf('Drucken', function () { exportiere(l.art, l.titel, l.spalten(), daten(), unter(), true); }, 'zweit'));
+      leiste.appendChild(A.knopf('CSV', function () { exportiere(l.art, l.titel, l.spalten(), daten(), unter(), false); }, 'zweit'));
+      karten.appendChild(A.el('div', null, { className: 'karte' }, [A.el('h3', l.titel), A.el('p', l.text, { className: 'leise' }), leiste]));
+    });
+    var tab = karten;
     ziel.appendChild(tab);
   }
 
@@ -495,7 +503,7 @@
         ['Anschrift', adresse],
         ['Kontakt', kontakt.childNodes.length ? kontakt : null],
         ['Geburtsdatum', m.geburtsdatum ? A.datum(m.geburtsdatum) : null],
-        ['Geschlecht', m.geschlecht],
+        ['Geschlecht', { m: 'männlich', w: 'weiblich', d: 'divers' }[m.geschlecht] || m.geschlecht],
         ['Versand', m.versandart],
         ['Gesetzliche Vertretung', vertretung],
         ['Ehrenmitglied seit', m.ehrenmitglied_seit ? A.datum(m.ehrenmitglied_seit) : null],
@@ -624,13 +632,28 @@
     });
   }
 
+  // Zwischenüberschriften für lange Mitglied-Formulare (erstes Feld einer Gruppe → Überschrift davor)
+  var GRUPPEN = { eintrittsdatum: 'Mitgliedschaft', anrede: 'Person', strasse: 'Anschrift', telefon: 'Kontakt',
+    beitragsart_id: 'Beitrag', vertreter_mitglied_id: 'Gesetzliche Vertretung', ehrenmitglied: 'Weitere Angaben', bemerkung: 'Bemerkung' };
+  function mitGruppen(defs) {
+    var aus = [], gesehen = {};
+    var reihenfolge = ['eintrittsdatum', 'anrede', 'strasse', 'telefon', 'beitragsart_id', 'vertreter_mitglied_id', 'ehrenmitglied', 'bemerkung'];
+    defs.forEach(function (d) {
+      var g = GRUPPEN[d.name];
+      if (!g && d.name === 'vorname' && !gesehen.Person) g = 'Person';
+      if (g && !gesehen[g] && reihenfolge.indexOf(d.name) >= 0 || (g === 'Person' && !gesehen.Person)) { aus.push({ gruppe: g }); gesehen[g] = true; }
+      aus.push(d);
+    });
+    return aus;
+  }
+
   function zeichneBearbeiten(ziel, param) {
     var m = mitglied(param && param.id);
     if (!m) { A.zeige('mitglieder'); return; }
     ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
     ziel.appendChild(A.el('h1', A.name(m) + ' bearbeiten'));
     var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status']);
-    var f = A.formular(spalten.map(function (sp) { return feldDef(sp); }), m);
+    var f = A.formular(mitGruppen(spalten.map(function (sp) { return feldDef(sp); })), m);
     var warnung = A.el('div', null, { className: 'mv-warnung', hidden: true });
     ziel.appendChild(warnung);
     ziel.appendChild(f.element);
@@ -678,7 +701,7 @@
     }
     var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status', 'ehrenmitglied', 'ehrenmitglied_seit']);
     var felder = [{ name: 'eintrittsdatum', titel: 'Eintritt', typ: 'datum', pflicht: true }].concat(spalten.map(function (sp) { return feldDef(sp); }));
-    var f = A.formular(felder, { eintrittsdatum: heute(), land: 'DE', versandart: 'E-Mail' });
+    var f = A.formular(mitGruppen(felder), { eintrittsdatum: heute(), land: 'DE', versandart: 'E-Mail' });
     var dublette = A.el('div', null, { className: 'mv-warnung', hidden: true });
     var trotz = A.el('input', null, { type: 'checkbox', id: 'mv-trotz' });
     var trotzLabel = A.el('label', null, { htmlFor: 'mv-trotz' }, [trotz, A.el('span', ' Es ist eine andere Person – trotzdem anlegen')]);

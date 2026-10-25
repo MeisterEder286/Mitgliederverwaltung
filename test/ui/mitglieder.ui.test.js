@@ -111,6 +111,7 @@ test('Abteilungsleiter: Meine Abteilung, Exaktsuche + Zuordnen, Funktion eintrag
     const zr = ui.objekte('Mitgliedschaftszeitraum');
     const fremd = ui.objekte('Mitglied').find(m => !sichtbar.includes(m.mitglied_id) && !m.sterbedatum && m.nur_funktionstraeger !== 'ja' &&
       zr.some(z => z.mitglied_id === m.mitglied_id && !z.austrittsdatum && !z.austritt_wirksam));
+    await ui.page.getByLabel('Nachname *', { exact: true }).fill(String(fremd.nachname));
     await ui.page.getByLabel('Mitgliedsnummer', { exact: true }).fill(String(fremd.mitgliedsnummer));
     await ui.page.locator('button', { hasText: 'Suchen' }).click();
     await ui.page.waitForSelector('button:has-text("Zuordnen")');

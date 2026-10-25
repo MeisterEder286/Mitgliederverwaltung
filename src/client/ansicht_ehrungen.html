@@ -59,7 +59,7 @@
     var d = zustand.daten;
     var ein = d.einstellungen;
     ziel.appendChild(A.el('p', 'Zählweise Mitgliedsjubiläum: ' + (ein.ehrung_zaehlweise === 'gesamt' ? 'alle Mitgliedschaftszeiten' : 'ab letztem Eintritt (Austritt setzt zurück)') +
-      ' · Stichtag: ' + (ein.ehrung_stichtag === 'exakter_tag' ? 'exakter Tag' : 'Kalenderjahr') + ' · Funktionsjubiläum: ' + String(ein.funktionsjubilaeum_zaehlweise || 'je_funktion').replace(/_/g, ' '),
+      ' · Stichtag: ' + (ein.ehrung_stichtag === 'exakter_tag' ? 'exakter Tag' : 'Kalenderjahr') + ' · Funktionsjubiläum: ' + ({ je_funktion: 'je Funktion', laengste_funktion: 'längste Funktion', summe_aller: 'Summe aller Funktionen' }[ein.funktionsjubilaeum_zaehlweise || 'je_funktion'] || String(ein.funktionsjubilaeum_zaehlweise).replace(/_/g, ' ')),
       { className: 'leise' }));
     var kach = A.el('div', null, { className: 'kacheln' });
     kach.appendChild(A.kachel(d.anzahl.gesamt, 'offen ' + d.jahr));

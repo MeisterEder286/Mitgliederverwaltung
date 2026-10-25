@@ -78,7 +78,7 @@
   };
   App.betrag = function (n) {
     if (n === null || n === undefined || n === '') return '–';
-    return Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    return Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00a0€';   // geschütztes Leerzeichen: „€“ bricht nicht allein um
   };
   App.zahl = function (n) { return n === null || n === undefined ? '–' : Number(n).toLocaleString('de-DE'); };
   App.janein = function (b) { return b === true ? 'ja' : b === false ? 'nein' : '–'; };
@@ -438,7 +438,7 @@
   /**
    * Formular aus Felddefinitionen. felder: [{ name, titel, typ: 'text'|'datum'|'zahl'|'betrag'|'auswahl'|'janein'|
    * 'langtext'|'email'|'tel', liste: [werte] oder [{wert, text}], zahl (Auswahl liefert Zahl, z. B. für IDs),
-   * pflicht, hilfe, nurLesen, breit }]
+   * pflicht, hilfe, nurLesen, breit }] – zusätzlich { gruppe: 'Überschrift' } als Zwischenüberschrift.
    * werte: Startwerte. Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name) }.
    */
   App.formular = function (felder, werte, optionen) {
@@ -448,6 +448,8 @@
     form.addEventListener('submit', function (e) { e.preventDefault(); if (optionen.beiAbsenden) optionen.beiAbsenden(); });
     var eingaben = {};
     felder.forEach(function (f) {
+      // Gruppenüberschrift: { gruppe: 'Anschrift' } als eigener Eintrag in der Feldliste
+      if (f.gruppe) { form.appendChild(App.el('h3', f.gruppe, { className: 'feldgruppe' })); return; }
       var id = 'f-' + f.name + '-' + Math.random().toString(36).slice(2, 7);
       var eingabe;
       var v = werte[f.name];

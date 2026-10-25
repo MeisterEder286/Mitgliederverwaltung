@@ -81,7 +81,7 @@
   }
 
   function schnellsuche(ziel) {
-    var feld = A.el('input', null, { type: 'search', placeholder: 'Name oder Mitgliedsnummer …', autocomplete: 'off' });
+    var feld = A.el('input', null, { type: 'search', placeholder: 'Name oder Nummer …', autocomplete: 'off' });
     feld.setAttribute('aria-label', 'Mitglied suchen');
     var knopf = A.knopf('Suchen', function () { suche(true); });
     var vorschlaege = A.el('ul', null, { className: 'start-vorschlaege', hidden: true });
