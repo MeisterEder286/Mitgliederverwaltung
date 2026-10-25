@@ -15,7 +15,11 @@
       beitragskonto_ids | sollstellung_ids, jahr }).
     - Briefe werden in einem eigenen Druckfenster gesetzt (A4, Anschriftfeld für Fensterumschlag nach DIN 5008),
       alle Texte per textContent – Vorlagen können kein HTML einschleusen.
-    - E-Mail ohne Versandberechtigung der WebApp: mailto:-Link, der Text geht über das eigene Mailprogramm.
+    - E-Mail: Kanal je Empfänger (Brief | E-Mail, Standard nach Versandart und vorhandener Adresse). „E-Mails senden“
+      nur mit mail_senden (apiMailSenden, src/api/Mail.js); Versand, Testmodus und Kontingent prüft der Server.
+      Die Mail-Vorschau ist aus DOM-Elementen gebaut (textContent) – kein iframe, kein HTML aus Daten.
+    - Reiter „Postausgang“: fällige Schreiben (apiMailVorschlaege), „Vorbereiten“ öffnet „Neues Schreiben“ mit Anlass
+      und Empfängern. Es wird nie automatisch etwas gesendet.
 -->
 <style>
   .ko-brief { white-space: pre-wrap; border: 1px solid var(--rand); border-radius: var(--radius); padding: 12px; margin: 0 0 12px; background: #fff; }
@@ -28,7 +32,16 @@
   .ko-platzhalter { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
   .ko-platzhalter button { min-height: 36px; font: inherit; font-size: 0.85rem; padding: 2px 8px; border: 1px solid var(--rand); border-radius: 999px; background: var(--flaeche); cursor: pointer; }
   .ko-auswahl input[type="checkbox"] { width: 20px; height: 20px; }
-  .ko-mail a { display: inline-flex; min-height: 44px; align-items: center; }
+  .ko-mailvorschau { border: 1px solid var(--rand); border-radius: var(--radius); margin: 0 0 12px; background: #fff; overflow: hidden; }
+  .ko-mailvorschau .ko-mkopf { background: #0b4f8a; color: #fff; padding: 10px 12px; }
+  .ko-mailvorschau .ko-mkopf div:first-child { font-weight: 600; }
+  .ko-mailvorschau .ko-mbetreff { font-weight: 600; padding: 10px 12px 0; }
+  .ko-mailvorschau .ko-mtext { white-space: pre-wrap; padding: 8px 12px; overflow-wrap: anywhere; }
+  .ko-mailvorschau .ko-mfuss { border-top: 1px solid var(--rand); padding: 8px 12px; font-size: 0.85rem; color: var(--text-leise); white-space: pre-line; }
+  .ko-kanal select { min-height: 40px; font: inherit; }
+  .ko-gruppe { margin: 0 0 12px; }
+  .ko-gruppe ul { margin: 4px 0 8px; padding-left: 20px; }
+  .ko-gruppe li { overflow-wrap: anywhere; }
 </style>
 <script>
 (function () {
@@ -111,17 +124,46 @@
     ]);
   }
 
-  function mailtoLinks(briefe) {
-    var mit = briefe.filter(function (b) { return b.versandart === 'E-Mail' && b.email; });
-    if (!mit.length) return null;
-    var box = A.el('div', null, { className: 'karte ko-mail' }, [
-      A.el('p', 'Per E-Mail (öffnet Ihr Mailprogramm; der Text wird dort versendet, nicht von der Mitgliederverwaltung):', { className: 'leise' })
+  /** Versandstatus (Schalter, Testmodus, Briefkopf) – einmal je Aufruf der Ansicht. */
+  var mailStatus = null;
+  function ladeMailStatus() {
+    if (mailStatus) return Promise.resolve(mailStatus);
+    return A.rufe('apiMailStatus', A.still).then(function (s) { mailStatus = s; return s; }, function () { return { aktiv: false, testmodus: false, darf_senden: false, briefkopf: [], fusszeile: [] }; });
+  }
+  function mailMoeglich(st) { return !!(st && st.darf_senden && (st.aktiv || st.testmodus)); }
+
+  /** Mail-Vorschau aus DOM-Elementen (Briefkopf, Betreff, Text, Gruß, Fußzeile – alles textContent). */
+  function mailVorschau(b, st) {
+    var kopf = A.el('div', null, { className: 'ko-mkopf' });
+    (st.briefkopf || []).forEach(function (z) { kopf.appendChild(A.el('div', z)); });
+    var box = A.el('div', null, { className: 'ko-mailvorschau' }, [
+      kopf,
+      A.el('div', 'An: ' + (st.testmodus ? (st.test_an || 'Testadresse') + ' (Testmodus, eigentlich ' + b.email + ')' : b.email), { className: 'ko-mtext leise' }),
+      A.el('div', (st.testmodus ? '[TEST] ' : '') + b.betreff, { className: 'ko-mbetreff' }),
+      A.el('div', [b.text, '', b.gruss].join('\n'), { className: 'ko-mtext' })
     ]);
-    mit.forEach(function (b) {
-      var url = 'mailto:' + encodeURIComponent(b.email) + '?subject=' + encodeURIComponent(b.betreff) + '&body=' + encodeURIComponent((b.text || '').slice(0, 1800));
-      box.appendChild(A.el('div', null, null, [linkEl(b.name + ' – ' + b.email, url)]));
-    });
+    if ((st.fusszeile || []).length) box.appendChild(A.el('div', st.fusszeile.join('\n'), { className: 'ko-mfuss' }));
     return box;
+  }
+
+  /** Auswahl (für die API) aus den Briefen eines Kanals, über die Herkunft der Zeile (Person, Konto, Sollstellung). */
+  function auswahlAus(briefe) {
+    var o = {}, feld = { mitglied: 'mitglied_ids', konto: 'beitragskonto_ids', soll: 'sollstellung_ids' };
+    briefe.forEach(function (b) {
+      var q = b.quelle || { art: 'mitglied', id: b.mitglied_id };
+      var k = feld[q.art];
+      (o[k] = o[k] || []).push(q.id);
+    });
+    return o;
+  }
+
+  /** Ergebnisbericht je Empfänger nach dem Versand. */
+  function berichtTabelle(bericht) {
+    return A.tabelle([
+      { feld: 'name', titel: 'Empfänger', wert: function (x) { return x.name || (x.anschreiben_id ? 'Schreiben ' + x.anschreiben_id : '–'); } },
+      { feld: 'status', titel: 'Status' },
+      { feld: 'hinweis', titel: 'Hinweis', wert: function (x) { return x.hinweis || ''; } }
+    ], bericht, { sortiere: 'status', leer: 'Keine Empfänger.' });
   }
 
   // ------------------------------------------------------------------ Empfängerauswahl
@@ -188,25 +230,61 @@
     param = param || {};
     var p = A.el('p', 'Lädt Vorlagen …', { className: 'laedt' });
     z.appendChild(p);
-    ladeVorlagen().then(function (d) {
+    Promise.all([ladeVorlagen(), ladeMailStatus()]).then(function (r) {
+      var d = r[0], st = r[1];
       p.remove();
       var aktiv = d.vorlagen.filter(function (v) { return v.aktiv !== false; });
       if (!aktiv.length) { z.appendChild(A.el('p', 'Es gibt noch keine Vorlagen. Bitte unter „Vorlagen“ anlegen.', { className: 'leise' })); return; }
       var start = param.anlass ? aktiv.filter(function (v) { return v.anlass === param.anlass; })[0] : null;
+      var zusatz0 = param.zusatz || {};
       var f = A.formular([
         { name: 'vorlage_id', titel: 'Vorlage', typ: 'auswahl', zahl: true, pflicht: true, liste: aktiv.map(function (v) { return { wert: v.vorlage_id, text: v.bezeichnung + ' (' + v.anlass + ')' }; }) },
         { name: 'jahr', titel: 'Beitragsjahr', typ: 'zahl' },
-        { name: 'faellig_am', titel: 'Zahlungsziel', typ: 'datum', hilfe: 'Nur für Rechnung/Mahnung; leer = Briefdatum + 14 Tage' }
-      ], { vorlage_id: start ? start.vorlage_id : aktiv[0].vorlage_id, jahr: param.jahr || (A.startdaten.konfig || {}).beitragsjahr || A.startdaten.beitragsjahr });
+        { name: 'faellig_am', titel: 'Zahlungsziel', typ: 'datum', hilfe: 'Nur für Rechnung/Mahnung; leer = Briefdatum + 14 Tage' },
+        { name: 'wirksam', titel: 'Wirksam ab', typ: 'datum', hilfe: 'Für {{wirksam}}, z. B. Umstellung auf Einzelbeitrag' }
+      ], { vorlage_id: start ? start.vorlage_id : aktiv[0].vorlage_id, jahr: param.jahr || (A.startdaten.konfig || {}).beitragsjahr || A.startdaten.beitragsjahr,
+        wirksam: zusatz0.wirksam || null });
       z.appendChild(f.element);
+      if (mailMoeglich(st) && st.testmodus) z.appendChild(A.el('p', 'Testmodus: Alle E-Mails gehen nur an die Testadresse ' + (st.test_an || '') + ' (Betreff mit [TEST]).', { className: 'ko-warnung' }));
       z.appendChild(A.el('h2', 'Empfänger'));
       var wahl = empfaengerWahl(param);
       z.appendChild(wahl.element);
       var ergebnis = A.el('div');
+      var kanaele = null;   // nach der Vorschau: { briefe, kanal: [ 'Brief' | 'E-Mail' ] }
       function eingaben() {
         var w = f.werte();
         if (!w.vorlage_id) { f.setzeFehler([{ feld: 'vorlage_id', meldung: 'Bitte eine Vorlage wählen.' }]); return null; }
-        return { vorlage: w.vorlage_id, auswahl: wahl.auswahl(), zusatz: { jahr: w.jahr, faellig_am: w.faellig_am } };
+        return { vorlage: w.vorlage_id, auswahl: wahl.auswahl(), zusatz: { jahr: w.jahr, faellig_am: w.faellig_am, wirksam: w.wirksam } };
+      }
+      function briefeMit(kanal) { return kanaele ? kanaele.briefe.filter(function (b, i) { return kanaele.kanal[i] === kanal; }) : []; }
+      function zaehle() {
+        var nBrief = kanaele ? briefeMit('Brief').length : null, nMail = briefeMit('E-Mail').length;
+        erstellenKnopf.textContent = 'Erstellen & drucken' + (nBrief !== null ? ' (' + nBrief + ')' : '');
+        erstellenKnopf.disabled = nBrief === 0;
+        mailKnopf.textContent = 'E-Mails senden (' + nMail + ')';
+        mailKnopf.disabled = !nMail;
+      }
+      function kanalTabelle(briefe) {
+        kanaele = { briefe: briefe, kanal: briefe.map(function (b) { return mailMoeglich(st) && b.kanal === 'E-Mail' ? 'E-Mail' : 'Brief'; }) };
+        if (!mailMoeglich(st)) return null;
+        return A.tabelle([
+          { feld: 'name', titel: 'Empfänger' },
+          { feld: 'kanal', titel: 'Kanal', sortierbar: false, wert: function (b) {
+            var i = briefe.indexOf(b);
+            var sel = A.el('select', null, { className: 'ko-kanal' });
+            sel.setAttribute('aria-label', 'Kanal für ' + b.name);
+            ['Brief', 'E-Mail'].forEach(function (k) {
+              var o = A.el('option', k, { value: k });
+              if (k === 'E-Mail' && !b.email) o.disabled = true;
+              sel.appendChild(o);
+            });
+            sel.value = kanaele.kanal[i];
+            sel.addEventListener('click', function (e) { e.stopPropagation(); });
+            sel.addEventListener('change', function () { kanaele.kanal[i] = sel.value; zaehle(); });
+            return A.el('span', null, { className: 'ko-kanal' }, [sel]);
+          } },
+          { feld: 'kanal_hinweis', titel: 'Hinweis', wert: function (b) { return b.kanal_hinweis || (b.email ? '' : 'keine E-Mail-Adresse'); } }
+        ], briefe, { sortiere: 'name', block: 30 });
       }
       var vorschauKnopf = A.knopf('Vorschau', function () {
         var e = eingaben(); if (!e) return;
@@ -215,26 +293,82 @@
           if (v.unbekannt.length) ergebnis.appendChild(A.el('p', 'Unbekannte Platzhalter in der Vorlage: ' + v.unbekannt.join(', ') + ' – bitte Vorlage korrigieren.', { className: 'ko-warnung' }));
           var leerNamen = Object.keys(v.leer || {});
           if (leerNamen.length) ergebnis.appendChild(A.el('p', 'Hinweis: Diese Angaben sind bei einigen Empfängern leer: ' + leerNamen.join(', '), { className: 'ko-warnung' }));
+          var t = kanalTabelle(v.briefe);
+          if (t) { ergebnis.appendChild(A.el('h3', 'Kanal je Empfänger')); ergebnis.appendChild(t); }
+          zaehle();
           ergebnis.appendChild(A.el('p', v.briefe.length + ' Schreiben. Vorschau der ersten ' + Math.min(3, v.briefe.length) + ':', { className: 'leise' }));
           v.briefe.slice(0, 3).forEach(function (b) { ergebnis.appendChild(briefKarte(b)); });
+          var ersteMail = v.briefe.filter(function (b, i) { return kanaele.kanal[i] === 'E-Mail'; })[0];
+          if (ersteMail) { ergebnis.appendChild(A.el('h3', 'So sieht die E-Mail aus')); ergebnis.appendChild(mailVorschau(ersteMail, st)); }
         }, function () {}).then(function () { vorschauKnopf.disabled = false; });
       }, 'zweit');
       var erstellenKnopf = A.knopf('Erstellen & drucken', function () {
         var e = eingaben(); if (!e) return;
+        if (kanaele) { e.auswahl = auswahlAus(briefeMit('Brief')); e.zusatz.kanal = 'Brief'; }
         erstellenKnopf.disabled = true;
         A.rufe('apiKorrespondenzErstellen', e.vorlage, e.auswahl, e.zusatz).then(function (d2) {
           A.daten.uebernehme(d2);
-          A.leere(ergebnis);
           ergebnis.appendChild(A.el('p', d2.briefe.length + ' Schreiben erstellt und unter „Erstellte Schreiben“ abgelegt.', { className: 'karte' }));
-          var mail = mailtoLinks(d2.briefe);
-          if (mail) ergebnis.appendChild(mail);
           ergebnis.appendChild(A.knopf('Erneut drucken', function () { drucke(d2.briefe, 'Schreiben'); }, 'zweit'));
           drucke(d2.briefe, 'Schreiben');
         }, function () {}).then(function () { erstellenKnopf.disabled = false; });
       });
-      z.appendChild(A.el('div', null, { className: 'knopfleiste' }, [vorschauKnopf, erstellenKnopf]));
+      var mailKnopf = A.knopf('E-Mails senden (0)', function () {
+        var e = eingaben(); if (!e) return;
+        var liste = briefeMit('E-Mail');
+        if (!liste.length) return;
+        var text = liste.length + ' E-Mail(s) jetzt senden?' + (st.testmodus ? ' TESTMODUS: Alle gehen an ' + (st.test_an || 'die Testadresse') + '.' : ' Die Mails gehen sofort an die Empfänger.');
+        A.bestaetige('E-Mails senden', text, 'Senden').then(function (ja) {
+          if (!ja) return;
+          mailKnopf.disabled = true;
+          A.rufe('apiMailSenden', e.vorlage, auswahlAus(liste), e.zusatz).then(function (d3) {
+            A.daten.uebernehme(d3);
+            var box = A.el('div', null, { className: 'karte ko-bericht' }, [
+              A.el('p', d3.gesendet + ' E-Mail(s) ' + (d3.testmodus ? 'im Testmodus ' : '') + 'gesendet' + (d3.fehlgeschlagen ? ', ' + d3.fehlgeschlagen + ' fehlgeschlagen (unter „Erstellte Schreiben“ erneut senden)' : '') + '.')
+            ]);
+            (d3.hinweise || []).forEach(function (h) { box.appendChild(A.el('p', h, { className: 'ko-warnung' })); });
+            box.appendChild(berichtTabelle(d3.bericht));
+            ergebnis.insertBefore(box, ergebnis.firstChild);
+            A.meldung(d3.gesendet + ' E-Mail(s) gesendet.', d3.fehlgeschlagen ? 'fehler' : 'ok');
+            // gesendete nicht noch einmal anbieten
+            kanaele.kanal = kanaele.kanal.map(function (k) { return k === 'E-Mail' ? 'gesendet' : k; });
+            zaehle();
+          }, function () { mailKnopf.disabled = false; });
+        });
+      });
+      var knoepfe = [vorschauKnopf, erstellenKnopf];
+      if (mailMoeglich(st)) knoepfe.push(mailKnopf);
+      zaehle();
+      z.appendChild(A.el('div', null, { className: 'knopfleiste' }, knoepfe));
+      if (st.darf_senden && !mailMoeglich(st)) z.appendChild(A.el('p', 'E-Mail-Versand ist ausgeschaltet (Verwaltung → Einstellungen: mail_aktiv bzw. mail_test_an).', { className: 'leise' }));
       z.appendChild(ergebnis);
     }, function () { p.textContent = 'Vorlagen konnten nicht geladen werden.'; });
+  }
+
+  // ------------------------------------------------------------------ Reiter: Postausgang
+
+  function reiterPostausgang(z, oeffne, setzeZahl) {
+    z.appendChild(A.el('p', 'Schreiben, die fällig wären – berechnet aus den Daten der letzten Wochen. Es wird nichts automatisch gesendet.', { className: 'leise' }));
+    var p = A.el('p', 'Lädt …', { className: 'laedt' });
+    z.appendChild(p);
+    A.rufe('apiMailVorschlaege').then(function (v) {
+      p.remove();
+      setzeZahl(v.anzahl);
+      if (!v.gruppen.length) { z.appendChild(A.el('p', 'Nichts offen – alle fälligen Schreiben sind verschickt.', { className: 'karte' })); return; }
+      v.gruppen.forEach(function (g) {
+        var ul = A.el('ul');
+        g.eintraege.slice(0, 10).forEach(function (x) { ul.appendChild(A.el('li', x.name + (x.info ? ' – ' + x.info : ''))); });
+        if (g.eintraege.length > 10) ul.appendChild(A.el('li', '… und ' + (g.eintraege.length - 10) + ' weitere'));
+        z.appendChild(A.el('div', null, { className: 'karte ko-gruppe' }, [
+          A.el('h3', g.titel + ' (' + g.eintraege.length + ')'),
+          A.el('p', g.beschreibung, { className: 'leise' }),
+          ul,
+          A.knopf('Vorbereiten', function () {
+            oeffne('neu', Object.assign({ anlass: g.anlass, zusatz: g.zusatz || {} }, g.auswahl));
+          }, 'zweit klein')
+        ]));
+      });
+    }, function () { p.textContent = 'Konnte nicht geladen werden.'; });
   }
 
   // ------------------------------------------------------------------ Nachdruck
@@ -277,7 +411,9 @@
       var m = a.mitglied_id ? mitglied(a.mitglied_id) : null;
       return m ? A.name(m) : (a.beitragskonto_id ? 'Konto ' + a.beitragskonto_id : '–');
     } });
-    spalten.push({ feld: 'versandart', titel: 'Versand' });
+    spalten.push({ feld: 'versandart', titel: 'Versand', wert: function (a) {
+      return a.versandart === 'E-Mail' && a.mail_status ? 'E-Mail · ' + a.mail_status : (a.versandart || '');
+    } });
     spalten.push({ feld: 'ablage', titel: 'Ablage', sortierbar: false, wert: function (a) { return a.dokument_link ? '✓' : ''; } });
     return A.tabelle(spalten, liste, { sortiere: 'datum', absteigend: true, leer: 'Noch keine Schreiben.', beiKlick: function (a) { nachdruck(a.anschreiben_id); } });
   }
@@ -305,6 +441,21 @@
         { name: 'jahr', titel: 'Jahr', liste: Object.keys(jahre).sort().reverse().map(function (x) { return { wert: x, text: x }; }) }
       ], function (zu) { zustand = zu; tab.aktualisiere(gefiltert()); }, 'Betreff, Name, Serie …');
       var tab = anschreibenTabelle(gefiltert());
+      var fehl = alle.filter(function (a) { return a.mail_status === 'fehlgeschlagen'; });
+      if (fehl.length && A.darf('mail_senden')) {
+        var nochmal = A.knopf('Fehlgeschlagene E-Mails erneut senden (' + fehl.length + ')', function () {
+          A.bestaetige('Erneut senden', fehl.length + ' fehlgeschlagene E-Mail(s) mit dem gespeicherten Inhalt erneut senden?', 'Senden').then(function (ja) {
+            if (!ja) return;
+            nochmal.disabled = true;
+            A.rufe('apiMailErneutSenden', fehl.map(function (a) { return a.anschreiben_id; })).then(function (d) {
+              A.daten.uebernehme(d);
+              A.meldung(d.gesendet + ' E-Mail(s) gesendet' + (d.fehlgeschlagen ? ', ' + d.fehlgeschlagen + ' wieder fehlgeschlagen.' : '.'), d.fehlgeschlagen ? 'fehler' : 'ok');
+              A.neuZeichnen();
+            }, function () { nochmal.disabled = false; });
+          });
+        }, 'zweit');
+        z.appendChild(A.el('div', null, { className: 'knopfleiste' }, [nochmal]));
+      }
       z.appendChild(leiste);
       z.appendChild(tab);
     });
@@ -412,18 +563,25 @@
     titel: 'Schreiben', aktion: 'anschreiben_erstellen', reihenfolge: 45,
     zeichne: function (ziel, param) {
       ziel.appendChild(A.el('h1', 'Schreiben'));
+      mailStatus = null;   // Einstellungen können sich geändert haben
+      param = param || {};
       var reiter = [
-        { id: 'neu', titel: 'Neues Schreiben', zeichne: function (z) { reiterNeu(z, param); } },
+        { id: 'postausgang', titel: 'Postausgang', zeichne: function (z) { reiterPostausgang(z, waehle, setzeZahl); } },
+        { id: 'neu', titel: 'Neues Schreiben', zeichne: function (z, p2) { reiterNeu(z, p2 || param); } },
         { id: 'erstellt', titel: 'Erstellte Schreiben', zeichne: reiterErstellt },
         { id: 'vorlagen', titel: 'Vorlagen', zeichne: reiterVorlagen },
         { id: 'export', titel: 'Serienbrief-Export', zeichne: reiterExport }
       ];
       var leiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
       var inhalt = A.el('div', null, { role: 'tabpanel' });
-      function waehle(id) {
+      function waehle(id, p2) {
         Array.prototype.forEach.call(leiste.children, function (b) { b.setAttribute('aria-selected', b.dataset.id === id ? 'true' : 'false'); });
         A.leere(inhalt);
-        reiter.filter(function (r) { return r.id === id; })[0].zeichne(inhalt);
+        reiter.filter(function (r) { return r.id === id; })[0].zeichne(inhalt, p2);
+      }
+      function setzeZahl(n) {
+        var b = leiste.querySelector('[data-id="postausgang"]');
+        if (b) b.textContent = 'Postausgang' + (n ? ' (' + n + ')' : '');
       }
       reiter.forEach(function (r) {
         var b = A.el('button', r.titel, { type: 'button', role: 'tab', dataset: { id: r.id } });
@@ -432,7 +590,8 @@
       });
       ziel.appendChild(leiste);
       ziel.appendChild(inhalt);
-      waehle((param && param.reiter) || 'neu');
+      var vorauswahl = param.anlass || ['mitglied_ids', 'beitragskonto_ids', 'sollstellung_ids'].some(function (k) { return (param[k] || []).length; });
+      waehle(param.reiter || (vorauswahl ? 'neu' : 'postausgang'));
     }
   });
 

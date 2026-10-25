@@ -60,3 +60,46 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 - **Berichte → BLSV:** im Januar Bestand prüfen, CSV für verein360 herunterladen, „Jahresstatistik einfrieren“.
 - **Datenschutz:** Einwilligungen, Anfragen von Betroffenen (Frist 1 Monat!), Löschliste. Anonymisieren ist endgültig.
 - **Verwaltung:** Benutzer und Rollen, Einstellungen, Stammdaten (Beiträge, Abteilungen, Funktionsarten …), Datenqualität.
+
+## E-Mails
+- **Einschalten** (Verwaltung → Einstellungen): `mail_aktiv = ja`. Zum Ausprobieren erst `mail_test_an` mit einer eigenen
+  Adresse füllen – dann gehen ALLE Mails nur dorthin, der Betreff beginnt mit „[TEST]“ (Status „testmodus“).
+  Briefkopf (`mail_briefkopf`, Zeilen mit | trennen), Fußzeile mit Impressum/Datenschutz (`mail_fusszeile`), optional
+  Logo (`mail_logo_url`, nur https), Absendername und Antwortadressen (`mail_antwort_an`, für Rechnung/Mahnung/
+  Vorabinformation/Rückfrage/Rücklastschrift/Bankverbindung `mail_antwort_an_finanzen`).
+- **Senden:** Schreiben → Vorlage und Empfänger wählen → „Vorschau“. In der Tabelle „Kanal je Empfänger“ steht je
+  Person Brief oder E-Mail (Vorschlag aus der Versandart und einer vorhandenen Adresse, änderbar). Darunter die
+  Mail-Vorschau. „Erstellen & drucken (n)“ druckt nur die Briefe, „E-Mails senden (n)“ sendet nach einer Rückfrage die
+  E-Mails und zeigt je Empfänger, ob es geklappt hat. Austritts-/Aufnahmebestätigungen bekommen das Schreiben
+  zusätzlich als PDF (`mail_pdf_anhang`).
+- **Wohin geht die Mail?** Minderjährige: an die E-Mail der gesetzlichen Vertretung (Feld „Kontakt Vertretung“ bzw. die
+  E-Mail des Vertretungs-Mitglieds). Rechnung, Mahnung, Vorabinformation, Rückfrage, Rücklastschrift, Bankverbindung:
+  an den Kontoinhaber; ist das kein Mitglied, wird ein Brief gedruckt.
+- **Fehlgeschlagen?** Unter „Erstellte Schreiben“ steht der Status (gesendet / testmodus / fehlgeschlagen);
+  „Fehlgeschlagene E-Mails erneut senden“ schickt den gespeicherten Text noch einmal.
+- **Postausgang** (erster Reiter in „Schreiben“, die Zahl zeigt offene): fehlende Austrittsbestätigungen, neue
+  Mitglieder ohne Aufnahmebestätigung, Rückfrage an den Zahler nach Umstellung auf Einzelbeitrag (wenn der Beitrag
+  noch über das Konto z. B. der Eltern läuft), SEPA-Vorabinformation zum nächsten Einzug, Rücklastschriften, geänderte
+  Bankverbindungen, fällige Ausbildungsnachweise. „Vorbereiten“ öffnet das passende Schreiben – gesendet wird erst nach
+  Vorschau und Bestätigung, nie automatisch.
+- **Rückfrage Zahler:** Nach dem Senden legt das Programm eine Wiedervorlage (Notizen → Zu erledigen) an.
+- **Grenzen:** Google erlaubt nur eine begrenzte Zahl Mails am Tag; reicht das Kontingent nicht, wird gar nichts
+  gesendet (Meldung). Je Versand höchstens `mail_max_je_lauf` Mails.
+
+## Notizen und Wiedervorlagen
+- **Wo:** im Mitglied über den Reiter „Notizen“ (oder den Knopf „Notizen (n)“ – n = offene), im Konto unter „Notizen zum
+  Konto“ und gesammelt im Menü „Notizen“. Die Startseite zeigt unter „Wiedervorlagen“ bis zu fünf fällige Einträge.
+- **Art:** Notiz, Telefonat, Rückfrage oder Wiedervorlage. Mit „Wiedervorlage am“ erscheint der Eintrag ab diesem Tag
+  unter „Notizen → Zu erledigen“ und auf der Startseite.
+- **Sichtbar für:** Verwaltung (Vorstand, Mitgliederverwaltung), Finanzen (Kasse + Verwaltung), Abteilung (Leitung
+  dieser Abteilung + Verwaltung) oder Jugendleitung (+ Verwaltung). Man kann nur Kreise wählen, zu denen man selbst
+  gehört; Abteilungsleitungen sehen nur Notizen ihrer Abteilung und nur zu Personen, die sie ohnehin sehen.
+- **Bitte nur sachliche Vermerke** – keine Gesundheitsdaten oder andere besonders schützenswerte Angaben (Art. 9
+  DSGVO). Betroffene haben ein Auskunftsrecht: Notizen stehen in der Datenschutz-Auskunft.
+- **Erledigen/Bearbeiten:** wer die Notiz geschrieben hat, oder die Verwaltung. **Löschen:** nur die Verwaltung und nur
+  ohne offene Rückfrage/Wiedervorlage (diese bitte „erledigen“).
+- **Rückfrage „Von welchem Konto soll abgebucht werden?“** (z. B. nach einer Beitragsumstellung, Kasse): unter „Zu
+  erledigen“ → „Antwort erfassen“ → „Bisheriges Konto“, „Eigenes Konto“ oder „Überweisung“. Die Antwort ändert kein
+  Konto – für ein neues Konto braucht es ein unterschriebenes SEPA-Mandat. Das Programm öffnet dafür das Konto bzw.
+  Finanzen und legt der Kasse eine Wiedervorlage an.
+- **Aufbewahrung:** erledigte Notizen werden 36 Monate nach dem Austritt automatisch entfernt, beim Anonymisieren sofort.

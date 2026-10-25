@@ -330,10 +330,38 @@ function erzeugeFakes(opt) {
       setXFrameOptionsMode(m) { o.xframe = m; return o; },
       setSandboxMode() { return o; },
       getContent() { return o.inhalt; },
-      append(t) { o.inhalt += t; return o; }
+      append(t) { o.inhalt += t; return o; },
+      // PDF-Umwandlung (E-Mail-Anhang): liefert einen Blob-Fake; opt.pdfFehler simuliert einen Fehlschlag
+      getAs(mime) {
+        if (opt.pdfFehler) throw new Error('PDF-Umwandlung fehlgeschlagen');
+        let name = 'Dokument.pdf';
+        const b = {
+          inhalt: o.inhalt,
+          getBytes: () => Buffer.from(o.inhalt),
+          getContentType: () => mime,
+          getName: () => name,
+          setName(n) { name = n; return b; }
+        };
+        return b;
+      }
     };
     return o;
   }
+
+  // E-Mail-Versand: zeichnet jede Mail auf (mails). opt.mailKontingent = Tageskontingent,
+  // opt.mailFehlerAn = Liste von Adressen, für die sendEmail scheitert.
+  const mails = [];
+  let kontingent = opt.mailKontingent === undefined ? 100 : opt.mailKontingent;
+  const MailApp = {
+    getRemainingDailyQuota: () => kontingent,
+    sendEmail(nachricht) {
+      if (typeof nachricht !== 'object') throw new Error('Fake: nur sendEmail({ … }) wird unterstützt');
+      if ((opt.mailFehlerAn || []).indexOf(nachricht.to) >= 0) throw new Error('Invalid email: ' + nachricht.to);
+      if (kontingent <= 0) throw new Error('Service invoked too many times for one day: email.');
+      kontingent--;
+      mails.push(Object.assign({}, nachricht));
+    }
+  };
   const HtmlService = {
     XFrameOptionsMode: { DEFAULT: 'DEFAULT', ALLOWALL: 'ALLOWALL' },
     SandboxMode: { IFRAME: 'IFRAME' },
@@ -371,8 +399,9 @@ function erzeugeFakes(opt) {
   return {
     globale: {
       SpreadsheetApp, Sheets, LockService, CacheService, PropertiesService, Session, Utilities,
-      HtmlService, ScriptApp, Logger
+      HtmlService, ScriptApp, Logger, MailApp
     },
+    mails,
     datei,
     daten: (tab) => tabs[tab],
     zaehler,

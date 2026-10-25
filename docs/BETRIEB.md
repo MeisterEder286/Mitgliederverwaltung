@@ -13,7 +13,11 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
 4. **Script Property** setzen: Projekteinstellungen → Script-Eigenschaften → `DB_ID` = ID des Sheets
    (aus der URL zwischen `/d/` und `/edit`). Die ID steht bewusst nicht im Code (A3/A8).
 5. **Erweiterter Dienst:** Google Sheets API ist über `appsscript.json` aktiviert. Beim ersten Ausführen
-   die Berechtigungen bestätigen. Angefordert werden nur: Tabellen, E-Mail-Adresse des Nutzers, Trigger.
+   die Berechtigungen bestätigen. Angefordert werden nur: Tabellen, E-Mail-Adresse des Nutzers, Trigger und
+   **E-Mail senden** (`script.send_mail` – nur Senden, kein Lesen des Postfachs; für „Schreiben → E-Mails senden“).
+   Nach einem Update, das diesen Scope neu hinzufügt, muss das Funktionskonto die Berechtigung einmal im Editor neu
+   bestätigen (eine beliebige Funktion ausführen), sonst schlägt der Versand fehl.
+   E-Mail-Versand vor dem Einschalten (`mail_aktiv = ja`) in der Testumgebung mit `mail_test_an` prüfen.
 6. **Setup:** Im Editor die Funktion `setup` ausführen. Sie legt alle Tabs mit Kopfzeilen, Formaten,
    Auswahllisten und der Startbelegung an und gibt einen Bericht aus. Mehrfaches Ausführen ist unschädlich
    (bestehende Werte werden nie überschrieben).
@@ -65,3 +69,4 @@ Rohdaten im Tab `_Messung` (keine Personendaten).
 | Script Properties | ca. 9 KB je Wert | nur `DB_ID` |
 | Trigger-Laufzeit gesamt | je nach Kontotyp, für Nonprofits prüfen | stündlicher Messwert-Trigger: Sekunden pro Lauf; nächtliche Wartung: Sekunden bis wenige Minuten, Abbruch nach 4,5 min mit Fortsetzung |
 | Gleichzeitige Ausführungen | weiß ich nicht genau | wenige Nutzer, unkritisch |
+| E-Mail-Kontingent (MailApp) | je nach Kontotyp, Stand meines Wissens ca. 100 Empfänger/Tag (Consumer) bis 1.500 (Workspace) – prüfen | Versand prüft vorher `MailApp.getRemainingDailyQuota()`; reicht es nicht, wird nichts gesendet. Zusätzlich `_Konfig.mail_max_je_lauf` (Standard 100) |

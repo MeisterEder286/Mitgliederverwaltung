@@ -36,6 +36,10 @@ var Vorlagen = (function () {
     ['offen', 'Offener Betrag (Soll + Gebühr − eingegangen)', 'Beitrag'], ['gebuehr', 'Rücklastschrift-/Mahngebühr', 'Beitrag'],
     ['mahnstufe', 'Mahnstufe (Zahl)', 'Beitrag'], ['faellig_am', 'Zahlungsziel (Standard: Briefdatum + 14 Tage)', 'Beitrag'],
     ['einzugsdatum', 'Einzugsdatum der Lastschrift', 'Beitrag'],
+    ['neuer_beitrag', 'Einzelbeitrag der Person (eigene Beitragsart, ohne Gemeinschaft)', 'Beitrag'],
+    ['wirksam', 'Wirksam ab (z. B. Umstellung auf Einzelbeitrag; Angabe beim Erstellen)', 'Beitrag'],
+    ['antwort_bis', 'Antwort erbeten bis (Briefdatum + rueckfrage_wiedervorlage_tage)', 'Verein'],
+    ['abteilung_ansprechpartner', 'Abteilungsleitung der ersten Abteilung (Name)', 'Mitgliedschaft'],
     ['mandatsreferenz', 'SEPA-Mandatsreferenz', 'Konto'], ['iban_maskiert', 'IBAN, nur maskiert (DE89 •••• 3000)', 'Konto'],
     ['kontoinhaber', 'Kontoinhaber', 'Konto'], ['glaeubiger_id', 'Gläubiger-ID des Vereins', 'Verein'],
     ['verein_name', 'Name des Vereins', 'Verein'], ['verein_anschrift', 'Anschrift des Vereins (einzeilig)', 'Verein'],
@@ -105,11 +109,11 @@ var Vorlagen = (function () {
 
   // ------------------------------------------------------------------ Anschrift
 
-  var AN_ZAHLER = ['Rechnung', 'Mahnung', 'SEPA-Vorabinformation'];
+  var AN_ZAHLER = ['Rechnung', 'Mahnung', 'SEPA-Vorabinformation', 'Rückfrage Zahler', 'Rücklastschrift', 'Bankverbindung geändert'];
 
   /**
    * Empfängeranschrift (Zeilen) und Briefanrede.
-   *   anlass Rechnung/Mahnung/SEPA-Vorabinformation mit Konto: an den Kontoinhaber, abweichende Rechnungsadresse
+   *   anlass Rechnung/Mahnung/SEPA-Vorabinformation/Rückfrage Zahler/Rücklastschrift/Bankverbindung geändert mit Konto: an den Kontoinhaber, abweichende Rechnungsadresse
    *   des Kontos (abw_*) hat Vorrang, sonst Anschrift des Inhaber-Mitglieds, sonst des Mitglieds.
    *   Minderjährige (alter < 18) ohne Zahlerbezug: an die gesetzliche Vertretung („An die Erziehungsberechtigten
    *   von …“ bzw. vertreter_name).
@@ -153,7 +157,7 @@ var Vorlagen = (function () {
    * Platzhalterwerte aus (bereits nach Rolle geschnittenen) Daten. Fehlende Felder bleiben leer.
    * d: { mitglied, konto, inhaber, sollstellung, zeitraum (laufend/letzter), abteilungen: [Text], funktionen: [Text],
    *      beitragsart: { bezeichnung, betrag }, gemeinschaft: { bezeichnung, festbetrag }, alter, alter_im_jahr, jahr, heute,
-   *      konfig, ehrung, zusatz: { faellig_am, … } }
+   *      konfig, ehrung, ansprechpartner (Name), zusatz: { faellig_am, wirksam, antwort_bis, … } }
    */
   function werte(d) {
     var m = d.mitglied || {}, k = d.konto || {}, s = d.sollstellung || null, z = d.zeitraum || {};
@@ -185,7 +189,11 @@ var Vorlagen = (function () {
       glaeubiger_id: c.verein_glaeubiger_id && !/^DE00ZZZ0+$/.test(c.verein_glaeubiger_id) ? c.verein_glaeubiger_id : '',
       verein_name: c.verein_name || 'TSV Ergoldsbach e. V.',
       verein_anschrift: [[c.verein_strasse, c.verein_hausnummer].filter(Boolean).join(' '), [c.verein_plz, c.verein_ort].filter(Boolean).join(' ')].filter(Boolean).join(', '),
-      datum: datum(heute), ehrung: d.ehrung || zusatz.ehrung || ''
+      datum: datum(heute), ehrung: d.ehrung || zusatz.ehrung || '',
+      neuer_beitrag: betrag(d.beitragsart ? d.beitragsart.betrag : null),
+      wirksam: datum(zusatz.wirksam),
+      antwort_bis: datum(zusatz.antwort_bis || (heute ? plusTage(heute, Number(c.rueckfrage_wiedervorlage_tage) || 21) : null)),
+      abteilung_ansprechpartner: d.ansprechpartner || ''
     };
     Object.keys(w).forEach(function (x) { if (w[x] === null || w[x] === undefined) w[x] = ''; });
     return w;
@@ -228,6 +236,7 @@ var Vorlagen = (function () {
   }
 
   return {
+    AN_ZAHLER: AN_ZAHLER, plusTage: plusTage,
     KATALOG: KATALOG, fuelle: fuelle, pruefe: pruefe, anschrift: anschrift, werte: werte, brief: brief,
     alsText: alsText, briefanredeVorschlag: briefanredeVorschlag, istDriveLink: istDriveLink,
     datum: datum, betrag: betrag

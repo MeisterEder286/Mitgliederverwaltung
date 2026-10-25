@@ -21,7 +21,7 @@ function korrespondenzAuswahl_(a) {
   return o;
 }
 
-/** Zusatzangaben säubern: jahr, faellig_am (JJJJ-MM-TT), mahnstufe, anlass. */
+/** Zusatzangaben säubern: jahr, faellig_am/wirksam/antwort_bis (JJJJ-MM-TT), mahnstufe, anlass, kanal (Brief|E-Mail). */
 function korrespondenzZusatz_(z) {
   z = z || {};
   var o = {};
@@ -29,6 +29,9 @@ function korrespondenzZusatz_(z) {
   if (z.faellig_am) o.faellig_am = String(z.faellig_am).slice(0, 10);
   if (z.mahnstufe) o.mahnstufe = Number(z.mahnstufe) || null;
   if (z.anlass) o.anlass = String(z.anlass).slice(0, 60);
+  if (z.wirksam) o.wirksam = String(z.wirksam).slice(0, 10);
+  if (z.antwort_bis) o.antwort_bis = String(z.antwort_bis).slice(0, 10);
+  if (z.kanal === 'Brief' || z.kanal === 'E-Mail') o.kanal = z.kanal;
   return o;
 }
 

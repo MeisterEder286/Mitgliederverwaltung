@@ -152,22 +152,22 @@ var Korrespondenz = (function () {
       Snapshot.pruefeMitglied(ktx, id);
       var k = m.beitragskonto_id ? konten[m.beitragskonto_id] : null;
       liste.push({ mitglied: m, konto: k, inhaber: k && k.kontoinhaber_mitglied_id ? mitglieder[k.kontoinhaber_mitglied_id] : null,
-        sollstellung: k ? sollJe[k.beitragskonto_id] || null : null });
+        sollstellung: k ? sollJe[k.beitragskonto_id] || null : null, quelle: { art: 'mitglied', id: id } });
     });
-    function ausKonto(k, s) {
+    function ausKonto(k, s, quelle) {
       if (!k) throw Fehler.fachlich('Ein ausgewähltes Konto wurde nicht gefunden.');
       var inh = k.kontoinhaber_mitglied_id ? mitglieder[k.kontoinhaber_mitglied_id] : null;
       if (inh) Snapshot.pruefeMitglied(ktx, inh.mitglied_id);
       else if (!Rechte.zeilenSicht(ktx).alle) throw Fehler.keinZugriff();
-      liste.push({ mitglied: inh, konto: k, inhaber: inh, sollstellung: s });
+      liste.push({ mitglied: inh, konto: k, inhaber: inh, sollstellung: s, quelle: quelle });
     }
-    kIds.forEach(function (id) { ausKonto(konten[id], sollJe[id] || null); });
+    kIds.forEach(function (id) { ausKonto(konten[id], sollJe[id] || null, { art: 'konto', id: id }); });
     if (sIds.length) {
       var soll = nachId(d.Sollstellung, 'sollstellung_id');
       sIds.forEach(function (id) {
         var s = soll[id];
         if (!s) throw Fehler.fachlich('Eine ausgewählte Sollstellung wurde nicht gefunden.');
-        ausKonto(konten[s.beitragskonto_id], s);
+        ausKonto(konten[s.beitragskonto_id], s, { art: 'soll', id: id });
       });
     }
     if (!liste.length) throw Fehler.fachlich('Bitte mindestens einen Empfänger auswählen.');
@@ -208,13 +208,26 @@ var Korrespondenz = (function () {
         .sort(function (a, c) { return (c.faellig_jahr || 0) - (a.faellig_jahr || 0); })[0];
       if (offen && regeln[offen.ehrungsregel_id]) ehrung = regeln[offen.ehrungsregel_id].bezeichnung;
     }
+    // Ansprechpartner: laufende Abteilungsleitung der ersten (laufenden) Abteilung – nur der Name
+    var ansprechpartner = '';
+    if (e.mitglied && abteilungen.length) {
+      var ersteAbt = (d.Abteilung || []).filter(function (a) { return a.bezeichnung === abteilungen[0]; })[0];
+      var alArt = (d.Funktionsart || []).filter(function (a) { return a.bezeichnung === 'Abteilungsleiter'; })[0];
+      if (ersteAbt && alArt) {
+        var al = Mitgliedschaft.laufendeFunktionen(d.Funktion, h).filter(function (f) {
+          return f.funktionsart_id === alArt.funktionsart_id && f.abteilung_id === ersteAbt.abteilung_id;
+        })[0];
+        var alM = al ? nachId(d.Mitglied, 'mitglied_id')[al.mitglied_id] : null;
+        if (alM) ansprechpartner = [alM.vorname, alM.nachname].filter(Boolean).join(' ');
+      }
+    }
     var geb = e.mitglied ? e.mitglied.geburtsdatum : null;   // Alter steuert die Anschrift (Vertretung) – kein Feldinhalt
     return {
       mitglied: m, konto: k, inhaber: inh, sollstellung: s, zeitraum: zeitraum,
       abteilungen: abteilungen, funktionen: funktionen, beitragsart: beitragsart, gemeinschaft: gemeinschaft,
       alter: geb ? Mitgliedschaft.alter(geb, h) : null,
       alter_im_jahr: geb && m && !leer(m.geburtsdatum) ? Mitgliedschaft.alterImJahr(geb, Number(h.slice(0, 4))) : null,
-      jahr: jahr, heute: h, konfig: b.konfig || {}, ehrung: ehrung, zusatz: zusatz || {}
+      jahr: jahr, heute: h, konfig: b.konfig || {}, ehrung: ehrung, ansprechpartner: ansprechpartner, zusatz: zusatz || {}
     };
   }
 
@@ -231,21 +244,58 @@ var Korrespondenz = (function () {
     return j;
   }
 
+  /**
+   * E-Mail-Ziel eines Schreibens (nur Felder, die die Rolle sehen darf):
+   *   - Zahler-Anlässe (Rechnung, Mahnung, Vorabinformation, Rückfrage Zahler …) mit Konto: der Kontoinhaber, falls
+   *     er Mitglied ist (dessen E-Mail); externer Zahler ohne Mitgliedsdatensatz → keine Adresse (Brief).
+   *   - Minderjährige: vertreter_kontakt, wenn dort eine E-Mail-Adresse steht, sonst die E-Mail der Vertretung
+   *     (vertreter_mitglied_id).
+   *   - sonst die E-Mail der Person.
+   * Liefert { email, versandart (des Adressaten), hinweis }.
+   */
+  function mailZiel(ktx, e, anlass, alter, mitglieder) {
+    function sicht(x) { return x ? Rechte.schneide(ktx, 'Mitglied', x) : null; }
+    if (e.konto && Vorlagen.AN_ZAHLER.indexOf(anlass) >= 0) {
+      var inh = sicht(e.inhaber);
+      if (!inh) return { email: null, versandart: 'Post', hinweis: 'Externer Zahler ohne E-Mail-Adresse – Brief.' };
+      return { email: MailBau.adresseOk(inh.email) ? String(inh.email).trim() : null, versandart: inh.versandart || 'Post', hinweis: null };
+    }
+    var m = sicht(e.mitglied);
+    if (!m) return { email: null, versandart: 'Post', hinweis: null };
+    if (alter !== null && alter !== undefined && alter < 18) {
+      if (MailBau.adresseOk(m.vertreter_kontakt)) return { email: String(m.vertreter_kontakt).trim(), versandart: m.versandart || 'Post', hinweis: 'An die gesetzliche Vertretung.' };
+      var v = sicht(m.vertreter_mitglied_id ? mitglieder[m.vertreter_mitglied_id] : null);
+      if (v && MailBau.adresseOk(v.email)) return { email: String(v.email).trim(), versandart: m.versandart || v.versandart || 'Post', hinweis: 'An die gesetzliche Vertretung.' };
+      return { email: null, versandart: m.versandart || 'Post', hinweis: 'Minderjährig: keine E-Mail der Vertretung – Brief.' };
+    }
+    return { email: MailBau.adresseOk(m.email) ? String(m.email).trim() : null, versandart: m.versandart || 'Post', hinweis: null };
+  }
+
   function briefe(ktx, vorlageId, auswahl, zusatz) {
     var v = vorlageHolen(vorlageId);
     zusatz = zusatz || {};
-    if (!leer(zusatz.faellig_am) && !/^\d{4}-\d{2}-\d{2}$/.test(String(zusatz.faellig_am))) {
-      feldfehler([{ feld: 'faellig_am', meldung: 'Datum bitte als TT.MM.JJJJ.' }]);
-    }
+    var f = [];
+    ['faellig_am', 'wirksam', 'antwort_bis'].forEach(function (x) {
+      if (!leer(zusatz[x]) && !/^\d{4}-\d{2}-\d{2}$/.test(String(zusatz[x]))) f.push({ feld: x, meldung: 'Datum bitte als TT.MM.JJJJ.' });
+    });
+    feldfehler(f);
     var jahr = jahrAus(zusatz);
+    var mitglieder = nachId(basis().tabs.Mitglied, 'mitglied_id');
     return { vorlage: v, jahr: jahr, liste: empfaenger(ktx, auswahl, jahr).map(function (e) {
-      var b = Vorlagen.brief(v, kontext(ktx, e, jahr, zusatz, v.anlass));
+      var kx = kontext(ktx, e, jahr, zusatz, v.anlass);
+      var b = Vorlagen.brief(v, kx);
       var m = e.mitglied ? Rechte.schneide(ktx, 'Mitglied', e.mitglied) : {};
       b.mitglied_id = e.mitglied ? e.mitglied.mitglied_id : null;
       b.beitragskonto_id = e.konto ? e.konto.beitragskonto_id : null;
       b.name = e.mitglied ? [e.mitglied.nachname, e.mitglied.vorname].filter(Boolean).join(', ') : (e.konto ? e.konto.kontoinhaber_name : '');
       b.versandart = m.versandart || 'Post';
-      b.email = m.email || null;
+      var ziel = mailZiel(ktx, e, v.anlass, kx.alter, mitglieder);
+      b.email = ziel.email;
+      // Kanal: E-Mail nur, wenn eine Adresse vorhanden ist und der Adressat Post per E-Mail wünscht
+      b.kanal = ziel.email && ziel.versandart === 'E-Mail' ? 'E-Mail' : 'Brief';
+      b.kanal_hinweis = ziel.hinweis || (ziel.versandart === 'E-Mail' && !ziel.email ? 'Keine gültige E-Mail-Adresse – Brief.' : null);
+      b.anlass = v.anlass;
+      b.quelle = e.quelle;
       return b;
     }) };
   }
@@ -273,7 +323,9 @@ var Korrespondenz = (function () {
         return {
           mitglied_id: b.mitglied_id, beitragskonto_id: b.beitragskonto_id, vorlage_id: r.vorlage.vorlage_id,
           anlass: r.vorlage.anlass, datum: h, betreff: b.betreff, inhalt: Vorlagen.alsText(b),
-          empfaenger: b.empfaenger.join('\n'), versandart: b.versandart === 'E-Mail' ? 'E-Mail' : 'Post', serie: serie
+          empfaenger: b.empfaenger.join('\n'), serie: serie,
+          // gedruckte Briefe (Kanal „Brief“) sind Post – auch wenn die Person sonst E-Mail bevorzugt
+          versandart: (zusatz || {}).kanal === 'Brief' ? 'Post' : (b.versandart === 'E-Mail' ? 'E-Mail' : 'Post')
         };
       });
       var neu = DB.einfuegenViele('Anschreiben', zeilen, ktx);
@@ -378,6 +430,7 @@ var Korrespondenz = (function () {
     dokumentSpeichern: dokumentSpeichern, dokumentEntfernen: dokumentEntfernen, antragsLinks: antragsLinks,
     vorlagen: vorlagen, vorlageSpeichern: vorlageSpeichern,
     vorschau: vorschau, erstellen: erstellen, anschreiben: anschreiben, anschreibenLink: anschreibenLink,
+    briefe: briefe, anschreibenZeile: anschreibenZeile,
     serienExport: serienExport, fristBereinigung: fristBereinigung
   };
 })();
