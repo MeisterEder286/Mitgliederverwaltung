@@ -120,3 +120,16 @@ test('Abteilungsleiter: keine Finanzen in der Navigation, Server verweigert', as
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });
+
+test('Startseite und Finanzen zeigen dieselbe Summe offen/strittig', async () => {
+  const { starteOberflaeche } = require('./harness');
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  try {
+    await ui.page.waitForSelector('text=Summe offen/strittig');
+    const start = await ui.page.locator('.kachel', { hasText: 'Summe offen/strittig' }).locator('.kachel-zahl').textContent();
+    await ui.page.locator('#navigation button', { hasText: 'Finanzen' }).click();
+    await ui.page.waitForSelector('.fin-summe');
+    const fin = await ui.page.locator('.fin-summe').textContent();
+    assert.ok(fin.replace(/\s/g, ' ').includes(start.replace(/\s/g, ' ')), start + ' ≠ ' + fin);
+  } finally { await ui.schliessen(); }
+});

@@ -162,9 +162,10 @@
           var offen = A.daten.liste('sollstellungen').filter(function (s) {
             return String(s.jahr) === jahr() && ['offen', 'ruecklastschrift', 'gemahnt', 'widerspruch'].indexOf(s.status) >= 0;
           });
-          var summe = offen.reduce(function (n, s) { return n + Number(s.soll_betrag || 0) - Number(s.ist_betrag || 0); }, 0);
+          // gleiche Rechnung wie Finanzen → Einzugsstand: Soll + Gebühr − eingegangen, nie negativ
+          var summe = offen.reduce(function (n, s) { return n + Math.max(0, Number(s.soll_betrag || 0) + Number(s.gebuehr || 0) - Number(s.ist_betrag || 0)); }, 0);
           fin.appendChild(A.kachel(A.zahl(offen.length), 'offene/strittige Beiträge ' + jahr(), offen.length ? 'warnung' : '', function () { A.zeige('finanzen'); }));
-          fin.appendChild(A.kachel(A.betrag(summe), 'Summe offen ' + jahr(), '', function () { A.zeige('finanzen'); }));
+          fin.appendChild(A.kachel(A.betrag(summe), 'Summe offen/strittig ' + jahr(), '', function () { A.zeige('finanzen'); }));
           var rl = offen.filter(function (s) { return s.status === 'ruecklastschrift'; }).length;
           if (rl) fin.appendChild(A.kachel(A.zahl(rl), 'Rücklastschriften ' + jahr(), 'fehler', function () { A.zeige('finanzen'); }));
         }).catch(function () { /* Meldung zeigt App.rufe */ });
