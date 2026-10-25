@@ -28,7 +28,9 @@ var Startbelegung = {
       ["6","Funktions- und Ehrungshistorie","Funktion, Ehrung","","Ende der Funktion","Berechtigtes Interesse Vereinschronik — OFFENER PUNKT","ja","Unbefristet nur, wenn der Verein das begründet. Sonst bei Anonymisierung mit entfernen."],
       ["8","Unterschriebener Aufnahmeantrag mit SEPA-Mandat","Drive-Ordner, Aufnahmeantrag.formular_link","120","Ende Geschäftsjahr","§ 147 AO und Nachweis des Mandats — VORSCHLAG","ja","Das Papier ist zugleich Mandatsnachweis. Ohne es steht der Verein bei einem Widerspruch mit leeren Händen."],
       ["9","Abgelehnte und zurückgezogene Anträge","Aufnahmeantrag","6","Eingang des Antrags","Kein Vertrag zustande gekommen — VORSCHLAG","ja","Kurz aufbewahren für Rückfragen, dann restlos löschen — Zeile im Archiv UND Datei im Drive-Ordner."],
-      ["7","Eingefrorene Jahresstatistik","Statistik_Jahr","","Ende Geschäftsjahr","Kein Personenbezug — keine Frist nötig","ja","Anonyme Summen. Genau deshalb dürfen Einzeldaten darunter verschwinden."]
+      ["7","Eingefrorene Jahresstatistik","Statistik_Jahr","","Ende Geschäftsjahr","Kein Personenbezug — keine Frist nötig","ja","Anonyme Summen. Genau deshalb dürfen Einzeldaten darunter verschwinden."],
+      ["10","Anschreiben (Geschäftsbriefe)","Anschreiben","72","Ende Geschäftsjahr","§ 257 HGB (6 Jahre) — VORSCHLAG","ja","Danach Inhalt leeren, Datum/Anlass behalten."],
+      ["11","Dokument-Links (Antrag, Mandat)","Dokument","120","Austritt","wie Aufnahmeantrag/Mandat — VORSCHLAG","ja","Link löschen, wenn die Datei im Drive-Ordner gelöscht wird."]
     ]
   },
   "Beitragsart": {
@@ -97,7 +99,7 @@ var Startbelegung = {
       ["ehrung_zaehlweise","letzter_eintritt","Beschlossen 10/2026: ab letztem Eintritt, ein Austritt setzt die Zählung zurück. Alternative: gesamt (alle Zeiträume), falls die Satzung geändert wird."],
       ["ehrung_stichtag","kalenderjahr","Alternative: exakter_tag"],
       ["funktionsjubilaeum_zaehlweise","je_funktion","Alternativen: laengste_funktion, summe_aller. OFFENER PUNKT"],
-      ["beitrag_anteilig","nein","Voller Jahresbeitrag bei unterjährigem Ein- oder Austritt. OFFENER PUNKT"],
+      ["beitrag_anteilig","nein","nein = voller Jahresbeitrag; halbjahr = halber Beitrag bei Eintritt ab 01.07. (wie früher „Laufender Einzug Halb“ in Access); monat = monatsgenau. OFFENER PUNKT"],
       ["next_id_Mitglied","15","ID-Zähler — nur vom Skript erhöhen"],
       ["next_id_Mitgliedschaftszeitraum","15","ID-Zähler"],
       ["next_id_Abteilung","6","ID-Zähler"],
@@ -152,7 +154,14 @@ var Startbelegung = {
       ["verein_plz","84061","Vereinsanschrift: PLZ"],
       ["verein_ort","Ergoldsbach","Vereinsanschrift: Ort"],
       ["verein_land","DE","Vereinsanschrift: Land (ISO-Code)"],
-      ["sepa_vier_augen","nein","ja = SEPA-Datei erst nach Freigabe des Probelaufs durch eine ZWEITE Person (Vier-Augen-Prinzip)"]
+      ["sepa_vier_augen","nein","ja = SEPA-Datei erst nach Freigabe des Probelaufs durch eine ZWEITE Person (Vier-Augen-Prinzip)"],
+      ["familie_kinder_bis_alter","17","Kinder sind bis zu diesem Alter (einschließlich, Stichtag siehe familie_umstellung_stichtag) im Familienbeitrag. PRÜFEN gegen Beitragsordnung"],
+      ["familie_ausbildung_bis_alter","25","Mit Nachweis von Schule/Studium/Ausbildung höchstens bis zu diesem Alter (einschließlich) im Familienbeitrag. PRÜFEN"],
+      ["familie_umstellung_stichtag","01.01.","Zu welchem Tag die Umstellung auf den Einzelbeitrag wirkt (Jahreswechsel, wie Tarifwechsel)"],
+      ["ausbildungsnachweis_vorlauf_monate","2","So viele Monate vor ausbildung_bis wird ein neuer Nachweis angefordert"],
+      ["brief_absender","TSV Ergoldsbach e. V. · Mitgliederverwaltung","Absenderzeile über der Anschrift in Anschreiben"],
+      ["brief_unterschrift","Mitgliederverwaltung TSV Ergoldsbach e. V.","Grußzeile/Unterschrift unter Anschreiben"],
+      ["brief_ort","Ergoldsbach","Ort vor dem Datum in Anschreiben"]
     ]
   }
 };

@@ -115,6 +115,11 @@ def klasse(tab, spalte):
 
 
 def main():
+    # Seit 10/2026 sind die CSV-Dateien maßgeblich (Erweiterungen Ausbildung/Dokument/Vorlage/Anschreiben stehen
+    # NUR dort). Ein erneuter Export aus dem xlsx würde sie überschreiben – deshalb nur mit ausdrücklichem Schalter.
+    if '--ueberschreiben' not in sys.argv:
+        print('ABBRUCH: docs/daten/*.csv sind maßgeblich. Nur mit --ueberschreiben ausführen (UEBERSCHREIBEN der Erweiterungen!).')
+        return 1
     wb = openpyxl.load_workbook(XLSX)
     # --- Tabellenübersicht
     uebersicht = {}

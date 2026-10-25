@@ -294,6 +294,27 @@
     return App.rufe('apiSnapshot', App.daten.bereiche).then(function (snap) { App.daten.setze(snap); App.neuZeichnen(); return snap; });
   };
 
+  // ================================================================== Erweiterungspunkte
+
+  /**
+   * Andere Ansichtsdateien können sich in bestehende Ansichten einhängen, ohne deren Datei zu ändern:
+   *   App.erweitere('mitglied.reiter',  { id, titel, sicht?, aktion?, zeichne(ziel, mitglied) })  zusätzlicher Reiter im Mitglied-Detail
+   *   App.erweitere('mitglied.knoepfe', function (mitglied) → Node|null)                           zusätzliche Knöpfe im Mitglied-Kopf
+   *   App.erweitere('mitglied.formular', function (formular, ziel, modus['neu'|'bearbeiten'], mitglied)) nach Aufbau des Formulars
+   *   App.erweitere('konto.abschnitt',  function (ziel, konto))                                   zusätzlicher Abschnitt im Konto-Detail
+   */
+  var erweiterungen = {};
+  App.erweitere = function (ort, def) { (erweiterungen[ort] = erweiterungen[ort] || []).push(def); };
+  App.erweiterungenFuer = function (ort) { return (erweiterungen[ort] || []).slice(); };
+  /** Ruft alle Funktions-Erweiterungen eines Orts auf; Fehler einer Erweiterung stören die Ansicht nicht. */
+  App.rufeErweiterungen = function (ort) {
+    var args = Array.prototype.slice.call(arguments, 1), aus = [];
+    App.erweiterungenFuer(ort).forEach(function (fn) {
+      try { var r = typeof fn === 'function' ? fn.apply(null, args) : null; if (r) aus.push(r); } catch (e) { console.error(e); }
+    });
+    return aus;
+  };
+
   // ================================================================== Router
 
   /** Ansicht anmelden: { titel, aktion (Recht oder null), reihenfolge (Zahl), zeichne(ziel, param), versteckt }. */

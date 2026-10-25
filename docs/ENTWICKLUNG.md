@@ -202,3 +202,16 @@ Feldfehler: `throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld, meldung }
 (verwerfen und neu bauen). Ergebnis als ein Sammeleintrag im `_Protokoll` (Tabelle „Wartung“). Laufzeitschutz: nach
 4,5 Minuten Abbruch, Fortschritt in der Script Property `wartung_fortschritt`, einmaliger Folge-Trigger
 `wartungFortsetzen` nach einer Minute; erledigte Schritte laufen am selben Tag nicht doppelt.
+
+## 7. Erweiterungspunkte im Browser
+
+Ansichten können sich in andere Ansichten einhängen, ohne deren Datei zu ändern (`client/kern`):
+
+| Ort | Erwartet | Wirkung |
+|---|---|---|
+| `mitglied.reiter` | `{ id, titel, sicht?, aktion?, zeichne(ziel, mitglied) }` | zusätzlicher Reiter im Mitglied-Detail |
+| `mitglied.knoepfe` | `function (mitglied) → Node\|null` | zusätzliche Knöpfe im Kopf des Mitglied-Details |
+| `mitglied.formular` | `function (formular, ziel, modus, mitglied)` | läuft nach Aufbau des Formulars „Bearbeiten“ (`modus = 'bearbeiten'`) bzw. „Neues Mitglied“ (`'neu'`) |
+| `konto.abschnitt` | `function (ziel, konto)` | zusätzlicher Abschnitt am Ende des Konto-Details |
+
+Registrieren: `App.erweitere(ort, def)`. Fehler einer Erweiterung werden abgefangen und stören die Ansicht nicht.

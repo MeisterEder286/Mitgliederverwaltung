@@ -457,17 +457,22 @@
         }).catch(function () { e.target.disabled = false; });
       }, 'zweit'));
     }
+    A.rufeErweiterungen('mitglied.knoepfe', m).forEach(function (k) { knoepfe.appendChild(k); });
     ziel.appendChild(knoepfe);
 
     var reiterLeiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
     var inhalt = A.el('div', null, { role: 'tabpanel' });
     var aktiv = (param && param.reiter) || 'stamm';
-    var reiter = REITER.filter(function (r) { return !r.sicht || A.sieht(r.sicht); });
+    // eigene Reiter + Reiter aus anderen Ansichtsdateien (App.erweitere('mitglied.reiter', …))
+    var zusatz = {};
+    A.erweiterungenFuer('mitglied.reiter').forEach(function (r) { zusatz[r.id] = r; });
+    var reiter = REITER.concat(A.erweiterungenFuer('mitglied.reiter'))
+      .filter(function (r) { return (!r.sicht || A.sieht(r.sicht)) && (!r.aktion || A.darf(r.aktion)); });
     function waehle(id) {
       aktiv = id;
       Array.prototype.forEach.call(reiterLeiste.children, function (b) { b.setAttribute('aria-selected', b.dataset.id === id ? 'true' : 'false'); });
       A.leere(inhalt);
-      try { REITER_ZEICHNEN[id](inhalt, m); } catch (e) { console.error(e); inhalt.appendChild(A.el('p', 'Konnte nicht angezeigt werden.', { className: 'leise' })); }
+      try { (REITER_ZEICHNEN[id] || zusatz[id].zeichne)(inhalt, m); } catch (e) { console.error(e); inhalt.appendChild(A.el('p', 'Konnte nicht angezeigt werden.', { className: 'leise' })); }
     }
     reiter.forEach(function (r) {
       var b = A.el('button', r.titel, { type: 'button', role: 'tab', dataset: { id: r.id } });
@@ -657,6 +662,7 @@
     var warnung = A.el('div', null, { className: 'mv-warnung', hidden: true });
     ziel.appendChild(warnung);
     ziel.appendChild(f.element);
+    A.rufeErweiterungen('mitglied.formular', f, ziel, 'bearbeiten', m);
     function pruefeHinweise() {
       var w = f.werte(), hinweise = [];
       if (w.strasse && /\d/.test(w.strasse) && !w.hausnummer) hinweise.push('Die Straße enthält eine Zahl – bitte die Hausnummer ins eigene Feld (wichtig für SEPA).');
@@ -702,11 +708,13 @@
     var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status', 'ehrenmitglied', 'ehrenmitglied_seit']);
     var felder = [{ name: 'eintrittsdatum', titel: 'Eintritt', typ: 'datum', pflicht: true }].concat(spalten.map(function (sp) { return feldDef(sp); }));
     var f = A.formular(mitGruppen(felder), { eintrittsdatum: heute(), land: 'DE', versandart: 'E-Mail' });
+    A.mitgliedNeuFormular = f;   // für Erweiterungen (z. B. XML-Import), die das Formular vorbefüllen
     var dublette = A.el('div', null, { className: 'mv-warnung', hidden: true });
     var trotz = A.el('input', null, { type: 'checkbox', id: 'mv-trotz' });
     var trotzLabel = A.el('label', null, { htmlFor: 'mv-trotz' }, [trotz, A.el('span', ' Es ist eine andere Person – trotzdem anlegen')]);
     ziel.appendChild(A.el('p', 'Die Mitgliedsnummer vergibt das System. Bankverbindung und Mandat werden im Bereich Finanzen erfasst (nie über Formulare im Internet).', { className: 'leise' }));
     ziel.appendChild(f.element);
+    A.rufeErweiterungen('mitglied.formular', f, ziel, 'neu', null);
 
     function pruefeDublette() {
       var w = f.werte();

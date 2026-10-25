@@ -88,6 +88,9 @@ var Schema = (function () {
         {"name":"beitragsart_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"beitragskonto_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"beitragsgemeinschaft_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"ausbildung_art","typ":"Auswahl","pflicht":"nein","liste":"ausbildung_art","sicht":"finanz"},
+        {"name":"ausbildung_bis","typ":"Datum","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"ausbildung_nachweis_am","typ":"Datum","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"vertreter_mitglied_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"kontakt"},
         {"name":"vertreter_name","typ":"Text","pflicht":"nein","liste":null,"sicht":"kontakt"},
         {"name":"vertreter_kontakt","typ":"Text","pflicht":"nein","liste":null,"sicht":"kontakt"},
@@ -402,6 +405,58 @@ var Schema = (function () {
         {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"verwaltung"}
       ]
     },
+    "Dokument": {
+      gruppe: "transaktional / SENSIBEL", idSpalte: "dokument_id", eindeutig: [],
+      spalten: [
+        {"name":"dokument_id","typ":"Ganzzahl","pflicht":"PK","liste":null,"sicht":"finanz"},
+        {"name":"mitglied_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"beitragskonto_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"art","typ":"Auswahl","pflicht":"ja","liste":"dokument_art","sicht":"finanz"},
+        {"name":"titel","typ":"Text","pflicht":"ja","liste":null,"sicht":"finanz"},
+        {"name":"link","typ":"Text","pflicht":"ja","liste":null,"sicht":"finanz"},
+        {"name":"datum","typ":"Datum","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"finanz"}
+      ]
+    },
+    "Vorlage": {
+      gruppe: "Stammdaten", idSpalte: "vorlage_id", eindeutig: [],
+      spalten: [
+        {"name":"vorlage_id","typ":"Ganzzahl","pflicht":"PK","liste":null,"sicht":"intern"},
+        {"name":"bezeichnung","typ":"Text","pflicht":"ja","liste":null,"sicht":"intern"},
+        {"name":"anlass","typ":"Auswahl","pflicht":"ja","liste":"vorlage_anlass","sicht":"intern"},
+        {"name":"betreff","typ":"Text","pflicht":"ja","liste":null,"sicht":"intern"},
+        {"name":"text","typ":"Langtext","pflicht":"ja","liste":null,"sicht":"intern"},
+        {"name":"aktiv","typ":"ja/nein","pflicht":"ja","liste":"ja_nein","sicht":"intern"},
+        {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+      ]
+    },
+    "Anschreiben": {
+      gruppe: "transaktional / SENSIBEL", idSpalte: "anschreiben_id", eindeutig: [],
+      spalten: [
+        {"name":"anschreiben_id","typ":"Ganzzahl","pflicht":"PK","liste":null,"sicht":"finanz"},
+        {"name":"mitglied_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"beitragskonto_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"vorlage_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"anlass","typ":"Auswahl","pflicht":"ja","liste":"vorlage_anlass","sicht":"finanz"},
+        {"name":"datum","typ":"Datum","pflicht":"ja","liste":null,"sicht":"finanz"},
+        {"name":"betreff","typ":"Text","pflicht":"ja","liste":null,"sicht":"finanz"},
+        {"name":"inhalt","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"empfaenger","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"versandart","typ":"Auswahl","pflicht":"nein","liste":"versandart","sicht":"finanz"},
+        {"name":"serie","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"dokument_link","typ":"Text","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"finanz"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"finanz"}
+      ]
+    },
     "Statistik_Jahr": {
       gruppe: "technisch / anonym", idSpalte: "statistik_id", eindeutig: [],
       spalten: [
@@ -496,7 +551,10 @@ var Schema = (function () {
     "antrag_quelle": ["Homepage-Formular","Papierantrag","E-Mail","Veranstaltung"],
     "anfrage_art": ["Auskunft (Art. 15)","Berichtigung (Art. 16)","Löschung (Art. 17)","Einschränkung (Art. 18)","Datenübertragbarkeit (Art. 20)","Widerspruch (Art. 21)","Widerruf einer Einwilligung (Art. 7)"],
     "einwilligung_art": ["Fotos und Videos","Newsletter per E-Mail","Ehrungen und Geburtstage in Vereinsmedien","Messenger-Gruppe","Weitergabe an den Verband"],
-    "einwilligung_form": ["Aufnahmeantrag","gesondert schriftlich","digital","mündlich"]
+    "einwilligung_form": ["Aufnahmeantrag","gesondert schriftlich","digital","mündlich"],
+    "ausbildung_art": ["Schule","Studium","Ausbildung","Freiwilligendienst","Sonstiges"],
+    "dokument_art": ["Aufnahmeantrag","SEPA-Mandat","Kündigung","Einwilligung","Ausbildungsnachweis","Schriftverkehr","Sonstiges"],
+    "vorlage_anlass": ["Aufnahmebestätigung","Austrittsbestätigung","Rechnung","Mahnung","SEPA-Vorabinformation","Beitragsänderung","Umstellung Einzelbeitrag","Ausbildungsnachweis anfordern","Ehrung","Geburtstag","Allgemein"]
   };
   return { TABELLEN: TABELLEN, LISTEN: LISTEN };
 })();

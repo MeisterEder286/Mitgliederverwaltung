@@ -71,6 +71,9 @@ Mitglied,status,Auswahl,auto,mitglied_status,intern,Vom Skript geschrieben. Quel
 Mitglied,beitragsart_id,FK,nein,,finanz,"→ Beitragsart. Leer, wenn das Mitglied in einer Gemeinschaft mit Festbetrag steckt."
 Mitglied,beitragskonto_id,FK,nein,,finanz,→ Beitragskonto. WER zahlt.
 Mitglied,beitragsgemeinschaft_id,FK,nein,,finanz,→ Beitragsgemeinschaft. Nur bei gedeckeltem Familien-/Ehegattenverbund.
+Mitglied,ausbildung_art,Auswahl,nein,ausbildung_art,finanz,Schule/Studium/Ausbildung/Freiwilligendienst – verlängert die Zugehörigkeit zum Familienbeitrag über die Altersgrenze hinaus. (Erweiterung 10/2026)
+Mitglied,ausbildung_bis,Datum,nein,,finanz,Prognostiziertes Ende von Schule/Studium/Ausbildung. Bis dahin bleibt die Person im Familienbeitrag (höchstens bis _Konfig.familie_ausbildung_bis_alter).
+Mitglied,ausbildung_nachweis_am,Datum,nein,,finanz,"Wann zuletzt ein Nachweis (Immatrikulation, Ausbildungsvertrag) vorgelegt wurde."
 Mitglied,vertreter_mitglied_id,FK,nein,,kontakt,"→ Mitglied. Gesetzliche Vertretung, falls selbst Mitglied. OFFENER PUNKT."
 Mitglied,vertreter_name,Text,nein,,kontakt,"Gesetzliche Vertretung, falls nicht Mitglied. OFFENER PUNKT."
 Mitglied,vertreter_kontakt,Text,nein,,kontakt,Telefon/E-Mail der gesetzlichen Vertretung.
@@ -344,3 +347,40 @@ _Messung,sheets_aufrufe,Ganzzahl,ja,,verwaltung,Zahl der Zugriffe auf die Tabell
 _Messung,cache,Text,nein,,verwaltung,treffer / fehlgriff / leer.
 _Messung,client_ms,Ganzzahl,nein,,verwaltung,"Vom Browser gemessene Gesamtzeit inkl. Übertragung, falls nachgereicht."
 _Messung,ok,ja/nein,ja,ja_nein,verwaltung,Ob der Aufruf erfolgreich war.
+Dokument,dokument_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
+Dokument,mitglied_id,FK,nein,,finanz,"→ Mitglied, falls das Dokument eine Person betrifft."
+Dokument,beitragskonto_id,FK,nein,,finanz,"→ Beitragskonto, z. B. beim SEPA-Mandat."
+Dokument,art,Auswahl,ja,dokument_art,finanz,"Aufnahmeantrag, SEPA-Mandat, Kündigung, Einwilligung, Nachweis, Schriftverkehr …"
+Dokument,titel,Text,ja,,finanz,"Kurzbezeichnung, z. B. „Aufnahmeantrag 2018 (unterschrieben)“."
+Dokument,link,Text,ja,,finanz,Link auf die Datei im eingeschränkten Drive-Ordner (nur drive.google.com/docs.google.com). Kein Upload in der WebApp.
+Dokument,datum,Datum,nein,,finanz,Datum des Dokuments (z. B. Unterschrift).
+Dokument,bemerkung,Langtext,nein,,finanz,—
+Dokument,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Dokument,geaendert_am,Zeitpunkt,auto,,finanz,Letzte Änderung. Nur vom Skript. (V1)
+Dokument,geaendert_von,Text,auto,,finanz,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Vorlage,vorlage_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
+Vorlage,bezeichnung,Text,ja,,intern,Name der Vorlage.
+Vorlage,anlass,Auswahl,ja,vorlage_anlass,intern,Wofür die Vorlage gedacht ist.
+Vorlage,betreff,Text,ja,,intern,"Betreffzeile, Platzhalter erlaubt (z. B. {{jahr}})."
+Vorlage,text,Langtext,ja,,intern,"Brieftext mit Platzhaltern wie {{briefanrede}}, {{betrag}} – Liste in der Oberfläche."
+Vorlage,aktiv,ja/nein,ja,ja_nein,intern,"Nicht mehr genutzte Vorlagen auf „nein“, nicht löschen."
+Vorlage,bemerkung,Langtext,nein,,intern,—
+Vorlage,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Vorlage,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
+Vorlage,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
+Anschreiben,anschreiben_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
+Anschreiben,mitglied_id,FK,nein,,finanz,→ Mitglied (Empfänger).
+Anschreiben,beitragskonto_id,FK,nein,,finanz,→ Beitragskonto (z. B. bei Rechnung/Mahnung an den Zahler).
+Anschreiben,vorlage_id,FK,nein,,finanz,"→ Vorlage, aus der das Schreiben erzeugt wurde."
+Anschreiben,anlass,Auswahl,ja,vorlage_anlass,finanz,Anlass zum Zeitpunkt der Erstellung.
+Anschreiben,datum,Datum,ja,,finanz,Briefdatum.
+Anschreiben,betreff,Text,ja,,finanz,—
+Anschreiben,inhalt,Langtext,nein,,finanz,"Vollständiger Brieftext, wie er erstellt wurde (für Nachdruck und Nachweis)."
+Anschreiben,empfaenger,Text,nein,,finanz,Anschrift wie gedruckt (mehrzeilig).
+Anschreiben,versandart,Auswahl,nein,versandart,finanz,Post oder E-Mail.
+Anschreiben,serie,Text,nein,,finanz,Kennung eines Serienbriefs (gleiche Kennung = gleicher Lauf).
+Anschreiben,dokument_link,Text,nein,,finanz,Optional: Link auf die abgelegte PDF im Drive-Ordner.
+Anschreiben,bemerkung,Langtext,nein,,finanz,—
+Anschreiben,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
+Anschreiben,geaendert_am,Zeitpunkt,auto,,finanz,Letzte Änderung. Nur vom Skript. (V1)
+Anschreiben,geaendert_von,Text,auto,,finanz,E-Mail des Bearbeiters. Nur vom Skript. (V1)

@@ -14,6 +14,16 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 | 10/2026 | `Daten16` | `Zahlung` enthält nur `NG` (= beim Einzug nicht gezahlt) → `Sollstellung.status = ruecklastschrift`; `Personalien` ist nur ein Access-Formular; Funktionen gibt es im Altbestand nicht | Johann |
 | 10/2026 | `Daten16.Zahler` | enthält die **MitglNr** des Zahlers → Grundlage der Konto-Cluster in der Migration | Johann |
 | 10/2026 | Reihenfolge | erst das komplette System (Phasen 3–5), **Migration ganz am Schluss** | Johann |
+| 10/2026 | Erweiterung | Bezahlhistorie, Umstellung auf Einzelbeitrag beim Ausscheiden aus der Familie, Verlängerung bei Schule/Studium/Ausbildung mit prognostiziertem Ende, Links zu Antrag/Mandat, alle Anschreiben je Person, Auswertungen und Funktionen aus dem Access-VBA | Johann |
+| 10/2026 | Datenmodell | neue Felder `Mitglied.ausbildung_art/ausbildung_bis/ausbildung_nachweis_am`; neue Tabs `Dokument`, `Vorlage`, `Anschreiben`; `_Konfig` familie_*, brief_*; CSV ist ab jetzt allein maßgeblich (xlsx-Export nur mit `--ueberschreiben`) | Umsetzung |
+
+## Gemeldete Widersprüche aus dem Access-VBA (nicht stillschweigend aufgelöst)
+
+| # | Thema | Access/VBA | Regeln/Datenmodell | Umgang |
+|---|---|---|---|---|
+| VBA1 | IBAN aus Homepage-Antrag | XML-Import (`Befehl1011`) übernimmt IBAN/BIC/Kontoinhaber aus der XML-Datei | Sicherheitsregel D3 + Datenmodell: **keine IBAN über Webformulare**, Erfassung erst vom unterschriebenen Formular | XML-Import füllt nur Personen-/Abteilungsdaten vor; Bankdaten werden angezeigt, aber nicht automatisch übernommen. **[E]** |
+| VBA2 | Mitgliedsnummer | `MitglNr_DblClick`/`Befehl1011`: kleinste **freie Lücke** wird neu vergeben | `_Konfig.mitgliedsnummer_wiederverwendung = nein` | Standard bleibt „keine Wiederverwendung“; Option „Lücke“ schaltbar. **[E]** |
+| VBA3 | Halbjahresbeitrag | `LaufenderEinzugHalb` – halber Beitrag (vermutlich bei Eintritt 2. Halbjahr) | `beitrag_anteilig` offen | Option `halbjahr` umgesetzt, Standard bleibt „voll“. **[E]** |
 
 ## Vorläufig gesetzt (noch zu bestätigen, im Code als `// OFFEN:` markiert)
 

@@ -506,6 +506,7 @@
     var soll = A.daten.liste('sollstellungen').filter(function (s) { return s.beitragskonto_id === k.beitragskonto_id; });
     ziel.appendChild(A.abschnitt('Sollstellungen'));
     ziel.appendChild(sollTabelle(soll, { ohneKonto: true }));
+    A.rufeErweiterungen('konto.abschnitt', ziel, k);
   }
 
   function umhaengenDialog(m) {

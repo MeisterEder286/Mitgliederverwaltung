@@ -8,3 +8,5 @@ aufbewahrungsfrist_id,datenkategorie,betrifft_tab,dauer_monate,bezugspunkt,recht
 8,Unterschriebener Aufnahmeantrag mit SEPA-Mandat,"Drive-Ordner, Aufnahmeantrag.formular_link",120,Ende Geschäftsjahr,§ 147 AO und Nachweis des Mandats — VORSCHLAG,ja,Das Papier ist zugleich Mandatsnachweis. Ohne es steht der Verein bei einem Widerspruch mit leeren Händen.
 9,Abgelehnte und zurückgezogene Anträge,Aufnahmeantrag,6,Eingang des Antrags,Kein Vertrag zustande gekommen — VORSCHLAG,ja,"Kurz aufbewahren für Rückfragen, dann restlos löschen — Zeile im Archiv UND Datei im Drive-Ordner."
 7,Eingefrorene Jahresstatistik,Statistik_Jahr,,Ende Geschäftsjahr,Kein Personenbezug — keine Frist nötig,ja,Anonyme Summen. Genau deshalb dürfen Einzeldaten darunter verschwinden.
+10,Anschreiben (Geschäftsbriefe),Anschreiben,72,Ende Geschäftsjahr,§ 257 HGB (6 Jahre) — VORSCHLAG,ja,"Danach Inhalt leeren, Datum/Anlass behalten."
+11,"Dokument-Links (Antrag, Mandat)",Dokument,120,Austritt,wie Aufnahmeantrag/Mandat — VORSCHLAG,ja,"Link löschen, wenn die Datei im Drive-Ordner gelöscht wird."

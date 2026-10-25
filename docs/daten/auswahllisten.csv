@@ -107,3 +107,26 @@ einwilligung_form,Aufnahmeantrag
 einwilligung_form,gesondert schriftlich
 einwilligung_form,digital
 einwilligung_form,mündlich
+ausbildung_art,Schule
+ausbildung_art,Studium
+ausbildung_art,Ausbildung
+ausbildung_art,Freiwilligendienst
+ausbildung_art,Sonstiges
+dokument_art,Aufnahmeantrag
+dokument_art,SEPA-Mandat
+dokument_art,Kündigung
+dokument_art,Einwilligung
+dokument_art,Ausbildungsnachweis
+dokument_art,Schriftverkehr
+dokument_art,Sonstiges
+vorlage_anlass,Aufnahmebestätigung
+vorlage_anlass,Austrittsbestätigung
+vorlage_anlass,Rechnung
+vorlage_anlass,Mahnung
+vorlage_anlass,SEPA-Vorabinformation
+vorlage_anlass,Beitragsänderung
+vorlage_anlass,Umstellung Einzelbeitrag
+vorlage_anlass,Ausbildungsnachweis anfordern
+vorlage_anlass,Ehrung
+vorlage_anlass,Geburtstag
+vorlage_anlass,Allgemein

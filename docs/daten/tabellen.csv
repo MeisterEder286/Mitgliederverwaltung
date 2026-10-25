@@ -18,6 +18,9 @@ Benutzer,Stammdaten / SENSIBEL,benutzer_id,email+rolle+abteilung_id,"Herz des Re
 Einwilligung,transaktional,einwilligung_id,,"Eine Zeile je Einwilligung mit Verlauf. Ein einzelnes Ja/Nein-Feld am Mitglied kann „erteilt 2018, widerrufen 2021, neu erteilt 2023“ nicht abbilden."
 Aufbewahrungsfrist,Stammdaten,aufbewahrungsfrist_id,,"Löschkonzept in Tabellenform. Das Skript rechnet daraus loeschbar_ab und die Löschliste. Werte sind Vorschläge, keine Rechtsberatung."
 Betroffenenanfrage,transaktional,anfrage_id,,"Anfragen nach Kapitel III DSGVO — Auskunft, Berichtigung, Löschung, Einschränkung, Widerspruch. Selbst zu führen, weil der Verein nachweisen muss, wie und wie schnell er entschieden hat."
+Dokument,transaktional / SENSIBEL,dokument_id,,"Links auf unterschriebene Dokumente (Aufnahmeantrag, SEPA-Mandat …) im eingeschränkten Drive-Ordner. Keine Dateien in der WebApp."
+Vorlage,Stammdaten,vorlage_id,,Briefvorlagen mit Platzhaltern für Anschreiben und Serienbriefe.
+Anschreiben,transaktional / SENSIBEL,anschreiben_id,,"Alle Anschreiben, die für eine Person erstellt wurden – mit Text, Datum, Anlass."
 Statistik_Jahr,technisch / anonym,statistik_id,,"Eingefrorene Jahreszahlen ohne jeden Personenbezug. Der Grund, warum Löschungen die Vereinsstatistik nicht mehr verfälschen können."
 _Konfig,technisch,,schluessel,"Laufendes Beitragsjahr, Vereinsdaten, Fristen und die ID-Zähler je Tabelle."
 _Protokoll,technisch,protokoll_id,,"Append-only. Nur anhängen, nie ändern, nie löschen."
