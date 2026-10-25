@@ -30,6 +30,7 @@ var Api = (function () {
     try { h = Messung.start(name); } catch (e) { h = null; }
     try {
       if (typeof DB !== 'undefined' && DB.zaehlerZuruecksetzen) DB.zaehlerZuruecksetzen();
+      if (typeof DB !== 'undefined' && DB.vorratLeeren) DB.vorratLeeren();
       ktx = Zugriff.pruefe(aktion);
       antwort = { ok: true, daten: sauber(fn(ktx)) };
       ok = true;
@@ -47,7 +48,8 @@ var Api = (function () {
     } finally {
       var messung = null;
       try {
-        messung = Messung.ende(h, { ok: ok, rollen: ktx ? ktx.rollen : null });
+        var cache = (typeof Snapshot !== 'undefined' && Snapshot.letzterCache) ? Snapshot.letzterCache() : null;
+        messung = Messung.ende(h, { ok: ok, rollen: ktx ? ktx.rollen : null, cache: cache });
       } catch (e2) { messung = null; }
       if (antwort) antwort.messung = messung;
     }

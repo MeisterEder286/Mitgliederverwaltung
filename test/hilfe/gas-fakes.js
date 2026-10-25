@@ -295,8 +295,20 @@ function erzeugeFakes(opt) {
     formatDate,
     getUuid: () => require('crypto').randomUUID(),
     sleep: () => {},
-    newBlob: (daten) => ({ getBytes: () => Buffer.from(String(daten)), getDataAsString: () => String(daten) })
+    // Blob: Text oder Byte-Array (wie in Apps Script); getBytes liefert ein Array von Zahlen.
+    newBlob: (daten, typ) => blob(Array.isArray(daten) || Buffer.isBuffer(daten) ? Buffer.from(daten) : Buffer.from(String(daten), 'utf8'), typ),
+    gzip: (b) => blob(require('zlib').gzipSync(Buffer.from(b.getBytes())), 'application/x-gzip'),
+    ungzip: (b) => blob(require('zlib').gunzipSync(Buffer.from(b.getBytes())), 'application/octet-stream'),
+    base64Encode: (daten) => Buffer.from(Array.isArray(daten) ? daten.map(x => x & 255) : String(daten)).toString('base64'),
+    base64Decode: (text) => Array.from(Buffer.from(String(text), 'base64'))
   };
+  function blob(buf, typ) {
+    return {
+      getBytes: () => Array.from(buf),
+      getDataAsString: () => buf.toString('utf8'),
+      getContentType: () => typ || null
+    };
+  }
 
   // ---------- HtmlService, ScriptApp, Logger ----------
   function htmlAusgabe(inhalt) {

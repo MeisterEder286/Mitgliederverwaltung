@@ -40,11 +40,16 @@ function Seite_(template) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-/** Startdaten für den Browser – nur, was die Rolle sehen darf (Phase 1: Benutzer, Konfig, Abteilungen). */
+/**
+ * Startdaten für den Browser – nur, was die Rolle sehen darf: Benutzer, Rechte, unkritische Einstellungen und
+ * der rollenbeschnittene Snapshot (Snapshot.fuer). Abteilungen kommen aus dem Snapshot (kein eigener Lesezugriff).
+ */
 function Startdaten_(ktx) {
-  var abteilungen = (DB.lese(['Abteilung']).Abteilung || []).map(function (a) {
-    return { id: a.abteilung_id, bezeichnung: a.bezeichnung, aktiv: a.aktiv };
-  });
+  var snapshot = Snapshot.fuer(ktx);
+  var k = Konfig.alle();
+  var konfig = {};
+  ['beitragsjahr', 'jugend_bis_alter', 'ehrung_zaehlweise', 'ehrung_stichtag', 'funktionsjubilaeum_zaehlweise',
+    'mandat_verfall_monate', 'sepa_faelligkeit'].forEach(function (s) { konfig[s] = k[s] === undefined ? null : k[s]; });
   return {
     benutzer: {
       name: ktx.name || ktx.email,
@@ -54,10 +59,15 @@ function Startdaten_(ktx) {
     },
     aktionen: ktx.aktionen,
     sicht: ktx.sicht,
-    beitragsjahr: Konfig.wert('beitragsjahr'),
-    impressum_url: Konfig.wert('impressum_url'),
-    datenschutz_url: Konfig.wert('datenschutz_url'),
-    abteilungen: abteilungen,
+    heute: DB.jetzt().slice(0, 10),
+    konfig: konfig,
+    beitragsjahr: konfig.beitragsjahr,
+    impressum_url: k.impressum_url || null,
+    datenschutz_url: k.datenschutz_url || null,
+    abteilungen: (snapshot.abteilungen || []).map(function (a) {
+      return { id: a.abteilung_id, bezeichnung: a.bezeichnung, aktiv: a.aktiv };
+    }),
+    snapshot: snapshot,
     erzeugt: DB.jetzt()
   };
 }
@@ -135,6 +145,13 @@ function triggerEinrichten() {
   });
   ScriptApp.newTrigger('messungSchreiben').timeBased().everyHours(1).create();
   var text = 'Trigger messungSchreiben (stündlich) eingerichtet.';
+  ScriptApp.getProjectTriggers().forEach(function (tr) {
+    if (tr.getHandlerFunction() === 'snapshotWarmhalten') ScriptApp.deleteTrigger(tr);
+  });
+  if (Konfig.wert('cache_warmhalten') === 'ja') {
+    ScriptApp.newTrigger('snapshotWarmhalten').timeBased().everyHours(5).create();
+    text += ' Trigger snapshotWarmhalten (alle 5 Stunden) eingerichtet.';
+  }
   console.log(text);
   return text;
 }

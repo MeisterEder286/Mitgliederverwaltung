@@ -119,8 +119,41 @@ var Rechte = (function () {
     return erg;
   }
 
+  /**
+   * Felder, die der Kontext in diesem Tab schreiben darf: nur Felder sichtbarer Sichtklassen, nie die ID,
+   * nie version/geaendert_* und nie vom Skript abgeleitete Felder (pflicht 'auto', 'PK').
+   * Liefert eine Kopie von `werte` nur mit diesen Feldern; unbekannte Felder fallen still weg.
+   */
+  function erlaubteSchreibfelder(ktx, tab, werte) {
+    var t = Schema.TABELLEN[tab];
+    var erg = {};
+    if (!t || !ktx || !werte) return erg;
+    var sichtbar = sichtbareSpalten(ktx, tab);
+    t.spalten.forEach(function (sp) {
+      if (sichtbar.indexOf(sp.name) < 0) return;
+      if (sp.name === t.idSpalte || sp.pflicht === 'PK' || sp.pflicht === 'auto') return;
+      if (TECHNISCH.indexOf(sp.name) >= 0) return;
+      if (Object.prototype.hasOwnProperty.call(werte, sp.name)) erg[sp.name] = werte[sp.name];
+    });
+    return erg;
+  }
+
+  /**
+   * Zeilensicht je Rolle getrennt (für Mehrfachrollen): { alle, abteilung, jugend } als Wahrheitswerte.
+   * Beispiel: Abteilungsleiter + Jugendleiter → abteilung UND jugend (Vereinigung beider Personenkreise).
+   */
+  function zeilenSicht(ktx) {
+    var z = { alle: false, abteilung: false, jugend: false };
+    ((ktx && ktx.rollen) || []).forEach(function (r) {
+      var m = MATRIX[r];
+      if (m) z[m.zeilen] = true;
+    });
+    return z;
+  }
+
   return {
     ROLLEN: ROLLEN, SICHTKLASSEN: SICHTKLASSEN, AKTIONEN: AKTIONEN, MATRIX: MATRIX,
-    kontext: kontext, darf: darf, sichtbareSpalten: sichtbareSpalten, schneide: schneide
+    kontext: kontext, darf: darf, sichtbareSpalten: sichtbareSpalten, schneide: schneide,
+    erlaubteSchreibfelder: erlaubteSchreibfelder, zeilenSicht: zeilenSicht
   };
 })();

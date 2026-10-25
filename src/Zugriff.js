@@ -26,7 +26,10 @@ var Zugriff = (function () {
       var roh = cache.get(CACHE_SCHLUESSEL);
       if (roh) return JSON.parse(roh);
     } catch (e) { cache = null; }
-    var zeilen = DB.lese(['Benutzer']).Benutzer || [];
+    // Kaltstart: fehlt auch die Snapshot-Basis im Cache, werden deren Tabs im selben batchGet mitgelesen
+    // (DB-Vorrat) – so kostet der erste Aufruf nur EINEN Tabellenzugriff.
+    var tabs = (typeof Snapshot !== 'undefined' && Snapshot.mitlesen) ? Snapshot.mitlesen(['Benutzer']) : ['Benutzer'];
+    var zeilen = DB.lese(tabs).Benutzer || [];
     try { if (cache) cache.put(CACHE_SCHLUESSEL, JSON.stringify(zeilen), CACHE_SEKUNDEN); } catch (e) { /* Cache ist nur Beschleunigung */ }
     return zeilen;
   }

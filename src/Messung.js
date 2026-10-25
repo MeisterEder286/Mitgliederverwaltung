@@ -67,7 +67,10 @@ var Messung = (function () {
   /** Vom Browser gemessene Zeiten übernehmen: [{ name, client_ms }], höchstens 100 Einträge. */
   function clientWerte(liste) {
     if (!Array.isArray(liste)) return 0;
-    var neue = liste.slice(0, 100).filter(function (w) {
+    var neue = liste.slice(0, 100).map(function (w) {
+      // Der Browser (client/kern) schickt { funktion, client_ms, … } – beide Schreibweisen annehmen.
+      return w && typeof w.name !== 'string' && typeof w.funktion === 'string' ? { name: w.funktion, client_ms: w.client_ms } : w;
+    }).filter(function (w) {
       return w && typeof w.name === 'string' && /^[A-Za-z0-9_]{1,60}$/.test(w.name) &&
         typeof w.client_ms === 'number' && isFinite(w.client_ms) && w.client_ms >= 0 && w.client_ms < 600000;
     }).map(function (w) {

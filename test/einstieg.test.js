@@ -35,9 +35,11 @@ function lade(optionen) {
       catch (e) { return { ok: false, fehler: { art: 'intern', meldung: 'intern' } }; }
     } },
     Zugriff: { nurFunktionskonto() { if (!o.funktionskonto) throw new Error('kein Zugriff'); } },
-    Konfig: { wert(k) {
-      return { snapshot_einbetten: o.einbetten, beitragsjahr: '2026', impressum_url: 'https://x/impressum', datenschutz_url: 'https://x/ds' }[k];
-    } },
+    Konfig: {
+      alle() { return { snapshot_einbetten: o.einbetten, beitragsjahr: '2026', impressum_url: 'https://x/impressum', datenschutz_url: 'https://x/ds' }; },
+      wert(k) { return this.alle()[k]; }
+    },
+    Snapshot: { fuer() { return { abteilungen: [{ abteilung_id: 1, bezeichnung: 'Fußball</script>', aktiv: true, version: 1 }], mitglieder: [] }; } },
     DB: { lese(tabs) { return { Abteilung: [{ abteilung_id: 1, bezeichnung: 'Fußball</script>', aktiv: true, version: 1 }] }; },
       jetzt() { return '2026-10-25T10:00:00'; } },
     Messung: { auswertung() { return [{ funktion: 'apiPing' }]; }, clientWerte(l) { protokoll.messungen = l; } },
@@ -66,6 +68,8 @@ test('doGet bettet rollengeprüfte Startdaten ein und maskiert < gegen Skript-Au
   assert.strictEqual(daten.abteilungen[0].bezeichnung, 'Fußball</script>');
   assert.deepStrictEqual(Object.keys(daten.abteilungen[0]).sort(), ['aktiv', 'bezeichnung', 'id']);
   assert.strictEqual(daten.beitragsjahr, '2026');
+  assert.ok(daten.snapshot && Array.isArray(daten.snapshot.mitglieder), 'Snapshot eingebettet');
+  assert.strictEqual(daten.heute, '2026-10-25');
   assert.deepStrictEqual(daten.benutzer.rollen, ['Kassier']);
 });
 

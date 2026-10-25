@@ -70,10 +70,28 @@ var DB = (function () {
     return !zeile || zeile.every(function (z) { return z === '' || z === null || z === undefined; });
   }
 
-  /** Liest mehrere Tabs mit EINEM Aufruf. Ergebnis: { Tab: [Objekt, …] } */
+  // Vorrat: Was in dieser Ausführung schon gelesen wurde, wird nicht erneut gelesen. So kann z. B. die
+  // Zugriffsprüfung beim Kaltstart Benutzer UND alle Snapshot-Tabs in EINEM batchGet holen, und Konfig/Snapshot
+  // bedienen sich danach daraus. Der Vorrat wird bei jedem Schreibzugriff und beim Betreten von mitSperre
+  // geleert (unter der Sperre wird immer frisch gelesen). Die gelieferten Objekte nicht verändern.
+  var vorrat = {};
+  function vorratLeeren() { vorrat = {}; }
+
+  /** Liest mehrere Tabs mit höchstens EINEM Aufruf (bereits gelesene Tabs aus dem Vorrat). Ergebnis: { Tab: [Objekt, …] } */
   function lese(tabs) {
     tabs.forEach(tabSchema);
     if (!tabs.length) return {};
+    var fehlend = tabs.filter(function (t) { return !Object.prototype.hasOwnProperty.call(vorrat, t); });
+    if (fehlend.length) {
+      var neu = leseVomSheet(fehlend);
+      fehlend.forEach(function (t) { vorrat[t] = neu[t]; });
+    }
+    var ergebnis = {};
+    tabs.forEach(function (t) { ergebnis[t] = vorrat[t]; });
+    return ergebnis;
+  }
+
+  function leseVomSheet(tabs) {
     var antwort = Sheets.Spreadsheets.Values.batchGet(dbId(), {
       ranges: tabs.map(function (t) { return "'" + t.replace(/'/g, "''") + "'"; }),
       valueRenderOption: 'UNFORMATTED_VALUE',
@@ -156,6 +174,7 @@ var DB = (function () {
 
   /** Nächste freie ID eines Tabs aus _Konfig (next_id_<Tab>). Nur in mitSperre. */
   function neueId(tab) {
+    vorratLeeren();
     nurInSperre('neueId');
     var t = tabSchema(tab);
     if (!t.idSpalte) throw intern('Tab ' + tab + ' hat keine ID-Spalte');
@@ -197,6 +216,7 @@ var DB = (function () {
 
   /** Legt einen Datensatz an. Liefert den gespeicherten Stand (mit ID, version = 1). Nur in mitSperre. */
   function einfuegen(tab, obj, ktx) {
+    vorratLeeren();
     nurInSperre('einfuegen');
     var t = tabSchema(tab);
     var sauber = bereinigt(tab, obj);
@@ -222,6 +242,7 @@ var DB = (function () {
    * Ohne inhaltliche Änderung wird nichts geschrieben und die Version bleibt.
    */
   function aktualisieren(tab, id, aenderungen, erwarteteVersion, ktx) {
+    vorratLeeren();
     nurInSperre('aktualisieren');
     var t = tabSchema(tab);
     if (!t.idSpalte) throw intern('Tab ' + tab + ' hat keine ID-Spalte');
@@ -255,6 +276,7 @@ var DB = (function () {
   /** Führt fn unter der Skriptsperre aus (wiedereintrittsfähig). Liefert das Ergebnis von fn. */
   function mitSperre(fn) {
     if (gesperrt) return fn();
+    vorratLeeren();
     var wartezeit = 10000;
     try { wartezeit = Number(Konfig.wert('sperre_wartezeit_ms')) || 10000; } catch (e) { /* Standardwert */ }
     var sperre = LockService.getScriptLock();
@@ -300,10 +322,12 @@ var DB = (function () {
 
   return {
     lese: lese,
+    vorratLeeren: vorratLeeren,
     mitSperre: mitSperre,
-    einfuegen: einfuegen,
-    aktualisieren: aktualisieren,
-    neueId: neueId,
+    // Nach jedem Schreibzugriff ist der Vorrat veraltet → leeren (auch im Fehlerfall).
+    einfuegen: function (tab, obj, ktx) { try { return einfuegen(tab, obj, ktx); } finally { vorratLeeren(); } },
+    aktualisieren: function (tab, id, a, v, ktx) { try { return aktualisieren(tab, id, a, v, ktx); } finally { vorratLeeren(); } },
+    neueId: function (tab) { try { return neueId(tab); } finally { vorratLeeren(); } },
     zaehler: zaehler,
     zaehlerZuruecksetzen: zaehlerZuruecksetzen,
     zaehle: zaehle,

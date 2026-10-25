@@ -40,6 +40,7 @@ var Konfig = (function () {
 
   function vergessen() {
     speicher = null;
+    if (typeof DB !== 'undefined' && DB.vorratLeeren) DB.vorratLeeren();
     CacheService.getScriptCache().remove(SCHLUESSEL);
   }
 
