@@ -1,13 +1,182 @@
 <!--
-  ansicht_funktionen – Ämter und Tätigkeiten
+  ansicht_funktionen – Ämter und Tätigkeiten (laufend und beendet), Funktion eintragen/beenden, Funktionsarten.
 
-  Zweck:      Laufende und beendete Funktionen, Funktionsarten.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   mitglied_lesen / funktion_bearbeiten – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Übersicht wie im Mitgliederverwalter-Mockup „Funktionen“: laufende Funktionen mit Dauer und
+              Nachweispflicht, beendete Funktionen (Historie bleibt dauerhaft), Funktionsarten (nur lesend –
+              Pflege der Stammdaten im Bereich Verwaltung). Eintragen und Beenden über Dialoge.
+  Datenquelle: App.daten (funktionen, funktionsarten, mitglieder, abteilungen) und apiFunktionEintragen /
+              apiFunktionBeenden / apiFunktionAendern (src/api/Mitglieder.js).
+  Wer darf:   Lesen mit mitglied_lesen; Eintragen/Beenden mit funktion_bearbeiten. Abteilungsleiter nur
+              Abteilungsämter der eigenen Abteilung – Vereinsämter pflegen Vorstand/Verwaltung. Der Server prüft das.
+  Besonderheiten:
+    - Funktionen werden nie gelöscht, nur mit Bis-Datum abgeschlossen (Historie für Ehrungen und Chronik).
+    - Nutzt App.MitgliederHilfe aus client/ansicht_mitglieder (wird vorher eingebunden) und stellt
+      App.MitgliederHilfe.funktionDialog(mitgliedId) für die Mitglieder-Detailansicht bereit.
+    - Hinweis „Führungszeugnis nötig“, wenn die Funktionsart fz_pflichtig ist und die Ampel der Person nicht grün.
 -->
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+  function H() { return A.MitgliederHilfe; }
+
+  function nachweisNoetig(f) {
+    var art = H().funktionsart(f.funktionsart_id);
+    return !!(art && art.fz_pflichtig === true);
+  }
+  function nachweisZelle(f) {
+    if (!nachweisNoetig(f)) return 'nein';
+    var m = H().mitglied(f.mitglied_id);
+    if (!A.sieht('hochsensibel') || !m) return 'ja';
+    return H().ampelText(m.fz_ampel) || 'ja';
+  }
+  function dauer(f) {
+    var j = H().jahreSeit(f.von);
+    if (f.bis) {
+      var a = String(f.von).split('-').map(Number), b = String(f.bis).split('-').map(Number);
+      j = b[0] - a[0] - ((b[1] < a[1] || (b[1] === a[1] && b[2] < a[2])) ? 1 : 0);
+    }
+    return j === null ? null : j < 1 ? '< 1 J.' : j + ' J.';
+  }
+  function darfBearbeiten(f) {
+    if (!A.darf('funktion_bearbeiten')) return false;
+    if (H().alleZeilen()) return true;
+    return !!f.abteilung_id && H().darfAbteilung(f.abteilung_id);
+  }
+
+  /** Dialog „Funktion eintragen“ (optional für eine bestimmte Person). */
+  function funktionDialog(mitgliedId) {
+    var personen = A.daten.liste('mitglieder').filter(function (m) {
+      var s = H().statusVon(m); return s === 'aktiv' || s === 'gekündigt' || s === 'extern';
+    }).sort(function (a, b) { return A.name(a).localeCompare(A.name(b)); })
+      .map(function (m) { return { wert: m.mitglied_id, text: A.name(m) + ' (' + m.mitgliedsnummer + ')' }; });
+    var arten = H().fkOptionen('funktionsart_id');
+    var abteilungen = H().fkOptionen('abteilung_id');
+    var f = A.formular([
+      { name: 'mitglied_id', titel: 'Person', typ: 'auswahl', pflicht: true, liste: personen, nurLesen: !!mitgliedId },
+      { name: 'funktionsart_id', titel: 'Funktion', typ: 'auswahl', pflicht: true, liste: arten },
+      { name: 'abteilung_id', titel: 'Abteilung', typ: 'auswahl', liste: abteilungen, hilfe: 'Nur bei Abteilungsämtern – Vereinsämter haben keine Abteilung.' },
+      { name: 'zusatz', titel: 'Zusatz (Mannschaft/Gruppe)', typ: 'text', hilfe: 'z. B. „E-Jugend“, „Herren I“' },
+      { name: 'von', titel: 'Seit', typ: 'datum', pflicht: true },
+      { name: 'bestellt_am', titel: 'Gewählt/berufen am', typ: 'datum' },
+      { name: 'bemerkung', titel: 'Bemerkung', typ: 'langtext' }
+    ], { mitglied_id: mitgliedId || '', von: H().heute(), abteilung_id: abteilungen.length === 1 ? abteilungen[0].wert : '' });
+    var hinweis = A.el('p', '', { className: 'leise' });
+    var fehler = A.el('p', '', { className: 'feldfehler' });
+    var artFeld = f.feld('funktionsart_id'), abtFeld = f.feld('abteilung_id');
+    artFeld.addEventListener('change', function () {
+      var art = H().funktionsart(Number(artFeld.value));
+      if (!art) { hinweis.textContent = ''; return; }
+      abtFeld.disabled = art.ebene === 'Verein';
+      if (art.ebene === 'Verein') abtFeld.value = '';
+      hinweis.textContent = (art.ebene === 'Verein' ? 'Vereinsamt. ' : 'Abteilungsamt. ') + (art.fz_pflichtig === true ? 'Erweitertes Führungszeugnis nötig. ' : '') + (art.bestellung ? 'Bestellung: ' + art.bestellung + '.' : '');
+    });
+    A.dialog('Funktion eintragen', A.el('div', null, null, [f.element, hinweis, fehler]), [
+      { text: 'Abbrechen' },
+      { text: 'Eintragen', art: 'haupt', aktion: function (schliessen) {
+        var w = f.werte();
+        w.mitglied_id = Number(mitgliedId || w.mitglied_id) || null;
+        w.funktionsart_id = w.funktionsart_id ? Number(w.funktionsart_id) : null;
+        w.abteilung_id = w.abteilung_id ? Number(w.abteilung_id) : null;
+        A.rufe('apiFunktionEintragen', w, A.still).then(function (d) {
+          A.daten.uebernehme(d); schliessen();
+          if (d.hinweise && d.hinweise.length) A.meldung('Eingetragen. ' + d.hinweise.join(' '), 'hinweis'); else A.meldung('Eingetragen.', 'ok');
+          A.neuZeichnen();
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); fehler.textContent = err.message; });
+      } }
+    ]);
+  }
+
+  function beendenDialog(fn) {
+    var m = H().mitglied(fn.mitglied_id);
+    var art = H().funktionsart(fn.funktionsart_id);
+    var f = A.formular([
+      { name: 'bis', titel: 'Bis', typ: 'datum', pflicht: true },
+      { name: 'beendigungsgrund', titel: 'Grund', typ: 'text', hilfe: 'z. B. Rücktritt, nicht wiedergewählt, beruflich' }
+    ], { bis: H().heute() });
+    var fehler = A.el('p', '', { className: 'feldfehler' });
+    A.dialog((art ? art.bezeichnung : 'Funktion') + ' beenden – ' + A.name(m), A.el('div', null, null, [
+      A.el('p', 'Die Funktion bleibt in der Historie erhalten. Läuft danach keine nachweispflichtige Funktion mehr, beginnt die Löschfrist des Führungszeugnis-Vermerks.', { className: 'leise' }),
+      f.element, fehler]), [
+      { text: 'Abbrechen' },
+      { text: 'Beenden', art: 'haupt', aktion: function (schliessen) {
+        A.rufe('apiFunktionBeenden', fn.funktion_id, fn.version, f.werte(), A.still).then(function (d) {
+          A.daten.uebernehme(d); schliessen(); A.meldung('Beendet.', 'ok'); A.neuZeichnen();
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); fehler.textContent = err.message; if (err.art === 'konflikt') A.ladeNeu(); });
+      } }
+    ]);
+  }
+
+  function zeichne(ziel) {
+    var knoepfe = [];
+    if (A.darf('funktion_bearbeiten')) knoepfe.push(A.knopf('Funktion eintragen', function () { funktionDialog(null); }));
+    ziel.appendChild(A.abschnitt('Funktionen', knoepfe, 'h1'));
+    ziel.appendChild(A.el('p', 'Erfasst wird nur, wer ein Amt oder eine Tätigkeit übernimmt (Trainer, Betreuer, Abteilungsleitung, Vorstandschaft). Einträge haben ein Von- und Bis-Datum und werden nie überschrieben.', { className: 'leise' }));
+    var alle = A.daten.liste('funktionen');
+    var laufend = alle.filter(function (f) { return H().laeuft(f.von, f.bis); });
+    var beendet = alle.filter(function (f) { return f.bis && f.bis < H().heute(); });
+
+    var nameSp = { feld: 'mitglied_id', titel: 'Name', wert: function (f) { return A.name(H().mitglied(f.mitglied_id)); }, sort: function (f) { return A.name(H().mitglied(f.mitglied_id)); } };
+    var nrSp = { feld: 'nr', titel: 'Nr.', wert: function (f) { var m = H().mitglied(f.mitglied_id); return m ? m.mitgliedsnummer : ''; } };
+    var artSp = { feld: 'funktionsart_id', titel: 'Funktion', wert: function (f) { var a = H().funktionsart(f.funktionsart_id); return a ? a.bezeichnung : ''; }, sort: function (f) { var a = H().funktionsart(f.funktionsart_id); return a ? a.bezeichnung : ''; } };
+    var ebeneSp = { feld: 'abteilung_id', titel: 'Ebene', wert: function (f) { return f.abteilung_id ? H().abteilungsname(f.abteilung_id) : 'Verein'; } };
+
+    var filterZustand = {};
+    var leiste = A.filterleiste([
+      { name: 'ebene', titel: 'Ebene', liste: [{ wert: 'verein', text: 'Verein' }].concat(A.daten.liste('abteilungen').map(function (a) { return { wert: String(a.abteilung_id), text: a.bezeichnung }; })) },
+      { name: 'art', titel: 'Funktion', liste: A.daten.liste('funktionsarten').map(function (a) { return { wert: String(a.funktionsart_id), text: a.bezeichnung }; }) }
+    ], function (z) { filterZustand = z; tabLaufend.aktualisiere(filtere(laufend)); tabBeendet.aktualisiere(filtere(beendet)); }, 'Name, Zusatz …');
+    function filtere(l) {
+      var such = A.falte(filterZustand.suche || '').trim();
+      return l.filter(function (f) {
+        if (filterZustand.ebene === 'verein' && f.abteilung_id) return false;
+        if (filterZustand.ebene && filterZustand.ebene !== 'verein' && String(f.abteilung_id) !== filterZustand.ebene) return false;
+        if (filterZustand.art && String(f.funktionsart_id) !== filterZustand.art) return false;
+        if (such && A.falte(A.name(H().mitglied(f.mitglied_id)) + ' ' + (f.zusatz || '')).indexOf(such) < 0) return false;
+        return true;
+      });
+    }
+    ziel.appendChild(leiste);
+
+    ziel.appendChild(A.abschnitt('Laufende Funktionen (' + laufend.length + ')'));
+    var tabLaufend = A.tabelle([nrSp, nameSp, artSp, ebeneSp, { feld: 'zusatz', titel: 'Zusatz' },
+      { feld: 'von', titel: 'seit', wert: function (f) { return A.datum(f.von); } },
+      { feld: 'dauer', titel: 'Dauer', sortierbar: false, wert: dauer },
+      { feld: 'nachweis', titel: 'Nachweis nötig', sortierbar: false, wert: nachweisZelle },
+      { titel: '', sortierbar: false, wert: function (f) {
+        if (!darfBearbeiten(f)) return null;
+        return A.knopf('beenden', function (e) { e.stopPropagation(); beendenDialog(f); }, 'zweit klein');
+      } }
+    ], filtere(laufend), { sortiere: 'funktionsart_id', leer: 'Keine laufenden Funktionen.',
+      beiKlick: function (f) { A.zeige('mitglied', { id: f.mitglied_id, reiter: 'funktionen' }); } });
+    ziel.appendChild(tabLaufend);
+
+    ziel.appendChild(A.abschnitt('Beendete Funktionen (' + beendet.length + ')'));
+    var tabBeendet = A.tabelle([nrSp, nameSp, artSp, ebeneSp,
+      { feld: 'von', titel: 'von', wert: function (f) { return A.datum(f.von); } },
+      { feld: 'bis', titel: 'bis', wert: function (f) { return A.datum(f.bis); } },
+      { feld: 'dauer', titel: 'Dauer', sortierbar: false, wert: dauer },
+      { feld: 'beendigungsgrund', titel: 'Ende' }
+    ], filtere(beendet), { sortiere: 'bis', absteigend: true, leer: 'Keine beendeten Funktionen.', block: 25,
+      beiKlick: function (f) { A.zeige('mitglied', { id: f.mitglied_id, reiter: 'funktionen' }); } });
+    ziel.appendChild(tabBeendet);
+
+    ziel.appendChild(A.abschnitt('Funktionsarten'));
+    ziel.appendChild(A.el('p', 'Stammdaten – steuern Nachweispflicht und Ehrungen. Pflege im Bereich Verwaltung.', { className: 'leise' }));
+    ziel.appendChild(A.tabelle([
+      { feld: 'bezeichnung', titel: 'Bezeichnung' },
+      { feld: 'ebene', titel: 'Ebene' },
+      { feld: 'fz_pflichtig', titel: 'Führungszeugnis nötig', wert: function (a) { return A.janein(a.fz_pflichtig); } },
+      { feld: 'bestellung', titel: 'Bestellung' },
+      { feld: 'ehrungsfaehig', titel: 'Ehrungsfähig', wert: function (a) { return A.janein(a.ehrungsfaehig); } },
+      { feld: 'aktiv', titel: 'Aktiv', wert: function (a) { return A.janein(a.aktiv); } }
+    ], A.daten.liste('funktionsarten'), { block: 30 }));
+  }
+
+  A.registriere('funktionen', { titel: 'Funktionen', aktion: 'mitglied_lesen', reihenfolge: 20, zeichne: zeichne });
+
+  // Für die Mitglieder-Detailansicht (Reiter „Funktionen“)
+  setTimeout(function () { if (A.MitgliederHilfe) A.MitgliederHilfe.funktionDialog = funktionDialog; }, 0);
+  if (A.MitgliederHilfe) A.MitgliederHilfe.funktionDialog = funktionDialog;
 })();
 </script>

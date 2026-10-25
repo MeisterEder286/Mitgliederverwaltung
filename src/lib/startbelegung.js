@@ -143,7 +143,16 @@ var Startbelegung = {
       ["messung_puffer_max","500","Wie viele Messwerte maximal im Cache gepuffert werden, bevor sie nach _Messung geschrieben werden."],
       ["sperre_wartezeit_ms","10000","Wie lange ein Schreibvorgang höchstens auf die Sperre wartet."],
       ["impressum_url","https://www.tsv-ergoldsbach.de/impressum","Link in der Fußzeile (D1). PRÜFEN"],
-      ["datenschutz_url","https://www.tsv-ergoldsbach.de/datenschutz","Link in der Fußzeile (D1). PRÜFEN"]
+      ["datenschutz_url","https://www.tsv-ergoldsbach.de/datenschutz","Link in der Fußzeile (D1). PRÜFEN"],
+      ["snapshot_sollstellung_jahre","3","So viele Beitragsjahre an Sollstellungen lädt der Browser (ältere bei Bedarf)."],
+      ["verein_iban","","IBAN des Vereinskontos (Gläubigerkonto) für die SEPA-Datei – ECHTEN WERT EINTRAGEN"],
+      ["verein_bic","","BIC des Vereinskontos (optional, bei DE-IBAN entbehrlich)"],
+      ["verein_strasse","","Vereinsanschrift für die SEPA-Datei (strukturierte Adresse): Straße"],
+      ["verein_hausnummer","","Vereinsanschrift: Hausnummer"],
+      ["verein_plz","84061","Vereinsanschrift: PLZ"],
+      ["verein_ort","Ergoldsbach","Vereinsanschrift: Ort"],
+      ["verein_land","DE","Vereinsanschrift: Land (ISO-Code)"],
+      ["sepa_vier_augen","nein","ja = SEPA-Datei erst nach Freigabe des Probelaufs durch eine ZWEITE Person (Vier-Augen-Prinzip)"]
     ]
   }
 };

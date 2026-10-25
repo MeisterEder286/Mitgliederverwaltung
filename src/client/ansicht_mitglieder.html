@@ -1,13 +1,918 @@
 <!--
-  ansicht_mitglieder – Mitgliederliste, Detail, Bearbeiten
+  ansicht_mitglieder – Mitgliederliste, Detail, Bearbeiten, Neues Mitglied, Austritt, Listen & Export.
 
-  Zweck:      Mitglieder suchen, filtern, ansehen, anlegen, bearbeiten; Austritt; Zugehörigkeiten und Funktionen.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   mitglied_lesen u. a. – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Mitglieder suchen, filtern und sortieren (alles im Browser auf App.daten), Detail mit Reitern
+              (Stammdaten, Mitgliedschaft, Abteilungen, Funktionen, Beitrag, Nachweise, Ehrungen, Einwilligungen),
+              Bearbeiten, Anlegen (mit Dublettenprüfung), Austritt (mit Konto-Guard), Wiedereintritt, Sterbefall,
+              Abteilungszugehörigkeiten, Exaktsuche „Mitglied der Abteilung zuordnen“ für Abteilungsleiter,
+              Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck.
+  Datenquelle: App.daten (Snapshot, Bereich kern; Mitgliedschaft/Einwilligungen → 'historie', Beitrag → 'finanzen')
+              und die api…-Funktionen aus src/api/Mitglieder.js.
+  Wer darf:   Lesen: mitglied_lesen. Bearbeiten/Anlegen/Austritt/Zugehörigkeit/Funktion: je eigene Aktion
+              (src/lib/rechte.js). Knöpfe werden über App.darf nur ausgeblendet – der Server prüft jede Aktion selbst.
+  Besonderheiten:
+    - Gibt Hilfsfunktionen für client/ansicht_funktionen unter App.MitgliederHilfe frei (gleicher Bereich).
+    - Abteilungsleiter sehen nur Personen ihrer Abteilung (serverseitig geschnitten); der Titel lautet dann
+      „Meine Abteilung“. Die Exaktsuche liefert höchstens einen Treffer und nie eine Trefferliste.
+    - „Zuletzt angesehen“ liegt nur im sessionStorage dieses Browsers (keine Personendaten, nur IDs).
+    - Exporte werden vor dem Herunterladen/Drucken auf dem Server protokolliert (ohne Personendaten).
 -->
+<style>
+  .mv-kopf { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin: 0 0 8px; }
+  .mv-kopf h1 { margin: 0; }
+  .mv-zuletzt { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+  .mv-zuletzt button { min-height: 36px; }
+  .mv-warnung { background: #fff6dc; color: #5c4400; border-radius: 6px; padding: 10px; margin: 0 0 10px; }
+  .mv-optionen label { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }
+  .mv-abteilungswahl { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+  .mv-abteilungswahl label { display: flex; gap: 8px; align-items: center; min-height: 36px; }
+  .mv-kontakt a { margin-right: 12px; }
+  .mv-filter { margin: 0 0 12px; }
+  .mv-filter summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+
+  // ================================================================== Hilfen
+
+  var TITEL = {
+    plz: 'PLZ', email: 'E-Mail', telefon: 'Telefon', handy: 'Handy', strasse: 'Straße', hausnummer: 'Hausnummer',
+    ort: 'Ort', land: 'Land', geburtsdatum: 'Geburtsdatum', geschlecht: 'Geschlecht', anrede: 'Anrede',
+    briefanrede: 'Briefanrede', titel: 'Titel', vorname: 'Vorname', nachname: 'Nachname', versandart: 'Versandart',
+    ehrenmitglied: 'Ehrenmitglied', ehrenmitglied_seit: 'Ehrenmitglied seit', nur_funktionstraeger: 'Nur Funktionsträger (kein Mitglied)',
+    beitragsart_id: 'Beitragsart', beitragskonto_id: 'Beitragskonto', beitragsgemeinschaft_id: 'Beitragsgemeinschaft',
+    vertreter_mitglied_id: 'Gesetzliche Vertretung (Mitglied)', vertreter_name: 'Gesetzliche Vertretung (Name)',
+    vertreter_kontakt: 'Vertretung Kontakt', bemerkung: 'Bemerkung', abteilung_id: 'Abteilung', status: 'Status',
+    passnummer: 'Passnummer', eintrittsdatum: 'Eintritt', austrittsdatum: 'Austritt', funktionsart_id: 'Funktion',
+    zusatz: 'Zusatz (Mannschaft/Gruppe)', von: 'Seit', bis: 'Bis', bestellt_am: 'Bestellt am', beendigungsgrund: 'Grund'
+  };
+  function titel(name) {
+    if (TITEL[name]) return TITEL[name];
+    var t = String(name).replace(/_id$/, '').replace(/_/g, ' ');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  function liste(name) { return (A.startdaten.listen || {})[name] || []; }
+  function heute() { return A.startdaten.heute || A.heute(); }
+  function jahr() { return Number(String(heute()).slice(0, 4)); }
+  function abteilung(id) { return A.daten.hole('abteilungen', id); }
+  function abteilungsname(id) { var a = abteilung(id); return a ? a.bezeichnung : '–'; }
+  function funktionsart(id) { return A.daten.hole('funktionsarten', id); }
+  function mitglied(id) { return A.daten.hole('mitglieder', Number(id)); }
+  function istAL() { var s = A.startdaten || {}; return (s.benutzer && (s.benutzer.rollen || []).length === 1 && s.benutzer.rollen[0] === 'Abteilungsleiter'); }
+  function alleZeilen() { var r = ((A.startdaten || {}).benutzer || {}).rollen || []; return r.indexOf('Vorstand') >= 0 || r.indexOf('Mitgliederverwalter') >= 0 || r.indexOf('Kassier') >= 0; }
+  function eigeneAbteilungen() { return (((A.startdaten || {}).benutzer || {}).abteilungen || []).map(Number); }
+  function darfAbteilung(id) { return alleZeilen() || eigeneAbteilungen().indexOf(Number(id)) >= 0; }
+
+  /** Status für Anzeige und Filter: aktiv / gekündigt / ausgetreten / verstorben / extern. */
+  function statusVon(m) {
+    var s = m.status_abgeleitet || m.status;
+    if (s === 'aktiv' && m.gekuendigt_zum) return 'gekündigt';
+    if (!s) return m.nur_funktionstraeger ? 'extern' : '–';
+    return s;
+  }
+  function statusText(m) {
+    var s = statusVon(m);
+    if (s === 'gekündigt') return 'gekündigt zum ' + A.datum(m.gekuendigt_zum);
+    if (s === 'extern') return 'Funktionsträger (kein Mitglied)';
+    return s;
+  }
+  function laeuft(von, bis) { var h = heute(); return (!von || von <= h) && (!bis || bis >= h); }
+  function zugehoerigkeitenVon(id) { return A.daten.liste('zugehoerigkeiten').filter(function (z) { return z.mitglied_id === id; }); }
+  function funktionenVon(id) { return A.daten.liste('funktionen').filter(function (f) { return f.mitglied_id === id; }); }
+  function altersklasse(alter) {
+    if (alter === null || alter === undefined) return null;
+    return alter <= 14 ? 'k14' : alter <= 18 ? 'k18' : alter <= 26 ? 'k26' : 'k27';
+  }
+  function ampelText(stufe) {
+    return stufe === 'gruen' ? A.ampel('gruen', 'vollständig') : stufe === 'gelb' ? A.ampel('gelb', 'läuft bald ab') : stufe === 'rot' ? A.ampel('rot', 'fehlt etwas') : null;
+  }
+  function jahreSeit(iso) {
+    if (!iso) return null;
+    var a = String(iso).split('-').map(Number), h = String(heute()).split('-').map(Number);
+    var j = h[0] - a[0] - ((h[1] < a[1] || (h[1] === a[1] && h[2] < a[2])) ? 1 : 0);
+    return j;
+  }
+
+  /** Feldkatalog-Spalte → Felddefinition für App.formular. */
+  function feldDef(sp, zusatz) {
+    var f = { name: sp.name, titel: titel(sp.name), pflicht: sp.pflicht === 'ja' };
+    if (sp.typ === 'Langtext') f.typ = 'langtext';
+    else if (sp.typ === 'Auswahl') { f.typ = 'auswahl'; f.liste = liste(sp.liste); }
+    else if (sp.typ === 'ja/nein') f.typ = 'janein';
+    else if (sp.typ === 'Datum') f.typ = 'datum';
+    else if (sp.typ === 'Ganzzahl') f.typ = 'zahl';
+    else if (sp.typ === 'Dezimal') f.typ = 'betrag';
+    else if (sp.typ === 'FK') { f.typ = 'auswahl'; f.liste = fkOptionen(sp.name); }
+    else if (sp.name === 'email') f.typ = 'email';
+    else if (sp.name === 'telefon' || sp.name === 'handy') f.typ = 'tel';
+    else f.typ = 'text';
+    Object.keys(zusatz || {}).forEach(function (k) { f[k] = zusatz[k]; });
+    return f;
+  }
+  function fkOptionen(name) {
+    if (name === 'beitragsart_id') return A.daten.liste('beitragsarten').filter(function (b) { return b.aktiv !== false; })
+      .map(function (b) { return { wert: b.beitragsart_id, text: b.bezeichnung + ' (' + A.betrag(b.betrag) + ')' }; });
+    if (name === 'beitragskonto_id') return A.daten.liste('konten').filter(function (k) { return k.aktiv !== false; })
+      .map(function (k) { return { wert: k.beitragskonto_id, text: k.beitragskonto_id + ' – ' + (k.kontoinhaber_name || '') + ' (' + (k.zahlweg || '') + ')' }; })
+      .sort(function (a, b) { return a.text.localeCompare(b.text); });
+    if (name === 'beitragsgemeinschaft_id') return A.daten.liste('gemeinschaften').filter(function (g) { return g.aktiv !== false; })
+      .map(function (g) { return { wert: g.beitragsgemeinschaft_id, text: g.bezeichnung + (g.festbetrag ? ' (' + A.betrag(g.festbetrag) + ')' : '') }; });
+    if (name === 'vertreter_mitglied_id') return A.daten.liste('mitglieder').filter(function (m) { return statusVon(m) === 'aktiv' && (m.alter === undefined || m.alter >= 18); })
+      .map(function (m) { return { wert: m.mitglied_id, text: A.name(m) + ' (' + m.mitgliedsnummer + ')' }; })
+      .sort(function (a, b) { return a.text.localeCompare(b.text); });
+    if (name === 'abteilung_id') return A.daten.liste('abteilungen').filter(function (a) { return a.aktiv !== false && darfAbteilung(a.abteilung_id); })
+      .map(function (a) { return { wert: a.abteilung_id, text: a.bezeichnung }; });
+    if (name === 'funktionsart_id') return A.daten.liste('funktionsarten').filter(function (a) { return a.aktiv !== false && (alleZeilen() || a.ebene === 'Abteilung'); })
+      .map(function (a) { return { wert: a.funktionsart_id, text: a.bezeichnung + (a.ebene === 'Abteilung' ? ' (Abteilung)' : ' (Verein)') }; });
+    return [];
+  }
+  /** Spalten eines Tabs, die die Rolle bearbeiten kann (ohne PK, auto, technische, Verwaltungsfelder). */
+  function bearbeitbar(tab, ohne) {
+    return ((A.startdaten.felder || {})[tab] || []).filter(function (sp) {
+      return sp.pflicht !== 'PK' && sp.pflicht !== 'auto' && sp.sicht !== 'verwaltung' &&
+        ['version', 'geaendert_am', 'geaendert_von'].indexOf(sp.name) < 0 && (ohne || []).indexOf(sp.name) < 0;
+    });
+  }
+  function sichtbar(tab, feld) { return ((A.startdaten.felder || {})[tab] || []).some(function (sp) { return sp.name === feld; }); }
+
+  /** Briefanrede vorschlagen: „Liebe(r) Vorname“ bei Minderjährigen, sonst „Sehr geehrte(r) Frau/Herr Nachname“. */
+  function briefanredeVorschlag(w) {
+    var alter = w.geburtsdatum ? jahreSeit(w.geburtsdatum) : null;
+    if (alter !== null && alter < 18 && w.vorname) return (w.anrede === 'Herr' || w.geschlecht === 'm' ? 'Lieber ' : 'Liebe ') + w.vorname;
+    if (w.anrede === 'Herr' && w.nachname) return 'Sehr geehrter Herr ' + w.nachname;
+    if (w.anrede === 'Frau' && w.nachname) return 'Sehr geehrte Frau ' + w.nachname;
+    if (w.vorname && w.nachname) return 'Guten Tag ' + w.vorname + ' ' + w.nachname;
+    return '';
+  }
+  /** Beitragsart nach Alter vorschlagen (alter_von/alter_bis der Beitragsarten). */
+  function beitragsartVorschlag(geburtsdatum) {
+    var alter = geburtsdatum ? jahreSeit(geburtsdatum) : null;
+    if (alter === null) return null;
+    var passend = A.daten.liste('beitragsarten').filter(function (b) {
+      return b.aktiv !== false && (b.alter_von === undefined || b.alter_von === null || alter >= b.alter_von) &&
+        (b.alter_bis === undefined || b.alter_bis === null || alter <= b.alter_bis) && (b.alter_von !== undefined || b.alter_bis !== undefined);
+    });
+    return passend.length ? passend[0].beitragsart_id : null;
+  }
+
+  // „Zuletzt angesehen“ (nur IDs, nur in diesem Browser-Tab)
+  function zuletzt() { try { return JSON.parse(sessionStorage.getItem('mv-zuletzt') || '[]'); } catch (e) { return []; } }
+  function merkeZuletzt(id) {
+    try { var l = zuletzt().filter(function (x) { return x !== id; }); l.unshift(id); sessionStorage.setItem('mv-zuletzt', JSON.stringify(l.slice(0, 6))); } catch (e) { /* ohne Speicher */ }
+  }
+
+  function hinweiseZeigen(daten) {
+    if (daten && daten.hinweise && daten.hinweise.length) A.meldung(daten.hinweise.join(' '), 'hinweis');
+  }
+
+  /** Formular-Werte: FK-Felder (Auswahl) als Zahl. */
+  function zahlenFK(werte, tab) {
+    ((A.startdaten.felder || {})[tab] || []).forEach(function (sp) {
+      if ((sp.typ === 'FK' || sp.typ === 'Ganzzahl') && werte[sp.name] !== null && werte[sp.name] !== undefined && werte[sp.name] !== '') werte[sp.name] = Number(werte[sp.name]);
+    });
+    return werte;
+  }
+
+  // ================================================================== Liste
+
+  var listenZustand = { suche: '', status: 'aktiv' };
+
+  function gefiltert(z) {
+    var such = A.falte(z.suche || '').trim();
+    var teile = such ? such.split(/\s+/) : [];
+    var zug = {};
+    if (z.zugstatus) A.daten.liste('zugehoerigkeiten').forEach(function (a) { if (laeuft(a.eintrittsdatum, a.austrittsdatum) && a.status === z.zugstatus) zug[a.mitglied_id] = true; });
+    return A.daten.liste('mitglieder').filter(function (m) {
+      if (z.status && statusVon(m) !== z.status && !(z.status === 'aktiv' && statusVon(m) === 'gekündigt')) return false;
+      if (z.abteilung && (m.abteilungen || []).indexOf(Number(z.abteilung)) < 0) return false;
+      if (z.funktion && (m.funktionen_laufend || []).indexOf(Number(z.funktion)) < 0) return false;
+      if (z.alter && altersklasse(m.alter) !== z.alter) return false;
+      if (z.zugstatus && !zug[m.mitglied_id]) return false;
+      if (z.merkmal === 'adresse' && m.adresse_ungueltig !== true) return false;
+      if (z.merkmal === 'ohne_email' && m.email) return false;
+      if (z.merkmal === 'ehren' && m.ehrenmitglied !== true) return false;
+      if (z.merkmal === 'jugend' && m.jugend !== true) return false;
+      if (z.merkmal === 'fz' && (!m.fz_ampel || m.fz_ampel === 'gruen')) return false;
+      if (teile.length) {
+        var text = A.falte([m.nachname, m.vorname, m.mitgliedsnummer, m.ort, m.email, m.strasse].join(' '));
+        for (var i = 0; i < teile.length; i++) if (text.indexOf(teile[i]) < 0) return false;
+      }
+      return true;
+    });
+  }
+
+  function listenSpalten() {
+    var sp = [
+      { feld: 'mitgliedsnummer', titel: 'Nr.' },
+      { feld: 'nachname', titel: 'Name', wert: function (m) { return A.name(m); }, sort: function (m) { return A.name(m); } }
+    ];
+    if (sichtbar('Mitglied', 'geburtsdatum')) sp.push({ feld: 'geburtsdatum', titel: 'Geb.', wert: function (m) { return A.datum(m.geburtsdatum); } });
+    if (sichtbar('Mitglied', 'ort')) sp.push({ feld: 'ort', titel: 'Ort' });
+    sp.push({ feld: 'abteilungen', titel: 'Abteilungen', sortierbar: false, wert: function (m) { return (m.abteilungen || []).map(abteilungsname).join(', '); } });
+    sp.push({ feld: 'funktionen_laufend', titel: 'Funktion', sortierbar: false, wert: function (m) {
+      return (m.funktionen_laufend || []).map(function (id) { var a = funktionsart(id); return a ? a.bezeichnung : ''; }).join(', ');
+    } });
+    sp.push({ feld: 'mitglied_seit', titel: 'seit', wert: function (m) { return A.datum(m.mitglied_seit); } });
+    sp.push({ feld: 'status_abgeleitet', titel: 'Status', wert: statusText, sort: statusVon });
+    if (A.sieht('hochsensibel')) sp.push({ feld: 'fz_ampel', titel: 'Nachweise', wert: function (m) { return ampelText(m.fz_ampel); } });
+    return sp;
+  }
+
+  function zeichneListe(ziel) {
+    var titelText = istAL() ? 'Meine Abteilung' : 'Mitglieder';
+    var knoepfe = [];
+    if (A.darf('mitglied_anlegen')) knoepfe.push(A.knopf('Neues Mitglied', function () { A.zeige('mitglied_neu'); }));
+    ziel.appendChild(A.abschnitt(titelText, knoepfe, 'h1'));
+
+    var zl = zuletzt().map(mitglied).filter(Boolean);
+    if (zl.length) {
+      var box = A.el('div', null, { className: 'mv-zuletzt', aria: { label: 'Zuletzt angesehen' } }, [A.el('span', 'Zuletzt:', { className: 'leise' })]);
+      zl.forEach(function (m) { box.appendChild(A.knopf(A.name(m), function () { A.zeige('mitglied', { id: m.mitglied_id }); }, 'zweit klein')); });
+      ziel.appendChild(box);
+    }
+
+    var kacheln = A.el('div', null, { className: 'kacheln' });
+    ziel.appendChild(kacheln);
+
+    var abteilungen = A.daten.liste('abteilungen').filter(function (a) {
+      return A.daten.liste('mitglieder').some(function (m) { return (m.abteilungen || []).indexOf(a.abteilung_id) >= 0; });
+    });
+    var filter = [
+      { name: 'status', titel: 'Status', start: listenZustand.status || '', liste: [
+        { wert: 'aktiv', text: 'aktiv' }, { wert: 'gekündigt', text: 'gekündigt' }, { wert: 'ausgetreten', text: 'ausgetreten' }, { wert: 'verstorben', text: 'verstorben' }] },
+      { name: 'abteilung', titel: 'Abteilung', liste: abteilungen.map(function (a) { return { wert: a.abteilung_id, text: a.bezeichnung }; }) },
+      { name: 'funktion', titel: 'Funktion', liste: A.daten.liste('funktionsarten').map(function (a) { return { wert: a.funktionsart_id, text: a.bezeichnung }; }) },
+      { name: 'zugstatus', titel: 'Abteilung aktiv/passiv', liste: [{ wert: 'aktiv', text: 'aktiv' }, { wert: 'passiv', text: 'passiv' }] }
+    ];
+    if (sichtbar('Mitglied', 'geburtsdatum')) filter.push({ name: 'alter', titel: 'Alter', liste: [
+      { wert: 'k14', text: 'bis 14' }, { wert: 'k18', text: '15–18' }, { wert: 'k26', text: '19–26' }, { wert: 'k27', text: 'ab 27' }] });
+    var merkmale = [{ wert: 'jugend', text: 'Jugend' }, { wert: 'ehren', text: 'Ehrenmitglied' }];
+    if (sichtbar('Mitglied', 'adresse_ungueltig')) merkmale.push({ wert: 'adresse', text: 'Adresse ungültig' });
+    if (sichtbar('Mitglied', 'email')) merkmale.push({ wert: 'ohne_email', text: 'ohne E-Mail' });
+    if (A.sieht('hochsensibel')) merkmale.push({ wert: 'fz', text: 'Nachweis fehlt/läuft ab' });
+    filter.push({ name: 'merkmal', titel: 'Merkmal', liste: merkmale });
+
+    var tabelle;
+    function aktualisiere(z) {
+      listenZustand = z;
+      var l = gefiltert(z);
+      tabelle.aktualisiere(l);
+      A.leere(kacheln);
+      kacheln.appendChild(A.kachel(A.zahl(l.length), 'angezeigt'));
+      kacheln.appendChild(A.kachel(A.zahl(l.filter(function (m) { return statusVon(m) === 'aktiv' || statusVon(m) === 'gekündigt'; }).length), 'davon aktiv'));
+      if (sichtbar('Mitglied', 'geburtsdatum')) kacheln.appendChild(A.kachel(A.zahl(l.filter(function (m) { return m.alter !== undefined && m.alter < 18; }).length), 'unter 18'));
+      if (A.sieht('hochsensibel')) kacheln.appendChild(A.kachel(A.zahl(l.filter(function (m) { return m.funktionen_laufend && m.funktionen_laufend.length; }).length), 'mit Funktion'));
+    }
+    var leiste = A.filterleiste(filter, aktualisiere, 'Name, Nummer, Ort, E-Mail …');
+    var suchfeld = leiste.querySelector('input');
+    if (listenZustand.suche) { suchfeld.value = listenZustand.suche; leiste.zustand.suche = listenZustand.suche; }
+    Object.keys(listenZustand).forEach(function (k) { if (k !== 'suche') leiste.zustand[k] = listenZustand[k]; });
+    Array.prototype.forEach.call(leiste.querySelectorAll('select'), function (s, i) { var n = filter[i].name; if (listenZustand[n]) s.value = String(listenZustand[n]); });
+    // Enter im Suchfeld öffnet den ersten Treffer (Tastaturbedienung)
+    suchfeld.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      var erster = gefiltert(leiste.zustand)[0];
+      if (erster) A.zeige('mitglied', { id: erster.mitglied_id });
+    });
+    // Filter einklappbar (spart auf dem Handy Platz); Suchfeld bleibt sichtbar
+    var auf = A.el('details', null, { className: 'mv-filter' }, [A.el('summary', 'Filter')]);
+    var selects = Array.prototype.slice.call(leiste.querySelectorAll('select'));
+    var filterBox = A.el('div', null, { className: 'filterleiste' });
+    selects.forEach(function (sel) { filterBox.appendChild(sel); sel.addEventListener('change', zaehleFilter); });
+    auf.appendChild(filterBox);
+    function zaehleFilter() {
+      var n = selects.filter(function (sel) { return sel.value; }).length;
+      auf.firstChild.textContent = n ? 'Filter (' + n + ' aktiv)' : 'Filter';
+    }
+    zaehleFilter();
+    if (window.matchMedia && window.matchMedia('(min-width: 720px)').matches) auf.open = true;
+    ziel.appendChild(leiste);
+    ziel.appendChild(auf);
+    tabelle = A.tabelle(listenSpalten(), [], {
+      sortiere: 'nachname', leer: 'Keine Mitglieder für diese Auswahl.',
+      beiKlick: function (m) { A.zeige('mitglied', { id: m.mitglied_id }); }
+    });
+    ziel.appendChild(tabelle);
+    aktualisiere(leiste.zustand);
+    setTimeout(function () { try { suchfeld.focus(); } catch (e) { /* egal */ } }, 0);
+
+    if (A.darf('mitglied_suchen_exakt')) zeichneZuordnen(ziel);
+    if (A.darf('export')) zeichneListenExport(ziel, function () { return gefiltert(leiste.zustand); });
+  }
+
+  // ------------------------------------------------------------------ Exaktsuche (Abteilungsleiter)
+
+  function zeichneZuordnen(ziel) {
+    ziel.appendChild(A.abschnitt('Mitglied der Abteilung zuordnen'));
+    ziel.appendChild(A.el('p', 'Ein bestehendes Vereinsmitglied kommt zu Ihrer Abteilung dazu: Mitgliedsnummer oder Nachname und Geburtsdatum eingeben. Die Suche liefert höchstens einen Treffer und nur bei exakter Übereinstimmung.', { className: 'leise' }));
+    var f = A.formular([
+      { name: 'mitgliedsnummer', titel: 'Mitgliedsnummer', typ: 'text' },
+      { name: 'nachname', titel: 'oder Nachname', typ: 'text' },
+      { name: 'geburtsdatum', titel: 'und Geburtsdatum', typ: 'datum' }
+    ], {});
+    var ergebnis = A.el('div');
+    var suchen = A.knopf('Suchen', function () {
+      var w = f.werte();
+      var kriterien = w.mitgliedsnummer ? { mitgliedsnummer: w.mitgliedsnummer } : { nachname: w.nachname, geburtsdatum: w.geburtsdatum };
+      suchen.disabled = true;
+      A.leere(ergebnis);
+      A.rufe('apiMitgliedSucheExakt', kriterien).then(function (d) {
+        if (!d.treffer) { ergebnis.appendChild(A.el('p', 'Kein eindeutiger Treffer. Bitte Angaben prüfen oder die Mitgliederverwaltung fragen.', { className: 'karte' })); return; }
+        var t = d.treffer;
+        var karte = A.el('div', null, { className: 'karte' }, [A.el('p', t.name + ' · Nr. ' + t.mitgliedsnummer + (t.geburtsjahr ? ' · Jahrgang ' + t.geburtsjahr : ''))]);
+        var eigene = A.daten.liste('abteilungen').filter(function (a) { return darfAbteilung(a.abteilung_id) && a.aktiv !== false; });
+        var auswahl = A.el('select', null, { aria: { label: 'Abteilung' } });
+        eigene.forEach(function (a) { auswahl.appendChild(A.el('option', a.bezeichnung + ((t.bereits_in || []).indexOf(a.abteilung_id) >= 0 ? ' (bereits zugeordnet)' : ''), { value: String(a.abteilung_id) })); });
+        var status = A.el('select', null, { aria: { label: 'Status' } }, [A.el('option', 'aktiv', { value: 'aktiv' }), A.el('option', 'passiv', { value: 'passiv' })]);
+        var zuordnen = A.knopf('Zuordnen', function () {
+          zuordnen.disabled = true;
+          A.rufe('apiMitgliedZuordnen', kriterien, Number(auswahl.value), status.value).then(function (r) {
+            A.daten.uebernehme(r);
+            A.meldung(t.name + ' ist jetzt der Abteilung zugeordnet.', 'ok');
+            if (r.mitglied_id) A.zeige('mitglied', { id: r.mitglied_id });
+          }).catch(function () { zuordnen.disabled = false; });
+        });
+        karte.appendChild(A.el('div', null, { className: 'knopfleiste' }, [auswahl, status, zuordnen]));
+        ergebnis.appendChild(karte);
+      }).catch(function () {}).then(function () { suchen.disabled = false; });
+    });
+    ziel.appendChild(f.element);
+    ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [suchen]));
+    ziel.appendChild(ergebnis);
+  }
+
+  // ------------------------------------------------------------------ Listen & Export
+
+  function exportiere(art, titelText, spalten, zeilen, untertitel, druck) {
+    A.rufe('apiMitgliederExport', art, zeilen.length).then(function () {
+      if (druck) A.drucke(titelText, spalten, zeilen, untertitel);
+      else A.csv(art + '_' + heute() + '.csv', spalten, zeilen);
+    }).catch(function () {});
+  }
+
+  function zeichneListenExport(ziel, aktuelleAuswahl) {
+    ziel.appendChild(A.abschnitt('Listen & Export'));
+    ziel.appendChild(A.el('p', 'Jeder Export wird protokolliert (wer, wann, welche Liste). Kontaktlisten bitte nicht in Messenger-Gruppen weitergeben.', { className: 'leise' }));
+    var aktive = function () { return A.daten.liste('mitglieder').filter(function (m) { var s = statusVon(m); return s === 'aktiv' || s === 'gekündigt'; }); };
+    var nameSp = { titel: 'Name', wert: function (m) { return A.name(m); } };
+    var listen = [];
+    listen.push({ art: 'liste', titel: 'Aktuelle Auswahl', text: 'die oben gefilterte Liste', zeilen: aktuelleAuswahl,
+      spalten: function () { return listenSpalten().map(function (s) { return { titel: s.titel, wert: function (m) { var v = s.wert ? s.wert(m) : m[s.feld]; return v && v.textContent !== undefined && typeof v !== 'string' ? v.textContent : v; } }; }); } });
+    if (sichtbar('Mitglied', 'telefon')) listen.push({ art: 'kontaktliste', titel: 'Kontaktliste', text: 'Name, Telefon, Handy, E-Mail', zeilen: aktive,
+      spalten: function () { return [nameSp, { titel: 'Telefon', feld: 'telefon' }, { titel: 'Handy', feld: 'handy' }, { titel: 'E-Mail', feld: 'email' }]; } });
+    if (sichtbar('Mitglied', 'geburtsdatum')) {
+      listen.push({ art: 'jahrgangsliste', titel: 'Jahrgangsliste', text: 'Name, Geburtsjahr, Abteilung', zeilen: function () {
+        return aktive().slice().sort(function (a, b) { return String(a.geburtsdatum || '').localeCompare(String(b.geburtsdatum || '')); });
+      }, spalten: function () { return [nameSp, { titel: 'Jahrgang', wert: function (m) { return m.geburtsdatum ? String(m.geburtsdatum).slice(0, 4) : ''; } },
+        { titel: 'Abteilungen', wert: function (m) { return (m.abteilungen || []).map(abteilungsname).join(', '); } }]; } });
+      listen.push({ art: 'geburtstage', titel: 'Geburtstage im Monat', text: 'Name, Datum, Alter', monat: true, zeilen: function (monat) {
+        return aktive().filter(function (m) { return m.geburtsdatum && Number(String(m.geburtsdatum).slice(5, 7)) === monat; })
+          .sort(function (a, b) { return String(a.geburtsdatum).slice(8).localeCompare(String(b.geburtsdatum).slice(8)); });
+      }, spalten: function () { return [nameSp, { titel: 'Geburtstag', wert: function (m) { return String(m.geburtsdatum).slice(8, 10) + '.' + String(m.geburtsdatum).slice(5, 7) + '.'; } },
+        { titel: 'wird', wert: function (m) { return jahr() - Number(String(m.geburtsdatum).slice(0, 4)); } }]; } });
+    }
+    listen.push({ art: 'passive', titel: 'Passive Mitglieder', text: 'Name, Abteilung, seit wann passiv', zeilen: function () {
+      return A.daten.liste('zugehoerigkeiten').filter(function (z) { return z.status === 'passiv' && laeuft(z.eintrittsdatum, z.austrittsdatum) && mitglied(z.mitglied_id); });
+    }, spalten: function () { return [{ titel: 'Name', wert: function (z) { return A.name(mitglied(z.mitglied_id)); } },
+      { titel: 'Abteilung', wert: function (z) { return abteilungsname(z.abteilung_id); } },
+      { titel: 'in der Abteilung seit', wert: function (z) { return A.datum(z.eintrittsdatum); } }]; } });
+
+    var monatWahl = A.el('select', null, { aria: { label: 'Monat' } });
+    ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'].forEach(function (n, i) {
+      monatWahl.appendChild(A.el('option', n, { value: String(i + 1) }));
+    });
+    monatWahl.value = String(Number(String(heute()).slice(5, 7)));
+
+    var tab = A.tabelle([
+      { titel: 'Liste', feld: 'titel', sortierbar: false },
+      { titel: 'Inhalt', feld: 'text', sortierbar: false },
+      { titel: 'Ausgabe', sortierbar: false, wert: function (l) {
+        var leiste = A.el('div', null, { className: 'knopfleiste' });
+        if (l.monat) leiste.appendChild(monatWahl);
+        var daten = function () { return l.monat ? l.zeilen(Number(monatWahl.value)) : l.zeilen(); };
+        var unter = function () { return l.monat ? monatWahl.options[monatWahl.selectedIndex].text : (istAL() ? 'Abteilung ' + eigeneAbteilungen().map(abteilungsname).join(', ') : ''); };
+        leiste.appendChild(A.knopf('Drucken', function (e) { e.stopPropagation(); exportiere(l.art, l.titel, l.spalten(), daten(), unter(), true); }, 'zweit klein'));
+        leiste.appendChild(A.knopf('CSV', function (e) { e.stopPropagation(); exportiere(l.art, l.titel, l.spalten(), daten(), unter(), false); }, 'zweit klein'));
+        return leiste;
+      } }
+    ], listen, { block: 20 });
+    ziel.appendChild(tab);
+  }
+
+  // ================================================================== Detail
+
+  var REITER = [
+    { id: 'stamm', titel: 'Stammdaten' },
+    { id: 'mitgliedschaft', titel: 'Mitgliedschaft' },
+    { id: 'abteilungen', titel: 'Abteilungen' },
+    { id: 'funktionen', titel: 'Funktionen' },
+    { id: 'beitrag', titel: 'Beitrag', sicht: 'finanz' },
+    { id: 'nachweise', titel: 'Nachweise', sicht: 'hochsensibel' },
+    { id: 'ehrungen', titel: 'Ehrungen' },
+    { id: 'einwilligungen', titel: 'Einwilligungen', sicht: 'kontakt' }
+  ];
+
+  function zeichneDetail(ziel, param) {
+    var m = mitglied(param && param.id);
+    if (!m) {
+      ziel.appendChild(A.el('h1', 'Mitglied'));
+      ziel.appendChild(A.el('p', 'Diese Person ist nicht (mehr) sichtbar.', { className: 'leise' }));
+      ziel.appendChild(A.knopf('Zur Liste', function () { A.zeige('mitglieder'); }, 'zweit'));
+      return;
+    }
+    merkeZuletzt(m.mitglied_id);
+    var kopf = A.el('div', null, { className: 'mv-kopf' }, [
+      A.el('h1', A.name(m)),
+      A.el('span', 'Nr. ' + m.mitgliedsnummer, { className: 'marke' }),
+      A.el('span', statusText(m), { className: 'marke' })
+    ]);
+    if (m.alter !== undefined && m.alter !== null) kopf.appendChild(A.el('span', m.alter + ' Jahre', { className: 'marke' }));
+    if (m.ehrenmitglied === true) kopf.appendChild(A.el('span', 'Ehrenmitglied', { className: 'marke' }));
+    if (m.adresse_ungueltig === true) kopf.appendChild(A.el('span', 'Adresse ungültig', { className: 'marke' }));
+    if (m.fz_ampel) kopf.appendChild(ampelText(m.fz_ampel));
+    ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
+    ziel.appendChild(kopf);
+
+    var knoepfe = A.el('div', null, { className: 'knopfleiste' });
+    var s = statusVon(m);
+    if (A.darf('mitglied_bearbeiten')) knoepfe.appendChild(A.knopf('Bearbeiten', function () { bearbeiten(m); }));
+    if (A.darf('austritt_erfassen') && (s === 'aktiv')) knoepfe.appendChild(A.knopf('Austritt erfassen', function () { austrittDialog(m); }, 'zweit'));
+    if (A.darf('mitglied_anlegen') && s === 'ausgetreten') knoepfe.appendChild(A.knopf('Wiedereintritt', function () { wiedereintrittDialog(m); }, 'zweit'));
+    if (A.darf('austritt_erfassen') && s !== 'verstorben') knoepfe.appendChild(A.knopf('Sterbefall', function () { sterbefallDialog(m); }, 'zweit'));
+    if (A.darf('mitglied_bearbeiten') && sichtbar('Mitglied', 'adresse_ungueltig')) {
+      knoepfe.appendChild(A.knopf(m.adresse_ungueltig ? 'Adresse wieder gültig' : 'Post kam zurück', function (e) {
+        e.target.disabled = true;
+        A.rufe('apiMitgliedAdresseUngueltig', m.mitglied_id, m.version, !m.adresse_ungueltig).then(function (d) {
+          A.daten.uebernehme(d); A.meldung('Gespeichert.', 'ok'); A.neuZeichnen();
+        }).catch(function () { e.target.disabled = false; });
+      }, 'zweit'));
+    }
+    ziel.appendChild(knoepfe);
+
+    var reiterLeiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
+    var inhalt = A.el('div', null, { role: 'tabpanel' });
+    var aktiv = (param && param.reiter) || 'stamm';
+    var reiter = REITER.filter(function (r) { return !r.sicht || A.sieht(r.sicht); });
+    function waehle(id) {
+      aktiv = id;
+      Array.prototype.forEach.call(reiterLeiste.children, function (b) { b.setAttribute('aria-selected', b.dataset.id === id ? 'true' : 'false'); });
+      A.leere(inhalt);
+      try { REITER_ZEICHNEN[id](inhalt, m); } catch (e) { console.error(e); inhalt.appendChild(A.el('p', 'Konnte nicht angezeigt werden.', { className: 'leise' })); }
+    }
+    reiter.forEach(function (r) {
+      var b = A.el('button', r.titel, { type: 'button', role: 'tab', dataset: { id: r.id } });
+      b.addEventListener('click', function () { waehle(r.id); });
+      reiterLeiste.appendChild(b);
+    });
+    ziel.appendChild(reiterLeiste);
+    ziel.appendChild(inhalt);
+    waehle(aktiv);
+  }
+
+  function laedt(ziel, bereich, weiter) {
+    if (A.daten.geladen(bereich)) { weiter(); return; }
+    var p = A.el('p', 'Lädt …', { className: 'laedt' });
+    ziel.appendChild(p);
+    A.daten.lade(bereich).then(function () { if (p.parentNode) { p.remove(); weiter(); } })
+      .catch(function () { p.textContent = 'Konnte nicht geladen werden.'; });
+  }
+
+  var REITER_ZEICHNEN = {
+    stamm: function (z, m) {
+      var adresse = [[m.strasse, m.hausnummer].filter(Boolean).join(' '), [m.plz, m.ort].filter(Boolean).join(' '), m.land && m.land !== 'DE' ? m.land : null].filter(Boolean).join(', ');
+      var kontakt = A.el('span', null, { className: 'mv-kontakt' });
+      [['tel:', m.telefon], ['tel:', m.handy], ['mailto:', m.email]].forEach(function (p) {
+        if (p[1]) kontakt.appendChild(A.el('a', p[1], { href: p[0] + String(p[1]).replace(/\s/g, '') }));
+      });
+      var vertretung = null;
+      if (m.vertreter_mitglied_id) { var v = mitglied(m.vertreter_mitglied_id); vertretung = v ? A.name(v) : 'Mitglied ' + m.vertreter_mitglied_id; }
+      else if (m.vertreter_name) vertretung = m.vertreter_name + (m.vertreter_kontakt ? ' (' + m.vertreter_kontakt + ')' : '');
+      z.appendChild(A.details([
+        ['Anrede', [m.anrede, m.titel].filter(Boolean).join(' ')],
+        ['Briefanrede', m.briefanrede],
+        ['Anschrift', adresse],
+        ['Kontakt', kontakt.childNodes.length ? kontakt : null],
+        ['Geburtsdatum', m.geburtsdatum ? A.datum(m.geburtsdatum) : null],
+        ['Geschlecht', m.geschlecht],
+        ['Versand', m.versandart],
+        ['Gesetzliche Vertretung', vertretung],
+        ['Ehrenmitglied seit', m.ehrenmitglied_seit ? A.datum(m.ehrenmitglied_seit) : null],
+        ['Bemerkung', m.bemerkung],
+        ['Zuletzt geändert', m.geaendert_am ? A.datum(m.geaendert_am, true) + (m.geaendert_von ? ' · ' + m.geaendert_von : '') : null]
+      ], true));
+      if (m.jugend === true && !m.vertreter_mitglied_id && !m.vertreter_name) z.appendChild(A.el('p', 'Minderjährig – gesetzliche Vertretung noch nicht erfasst.', { className: 'mv-warnung' }));
+    },
+    mitgliedschaft: function (z, m) {
+      laedt(z, 'historie', function () {
+        var zr = A.daten.liste('zeitraeume').filter(function (x) { return x.mitglied_id === m.mitglied_id; })
+          .sort(function (a, b) { return String(b.eintrittsdatum).localeCompare(String(a.eintrittsdatum)); });
+        z.appendChild(A.details([['Mitglied seit', A.datum(m.mitglied_seit)], ['Jahre (laufende Mitgliedschaft)', m.mitglied_seit && statusVon(m) !== 'ausgetreten' ? jahreSeit(m.mitglied_seit) : null]], true));
+        z.appendChild(A.tabelle([
+          { feld: 'eintrittsdatum', titel: 'Eintritt', wert: function (x) { return A.datum(x.eintrittsdatum); } },
+          { feld: 'austrittsdatum', titel: 'Austritt', wert: function (x) { return x.austrittsdatum || x.austritt_wirksam ? A.datum(x.austrittsdatum || x.austritt_wirksam) : 'laufend'; } },
+          { feld: 'kuendigung_eingang', titel: 'Kündigung eingegangen', wert: function (x) { return x.kuendigung_eingang ? A.datum(x.kuendigung_eingang) : null; } },
+          { feld: 'austrittsgrund', titel: 'Grund' },
+          { feld: 'bemerkung', titel: 'Bemerkung' }
+        ], zr, { leer: 'Keine Zeiträume.' }));
+      });
+    },
+    abteilungen: function (z, m) {
+      var zug = zugehoerigkeitenVon(m.mitglied_id);
+      var darf = A.darf('zugehoerigkeit_bearbeiten');
+      z.appendChild(A.tabelle([
+        { feld: 'abteilung_id', titel: 'Abteilung', wert: function (x) { return abteilungsname(x.abteilung_id); } },
+        { feld: 'status', titel: 'Status' },
+        { feld: 'eintrittsdatum', titel: 'seit', wert: function (x) { return A.datum(x.eintrittsdatum); } },
+        { feld: 'austrittsdatum', titel: 'bis', wert: function (x) { return x.austrittsdatum ? A.datum(x.austrittsdatum) : 'laufend'; } },
+        { feld: 'passnummer', titel: 'Passnummer' },
+        { titel: '', sortierbar: false, wert: function (x) {
+          if (!darf || !darfAbteilung(x.abteilung_id) || !laeuft(x.eintrittsdatum, x.austrittsdatum)) return null;
+          return A.el('div', null, { className: 'knopfleiste' }, [
+            A.knopf('ändern', function (e) { e.stopPropagation(); zugehoerigkeitDialog(m, x); }, 'zweit klein'),
+            A.knopf('beenden', function (e) { e.stopPropagation(); zugehoerigkeitBeendenDialog(m, x); }, 'zweit klein')
+          ]);
+        } }
+      ], zug, { leer: 'Keiner Abteilung zugeordnet.' }));
+      if (darf && statusVon(m) !== 'verstorben' && statusVon(m) !== 'ausgetreten') z.appendChild(A.knopf('Abteilung hinzufügen', function () { zugehoerigkeitDialog(m, null); }, 'zweit'));
+      if (darf && !alleZeilen()) z.appendChild(A.el('p', 'Hinweis: Hier wird nur die Abteilung beendet. Den Vereinsaustritt erfasst die Mitgliederverwaltung.', { className: 'leise' }));
+    },
+    funktionen: function (z, m) {
+      var f = funktionenVon(m.mitglied_id).sort(function (a, b) { return String(b.von).localeCompare(String(a.von)); });
+      z.appendChild(A.tabelle([
+        { feld: 'funktionsart_id', titel: 'Funktion', wert: function (x) { var a = funktionsart(x.funktionsart_id); return a ? a.bezeichnung : ''; } },
+        { feld: 'abteilung_id', titel: 'Ebene', wert: function (x) { return x.abteilung_id ? abteilungsname(x.abteilung_id) : 'Verein'; } },
+        { feld: 'zusatz', titel: 'Zusatz' },
+        { feld: 'von', titel: 'von', wert: function (x) { return A.datum(x.von); } },
+        { feld: 'bis', titel: 'bis', wert: function (x) { return x.bis ? A.datum(x.bis) : 'laufend'; } },
+        { feld: 'beendigungsgrund', titel: 'Ende' }
+      ], f, { leer: 'Keine Funktionen.' }));
+      if (A.darf('funktion_bearbeiten') && A.MitgliederHilfe.funktionDialog) z.appendChild(A.knopf('Funktion eintragen', function () { A.MitgliederHilfe.funktionDialog(m.mitglied_id); }, 'zweit'));
+    },
+    beitrag: function (z, m) {
+      laedt(z, 'finanzen', function () {
+        var konto = m.beitragskonto_id ? A.daten.hole('konten', m.beitragskonto_id) : null;
+        var gem = m.beitragsgemeinschaft_id ? A.daten.hole('gemeinschaften', m.beitragsgemeinschaft_id) : null;
+        var art = m.beitragsart_id ? A.daten.hole('beitragsarten', m.beitragsart_id) : null;
+        var kontoLink = konto ? A.el('a', 'Konto ' + konto.beitragskonto_id + ' – ' + (konto.kontoinhaber_name || ''), { href: '#', onclick: function (e) { e.preventDefault(); A.zeige('konto', { id: konto.beitragskonto_id }); } }) : null;
+        z.appendChild(A.details([
+          ['Beitragskonto', kontoLink || 'kein Konto zugeordnet'],
+          ['Zahlweg', konto ? konto.zahlweg : null],
+          ['IBAN', konto ? konto.iban_maskiert : null],
+          ['Mandat', konto && konto.mandatsreferenz ? konto.mandatsreferenz + (konto.mandatsdatum ? ' vom ' + A.datum(konto.mandatsdatum) : '') : null],
+          ['Beitragsgemeinschaft', gem ? gem.bezeichnung + (gem.festbetrag ? ' – Pauschale ' + A.betrag(gem.festbetrag) : '') : null],
+          ['Beitragsart', art ? art.bezeichnung + ' – ' + A.betrag(art.betrag) : (gem && gem.festbetrag ? '– (in der Pauschale)' : null)]
+        ], true));
+        if (konto) {
+          var mitzahler = A.daten.liste('mitglieder').filter(function (x) { return x.beitragskonto_id === konto.beitragskonto_id && x.mitglied_id !== m.mitglied_id; });
+          if (mitzahler.length) z.appendChild(A.el('p', 'Über dieses Konto zahlen außerdem: ' + mitzahler.map(A.name).join(', '), { className: 'leise' }));
+          var soll = A.daten.liste('sollstellungen').filter(function (s) { return s.beitragskonto_id === konto.beitragskonto_id; })
+            .sort(function (a, b) { return b.jahr - a.jahr; });
+          z.appendChild(A.el('h3', 'Sollstellungen des Kontos'));
+          z.appendChild(A.tabelle([
+            { feld: 'jahr', titel: 'Jahr', zahl: true },
+            { feld: 'soll_betrag', titel: 'Soll', zahl: true, wert: function (s) { return A.betrag(s.soll_betrag); } },
+            { feld: 'status', titel: 'Status' },
+            { feld: 'einzugsdatum', titel: 'Einzug', wert: function (s) { return s.einzugsdatum ? A.datum(s.einzugsdatum) : null; } },
+            { feld: 'mahnstufe', titel: 'Mahnstufe', zahl: true }
+          ], soll, { leer: 'Keine Sollstellungen.' }));
+        }
+      });
+    },
+    nachweise: function (z, m) {
+      var q = A.daten.liste('qualifikationen').filter(function (x) { return x.mitglied_id === m.mitglied_id && !x.geloescht_am; });
+      if (m.fz_ampel) z.appendChild(A.el('p', null, null, [ampelText(m.fz_ampel)]));
+      z.appendChild(A.tabelle([
+        { feld: 'qualifikationsart_id', titel: 'Nachweis', wert: function (x) { var a = A.daten.hole('qualifikationsarten', x.qualifikationsart_id); return a ? a.bezeichnung : ''; } },
+        { feld: 'ausgestellt_am', titel: 'ausgestellt', wert: function (x) { return x.ausgestellt_am ? A.datum(x.ausgestellt_am) : null; } },
+        { feld: 'eingesehen_am', titel: 'eingesehen', wert: function (x) { return x.eingesehen_am ? A.datum(x.eingesehen_am) : null; } },
+        { feld: 'gueltig_bis', titel: 'gültig bis / Wiedervorlage', wert: function (x) { var d = x.gueltig_bis || x.wiedervorlage_am; return d ? A.datum(d) : null; } }
+      ], q, { leer: 'Keine Nachweise erfasst.' }));
+      if (A.ansichten.nachweise) z.appendChild(A.knopf('Zu den Nachweisen', function () { A.zeige('nachweise', { mitglied_id: m.mitglied_id }); }, 'zweit'));
+    },
+    ehrungen: function (z, m) {
+      var e = A.daten.liste('ehrungen').filter(function (x) { return x.mitglied_id === m.mitglied_id; });
+      z.appendChild(A.tabelle([
+        { feld: 'ehrungsregel_id', titel: 'Ehrung', wert: function (x) { var r = A.daten.hole('ehrungsregeln', x.ehrungsregel_id); return r ? r.typ + ' – ' + r.bezeichnung + ' (' + r.schwelle + ')' : ''; } },
+        { feld: 'faellig_jahr', titel: 'fällig', zahl: true },
+        { feld: 'status', titel: 'Status' },
+        { feld: 'verliehen_am', titel: 'verliehen', wert: function (x) { return x.verliehen_am ? A.datum(x.verliehen_am) : null; } },
+        { feld: 'veranstaltung', titel: 'Veranstaltung' }
+      ], e, { leer: 'Keine Ehrungen.' }));
+    },
+    einwilligungen: function (z, m) {
+      laedt(z, 'historie', function () {
+        var e = A.daten.liste('einwilligungen').filter(function (x) { return x.mitglied_id === m.mitglied_id; });
+        z.appendChild(A.tabelle([
+          { feld: 'art', titel: 'Einwilligung' },
+          { feld: 'umfang', titel: 'Umfang' },
+          { feld: 'erteilt_am', titel: 'erteilt', wert: function (x) { return x.erteilt_am ? A.datum(x.erteilt_am) : null; } },
+          { feld: 'widerrufen_am', titel: 'widerrufen', wert: function (x) { return x.widerrufen_am ? A.datum(x.widerrufen_am) : 'gültig'; } },
+          { feld: 'erteilt_durch', titel: 'durch' }
+        ], e, { leer: 'Keine Einwilligungen erfasst.' }));
+        if (A.ansichten.datenschutz && A.darf('datenschutz_bearbeiten')) z.appendChild(A.knopf('Einwilligungen pflegen', function () { A.zeige('datenschutz', { mitglied_id: m.mitglied_id }); }, 'zweit'));
+      });
+    }
+  };
+
+  // ================================================================== Bearbeiten
+
+  function bearbeiten(m) {
+    A.daten.lade('finanzen').catch(function () {}).then(function () {
+      A.zeige('mitglied_bearbeiten', { id: m.mitglied_id });
+    });
+  }
+
+  function zeichneBearbeiten(ziel, param) {
+    var m = mitglied(param && param.id);
+    if (!m) { A.zeige('mitglieder'); return; }
+    ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
+    ziel.appendChild(A.el('h1', A.name(m) + ' bearbeiten'));
+    var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status']);
+    var f = A.formular(spalten.map(function (sp) { return feldDef(sp); }), m);
+    var warnung = A.el('div', null, { className: 'mv-warnung', hidden: true });
+    ziel.appendChild(warnung);
+    ziel.appendChild(f.element);
+    function pruefeHinweise() {
+      var w = f.werte(), hinweise = [];
+      if (w.strasse && /\d/.test(w.strasse) && !w.hausnummer) hinweise.push('Die Straße enthält eine Zahl – bitte die Hausnummer ins eigene Feld (wichtig für SEPA).');
+      if (w.land === 'DE' || !w.land) { if (w.plz && !/^\d{5}$/.test(w.plz)) hinweise.push('Postleitzahl: 5 Ziffern.'); }
+      warnung.textContent = hinweise.join(' ');
+      warnung.hidden = !hinweise.length;
+    }
+    f.element.addEventListener('change', pruefeHinweise);
+    var vorschlag = A.knopf('Briefanrede vorschlagen', function () {
+      var feld = f.feld('briefanrede');
+      if (feld) feld.value = briefanredeVorschlag(f.werte());
+    }, 'zweit');
+    var speichern = A.knopf('Speichern', function () {
+      var w = zahlenFK(f.werte(), 'Mitglied');
+      speichern.disabled = true;
+      A.rufe('apiMitgliedSpeichern', m.mitglied_id, m.version, w, A.still).then(function (d) {
+        A.daten.uebernehme(d);
+        A.meldung('Gespeichert.', 'ok');
+        hinweiseZeigen(d);
+        A.zeige('mitglied', { id: m.mitglied_id }, true);
+      }, function (err) {
+        speichern.disabled = false;
+        if (err.felder) f.setzeFehler(err.felder);
+        if (err.art === 'konflikt') { A.meldung('Der Datensatz wurde inzwischen geändert. Die aktuelle Fassung wurde geladen – bitte Änderung erneut vornehmen.', 'fehler'); A.ladeNeu(); }
+        else A.fehler({ meldung: err.message, nr: err.nr });
+      });
+    });
+    ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [speichern, sichtbar('Mitglied', 'briefanrede') ? vorschlag : null, A.knopf('Abbrechen', function () { A.zurueck(); }, 'zweit')]));
+    pruefeHinweise();
+  }
+
+  // ================================================================== Neues Mitglied
+
+  function zeichneNeu(ziel) {
+    ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
+    ziel.appendChild(A.el('h1', 'Neues Mitglied'));
+    if (A.sieht('finanz') && !A.daten.geladen('finanzen')) {
+      var p = A.el('p', 'Lädt Konten …', { className: 'laedt' });
+      ziel.appendChild(p);
+      A.daten.lade('finanzen').then(function () { A.neuZeichnen(); }).catch(function () { p.textContent = 'Konten konnten nicht geladen werden.'; });
+      return;
+    }
+    var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status', 'ehrenmitglied', 'ehrenmitglied_seit']);
+    var felder = [{ name: 'eintrittsdatum', titel: 'Eintritt', typ: 'datum', pflicht: true }].concat(spalten.map(function (sp) { return feldDef(sp); }));
+    var f = A.formular(felder, { eintrittsdatum: heute(), land: 'DE', versandart: 'E-Mail' });
+    var dublette = A.el('div', null, { className: 'mv-warnung', hidden: true });
+    var trotz = A.el('input', null, { type: 'checkbox', id: 'mv-trotz' });
+    var trotzLabel = A.el('label', null, { htmlFor: 'mv-trotz' }, [trotz, A.el('span', ' Es ist eine andere Person – trotzdem anlegen')]);
+    ziel.appendChild(A.el('p', 'Die Mitgliedsnummer vergibt das System. Bankverbindung und Mandat werden im Bereich Finanzen erfasst (nie über Formulare im Internet).', { className: 'leise' }));
+    ziel.appendChild(f.element);
+
+    function pruefeDublette() {
+      var w = f.werte();
+      if (!w.nachname || !w.geburtsdatum || !/^\d{4}-\d{2}-\d{2}$/.test(w.geburtsdatum)) { dublette.hidden = true; return; }
+      A.rufe('apiMitgliedDublettenPruefen', w.nachname, w.geburtsdatum, A.still).then(function (liste) {
+        A.leere(dublette);
+        if (!liste.length) { dublette.hidden = true; return; }
+        dublette.appendChild(A.el('p', 'Achtung: Es gibt bereits ' + (liste.length === 1 ? 'eine Person' : liste.length + ' Personen') + ' mit diesem Namen und Geburtsdatum:'));
+        liste.forEach(function (x) {
+          var zeile = A.el('p', null, null, [A.el('span', x.name + ' (Nr. ' + x.mitgliedsnummer + ', ' + (x.status || '–') + ') ')]);
+          if (mitglied(x.mitglied_id)) zeile.appendChild(A.knopf(x.status === 'ausgetreten' ? 'Wiedereintritt erfassen' : 'Ansehen', function () {
+            A.zeige('mitglied', { id: x.mitglied_id });
+            if (x.status === 'ausgetreten') wiedereintrittDialog(mitglied(x.mitglied_id));
+          }, 'zweit klein'));
+          dublette.appendChild(zeile);
+        });
+        dublette.appendChild(trotzLabel);
+        dublette.hidden = false;
+      }).catch(function () {});
+    }
+    ['nachname', 'geburtsdatum'].forEach(function (n) { var e = f.feld(n); if (e) e.addEventListener('change', pruefeDublette); });
+    var geb = f.feld('geburtsdatum');
+    if (geb && f.feld('beitragsart_id')) geb.addEventListener('change', function () {
+      var feld = f.feld('beitragsart_id');
+      if (feld.value) return;
+      var v = beitragsartVorschlag(A.isoDatum(geb.value));
+      if (v) feld.value = String(v);
+    });
+    ziel.appendChild(dublette);
+
+    ziel.appendChild(A.el('h2', 'Abteilungen'));
+    var abtBox = A.el('div', null, { className: 'mv-abteilungswahl' });
+    var abtWahl = [];
+    A.daten.liste('abteilungen').filter(function (a) { return a.aktiv !== false && darfAbteilung(a.abteilung_id); }).forEach(function (a) {
+      var cb = A.el('input', null, { type: 'checkbox', value: String(a.abteilung_id) });
+      var st = A.el('select', null, { aria: { label: 'Status ' + a.bezeichnung } }, [A.el('option', 'aktiv', { value: 'aktiv' }), A.el('option', 'passiv', { value: 'passiv' })]);
+      abtWahl.push({ cb: cb, st: st });
+      abtBox.appendChild(A.el('label', null, null, [cb, A.el('span', a.bezeichnung), st]));
+    });
+    ziel.appendChild(abtBox);
+
+    var anlegen = A.knopf('Mitglied anlegen', function () {
+      var w = zahlenFK(f.werte(), 'Mitglied');
+      if (!w.briefanrede && f.feld('briefanrede')) w.briefanrede = briefanredeVorschlag(w) || null;
+      var eintritt = w.eintrittsdatum; delete w.eintrittsdatum;
+      var eingabe = {
+        mitglied: w, eintrittsdatum: eintritt, trotzDublette: trotz.checked,
+        abteilungen: abtWahl.filter(function (x) { return x.cb.checked; }).map(function (x) { return { abteilung_id: Number(x.cb.value), status: x.st.value }; })
+      };
+      anlegen.disabled = true;
+      f.setzeFehler([]);
+      A.rufe('apiMitgliedAnlegen', eingabe, A.still).then(function (d) {
+        A.daten.uebernehme(d);
+        A.meldung('Angelegt mit Mitgliedsnummer ' + d.mitgliedsnummer + '.' + (d.hinweise && d.hinweise.length ? ' ' + d.hinweise.join(' ') : ''), d.hinweise && d.hinweise.length ? 'hinweis' : 'ok');
+        A.zeige('mitglied', { id: d.mitglied_id }, true);
+      }, function (err) {
+        anlegen.disabled = false;
+        if (err.felder) f.setzeFehler(err.felder);
+        A.fehler({ meldung: err.message, nr: err.nr });
+        if (/Dublette/.test(err.message || '')) pruefeDublette();
+      });
+    });
+    ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [anlegen, A.knopf('Abbrechen', function () { A.zurueck(); }, 'zweit')]));
+  }
+
+  // ================================================================== Dialoge
+
+  function austrittDialog(m) {
+    var standard = String(heute()).slice(0, 4) + '-12-31';
+    var f = A.formular([
+      { name: 'kuendigung_eingang', titel: 'Kündigung eingegangen am', typ: 'datum' },
+      { name: 'austritt_wirksam', titel: 'Wirksam zum', typ: 'datum', pflicht: true, hilfe: 'Kündigungsfrist laut Satzung, meist 31.12.' },
+      { name: 'austrittsgrund', titel: 'Grund', typ: 'auswahl', liste: liste('austrittsgrund').filter(function (g) { return g !== 'verstorben'; }) }
+    ], { kuendigung_eingang: heute(), austritt_wirksam: standard });
+    var optBox = A.el('div', null, { className: 'mv-optionen' });
+    var optFehler = A.el('p', '', { className: 'feldfehler' });
+    var inhalt = A.el('div', null, null, [f.element, optBox, optFehler]);
+    var optionen = [];
+    function ladeGuard() {
+      var d = A.isoDatum(f.feld('austritt_wirksam').value) || standard;
+      A.rufe('apiMitgliedAustrittVorbereiten', m.mitglied_id, d, A.still).then(function (r) {
+        A.leere(optBox); optionen = [];
+        if (!r.waisen || !r.waisen.betroffen) return;
+        r.waisen.konten.forEach(function (k) {
+          optBox.appendChild(A.el('p', A.name(m) + ' ist Inhaber von Konto ' + k.konto_id + ' und Zahler für ' + k.abhaengige.map(function (a) { return a.name; }).join(', ') +
+            '. Das Mandat deckt sie nach dem Austritt nicht mehr ab – sie werden NICHT automatisch mit ausgetragen.', { className: 'mv-warnung' }));
+        });
+        optBox.appendChild(A.el('strong', 'Was passiert mit dem Konto?'));
+        r.waisen.optionen.forEach(function (o, i) {
+          var rb = A.el('input', null, { type: 'radio', name: 'mv-option', value: String(i), id: 'mv-opt-' + i });
+          optionen.push({ rb: rb, o: o });
+          optBox.appendChild(A.el('label', null, { htmlFor: 'mv-opt-' + i }, [rb, A.el('span', o.text)]));
+        });
+      }).catch(function () {});
+    }
+    f.feld('austritt_wirksam').addEventListener('change', ladeGuard);
+    ladeGuard();
+    A.dialog('Austritt erfassen – ' + A.name(m), inhalt, [
+      { text: 'Abbrechen' },
+      { text: 'Austritt speichern', art: 'haupt', aktion: function (schliessen) {
+        var w = f.werte();
+        var gewaehlt = optionen.filter(function (x) { return x.rb.checked; })[0];
+        if (gewaehlt) w.option = { code: gewaehlt.o.code, konto_id: gewaehlt.o.konto_id || null, mitglied_id: gewaehlt.o.mitglied_id || null };
+        optFehler.textContent = '';
+        A.rufe('apiMitgliedAustritt', m.mitglied_id, w, A.still).then(function (d) {
+          A.daten.uebernehme(d);
+          schliessen();
+          A.meldung('Austritt gespeichert.' + (d.hinweise && d.hinweise.length ? ' ' + d.hinweise.join(' ') : ''), d.hinweise && d.hinweise.length ? 'hinweis' : 'ok');
+          A.neuZeichnen();
+        }, function (err) {
+          if (err.felder) {
+            f.setzeFehler(err.felder);
+            var o = err.felder.filter(function (x) { return x.feld === 'option'; })[0];
+            if (o) optFehler.textContent = err.message + ' ' + o.meldung;
+          } else optFehler.textContent = err.message;
+        });
+      } }
+    ]);
+  }
+
+  function wiedereintrittDialog(m) {
+    var f = A.formular([{ name: 'eintrittsdatum', titel: 'Wiedereintritt am', typ: 'datum', pflicht: true }], { eintrittsdatum: heute() });
+    var fehler = A.el('p', '', { className: 'feldfehler' });
+    var box = A.el('div', null, { className: 'mv-abteilungswahl' });
+    var wahl = [];
+    A.daten.liste('abteilungen').filter(function (a) { return a.aktiv !== false && darfAbteilung(a.abteilung_id); }).forEach(function (a) {
+      var cb = A.el('input', null, { type: 'checkbox', value: String(a.abteilung_id) });
+      wahl.push(cb);
+      box.appendChild(A.el('label', null, null, [cb, A.el('span', a.bezeichnung)]));
+    });
+    A.dialog('Wiedereintritt – ' + A.name(m), A.el('div', null, null, [A.el('p', 'Gleiche Mitgliedsnummer ' + m.mitgliedsnummer + ', neuer Mitgliedschaftszeitraum.', { className: 'leise' }), f.element, A.el('strong', 'Abteilungen'), box, fehler]), [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: 'haupt', aktion: function (schliessen) {
+        var w = f.werte();
+        w.abteilungen = wahl.filter(function (c) { return c.checked; }).map(function (c) { return { abteilung_id: Number(c.value), status: 'aktiv' }; });
+        A.rufe('apiMitgliedWiedereintritt', m.mitglied_id, w, A.still).then(function (d) {
+          A.daten.uebernehme(d); schliessen(); A.meldung('Wiedereintritt gespeichert.', 'ok'); A.neuZeichnen();
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); fehler.textContent = err.message; });
+      } }
+    ]);
+  }
+
+  function sterbefallDialog(m) {
+    var f = A.formular([{ name: 'sterbedatum', titel: 'Sterbedatum', typ: 'datum', pflicht: true }], {});
+    var fehler = A.el('p', '', { className: 'feldfehler' });
+    A.dialog('Sterbefall erfassen – ' + A.name(m), A.el('div', null, null, [
+      A.el('p', 'Mitgliedschaft, Abteilungen und Funktionen enden zum Sterbedatum. Die Kasse sollte offene Beiträge prüfen.', { className: 'leise' }), f.element, fehler]), [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: 'gefahr', aktion: function (schliessen) {
+        A.rufe('apiMitgliedSterbefall', m.mitglied_id, m.version, f.werte().sterbedatum, A.still).then(function (d) {
+          A.daten.uebernehme(d); schliessen(); hinweiseZeigen(d); A.neuZeichnen();
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); fehler.textContent = err.message; });
+      } }
+    ]);
+  }
+
+  function zugehoerigkeitDialog(m, z) {
+    var neu = !z;
+    var felder = [];
+    if (neu) felder.push({ name: 'abteilung_id', titel: 'Abteilung', typ: 'auswahl', pflicht: true, liste: fkOptionen('abteilung_id').filter(function (o) {
+      return !zugehoerigkeitenVon(m.mitglied_id).some(function (x) { return x.abteilung_id === o.wert && laeuft(x.eintrittsdatum, x.austrittsdatum); });
+    }) });
+    felder.push({ name: 'status', titel: 'Status', typ: 'auswahl', pflicht: true, liste: liste('zugehoerigkeit') });
+    felder.push({ name: 'eintrittsdatum', titel: 'in der Abteilung seit', typ: 'datum' });
+    felder.push({ name: 'passnummer', titel: 'Passnummer', typ: 'text' });
+    felder.push({ name: 'bemerkung', titel: 'Bemerkung', typ: 'langtext' });
+    var f = A.formular(felder, neu ? { status: 'aktiv', eintrittsdatum: heute() } : z);
+    var fehler = A.el('p', '', { className: 'feldfehler' });
+    A.dialog((neu ? 'Abteilung hinzufügen – ' : abteilungsname(z.abteilung_id) + ' – ') + A.name(m), A.el('div', null, null, [f.element, fehler]), [
+      { text: 'Abbrechen' },
+      { text: 'Speichern', art: 'haupt', aktion: function (schliessen) {
+        var w = f.werte();
+        if (neu) { w.mitglied_id = m.mitglied_id; w.abteilung_id = Number(w.abteilung_id); }
+        A.rufe('apiZugehoerigkeitSpeichern', neu ? null : z.zugehoerigkeit_id, neu ? 0 : z.version, w, A.still).then(function (d) {
+          A.daten.uebernehme(d); schliessen(); A.meldung('Gespeichert.', 'ok'); A.neuZeichnen();
+        }, function (err) {
+          if (err.felder) f.setzeFehler(err.felder);
+          fehler.textContent = err.message;
+          if (err.art === 'konflikt') A.ladeNeu();
+        });
+      } }
+    ]);
+  }
+
+  function zugehoerigkeitBeendenDialog(m, z) {
+    var f = A.formular([{ name: 'austrittsdatum', titel: 'Ende in der Abteilung zum', typ: 'datum', pflicht: true }], { austrittsdatum: heute() });
+    var fehler = A.el('p', '', { className: 'feldfehler' });
+    A.dialog(abteilungsname(z.abteilung_id) + ' beenden – ' + A.name(m), A.el('div', null, null, [
+      A.el('p', 'Beendet nur die Zugehörigkeit zur Abteilung, nicht die Vereinsmitgliedschaft.', { className: 'leise' }), f.element, fehler]), [
+      { text: 'Abbrechen' },
+      { text: 'Beenden', art: 'haupt', aktion: function (schliessen) {
+        A.rufe('apiZugehoerigkeitBeenden', z.zugehoerigkeit_id, z.version, f.werte().austrittsdatum, A.still).then(function (d) {
+          A.daten.uebernehme(d); schliessen(); hinweiseZeigen(d); A.neuZeichnen();
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); fehler.textContent = err.message; });
+      } }
+    ]);
+  }
+
+  // ================================================================== Anmelden
+
+  A.registriere('mitglieder', {
+    titel: 'Mitglieder', aktion: 'mitglied_lesen', reihenfolge: 10,
+    zeichne: function (ziel) {
+      // Titel der Navigation beim Abteilungsleiter anpassen (nach dem Start bekannt)
+      zeichneListe(ziel);
+    }
+  });
+  A.registriere('mitglied', { titel: 'Mitglied', aktion: 'mitglied_lesen', versteckt: true, gehoertZu: 'mitglieder', zeichne: zeichneDetail });
+  A.registriere('mitglied_bearbeiten', { titel: 'Mitglied bearbeiten', aktion: 'mitglied_bearbeiten', versteckt: true, gehoertZu: 'mitglieder', zeichne: zeichneBearbeiten });
+  A.registriere('mitglied_neu', { titel: 'Neues Mitglied', aktion: 'mitglied_anlegen', versteckt: true, gehoertZu: 'mitglieder', zeichne: zeichneNeu });
+
+  // Navigationstitel für Abteilungsleiter: „Meine Abteilung“ (sobald die Startdaten da sind)
+  A.daten.beobachte(function () {
+    if (!istAL()) return;
+    var b = document.querySelector('#navigation button[data-ansicht="mitglieder"]');
+    if (b) b.textContent = 'Meine Abteilung';
+  });
+  setTimeout(function warte() {
+    if (!A.startdaten) { setTimeout(warte, 100); return; }
+    if (!istAL()) return;
+    var b = document.querySelector('#navigation button[data-ansicht="mitglieder"]');
+    if (b) b.textContent = 'Meine Abteilung'; else setTimeout(warte, 100);
+  }, 0);
+
+  /** Für client/ansicht_funktionen. */
+  A.MitgliederHilfe = {
+    titel: titel, feldDef: feldDef, fkOptionen: fkOptionen, statusVon: statusVon, laeuft: laeuft,
+    abteilungsname: abteilungsname, funktionsart: funktionsart, mitglied: mitglied, alleZeilen: alleZeilen,
+    darfAbteilung: darfAbteilung, jahreSeit: jahreSeit, ampelText: ampelText, heute: heute, hinweiseZeigen: hinweiseZeigen
+  };
 })();
 </script>
