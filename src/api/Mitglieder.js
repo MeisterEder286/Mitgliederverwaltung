@@ -86,10 +86,10 @@ function apiMitgliedSucheExakt(kriterien) {
   });
 }
 
-/** Nach der Exaktsuche der eigenen Abteilung zuordnen (Suche wird serverseitig wiederholt). */
-function apiMitgliedZuordnen(kriterien, abteilungId, status) {
+/** Nach der Exaktsuche der eigenen Abteilung zuordnen – nur mit dem Einmal-Token aus apiMitgliedSucheExakt. */
+function apiMitgliedZuordnen(token, abteilungId, status) {
   return Api.ausfuehren('apiMitgliedZuordnen', 'zugehoerigkeit_bearbeiten', function (ktx) {
-    return Mitglieder.zuordnen(ktx, kriterien, Number(abteilungId), status);
+    return Mitglieder.zuordnen(ktx, typeof token === 'string' ? token : '', Number(abteilungId), status);
   });
 }
 

@@ -27,7 +27,9 @@
  *     Das Zuordnen wiederholt die Suche serverseitig, statt eine ID vom Browser anzunehmen.
  */
 var Mitglieder = (function () {
-  var EXAKTSUCHE_MAX = 30;
+  var EXAKTSUCHE_MAX = 30;          // Suchen je Benutzer und Stunde
+  var EXAKTSUCHE_MAX_TAG = 60;      // Suchen je Benutzer und Tag (Befund M3: Durchzählen erschweren)
+  var TOKEN_DAUER_S = 600;          // so lange gilt ein Treffer-Token für „Zuordnen“
   var EXPORTARTEN = ['liste', 'kontaktliste', 'jahrgangsliste', 'geburtstage', 'passive'];
 
   // ================================================================== Hilfen
@@ -501,12 +503,19 @@ var Mitglieder = (function () {
 
   // ================================================================== Exaktsuche (Abteilungsleiter)
 
+  /**
+   * Ratenbegrenzung je Benutzer (Stunde + Tag). Zählt UNTER der Sperre, damit parallele Aufrufe den Zähler nicht
+   * umgehen können (Befund M3 der Sicherheitsprüfung).
+   */
   function begrenze(ktx) {
-    var c = CacheService.getScriptCache();
-    var key = 'exaktsuche:' + String(ktx.email);
-    var n = Number(c.get(key) || 0);
-    if (n >= EXAKTSUCHE_MAX) throw Fehler.fachlich('Zu viele Suchen in kurzer Zeit. Bitte später erneut versuchen.');
-    c.put(key, String(n + 1), 3600);
+    DB.mitSperre(function () {
+      var c = CacheService.getScriptCache();
+      var stunde = 'exaktsuche:h:' + String(ktx.email), tag = 'exaktsuche:t:' + String(ktx.email) + ':' + heute();
+      var nh = Number(c.get(stunde) || 0), nt = Number(c.get(tag) || 0);
+      if (nh >= EXAKTSUCHE_MAX || nt >= EXAKTSUCHE_MAX_TAG) throw Fehler.fachlich('Zu viele Suchen in kurzer Zeit. Bitte später erneut versuchen.');
+      c.put(stunde, String(nh + 1), 3600);
+      c.put(tag, String(nt + 1), 21600);
+    });
   }
 
   /** Höchstens EIN Treffer, nur bei exakter Übereinstimmung, nur laufende Mitglieder. */
@@ -515,14 +524,17 @@ var Mitglieder = (function () {
     var nummer = leer(kriterien.mitgliedsnummer) ? null : String(kriterien.mitgliedsnummer).trim();
     var nachname = leer(kriterien.nachname) ? null : falte(kriterien.nachname);
     var geb = istDatum(kriterien.geburtsdatum) ? kriterien.geburtsdatum : null;
-    if (!nummer && !(nachname && geb)) {
-      feldfehler([{ feld: 'mitgliedsnummer', meldung: 'Mitgliedsnummer ODER Nachname und Geburtsdatum angeben.' }]);
+    // Immer ZWEI Merkmale (Befund H1/M3): Nummer + Nachname oder Nachname + Geburtsdatum. Die Nummer allein
+    // ließe sich durchzählen und würde fremde Mitglieder nacheinander offenlegen.
+    if (!nachname || !(nummer || geb)) {
+      feldfehler([{ feld: 'nachname', meldung: 'Nachname und dazu Mitgliedsnummer oder Geburtsdatum angeben.' }]);
     }
     var h = heute();
     var kandidaten = (daten().Mitglied || []).filter(function (m) {
       if (m.anonymisiert === true || m.verarbeitung_eingeschraenkt === true || m.sterbedatum) return false;
-      if (nummer) return String(m.mitgliedsnummer) === nummer;
-      return falte(m.nachname) === nachname && m.geburtsdatum === geb;
+      if (falte(m.nachname) !== nachname) return false;
+      if (nummer && String(m.mitgliedsnummer) !== nummer) return false;
+      return !geb || m.geburtsdatum === geb;
     }).filter(function (m) { return Mitgliedschaft.status(m, zeitraeume(m.mitglied_id), h) === 'aktiv'; });
     return kandidaten.length === 1 ? kandidaten[0] : null;
   }
@@ -532,6 +544,10 @@ var Mitglieder = (function () {
     var m = exaktTreffer(kriterien);
     Protokoll.schreibe(ktx, [{ aktion: 'eingesehen', tabelle: 'Mitglied', datensatz_id: m ? m.mitglied_id : '-', kommentar: 'Exaktsuche' + (m ? '' : ' ohne Treffer') }]);
     if (!m) return { treffer: null };
+    // Einmal-Token statt ID: „Zuordnen“ ist nur für genau diesen Treffer, nur für diesen Benutzer und nur
+    // kurze Zeit möglich (Befund H1 – vorher genügte die Nummer allein, ohne vorherige Suche).
+    var token = Utilities.getUuid();
+    CacheService.getScriptCache().put('exakttoken:' + String(ktx.email) + ':' + token, String(m.mitglied_id), TOKEN_DAUER_S);
     var eigene = (daten().Abteilungszugehoerigkeit || []).filter(function (a) {
       return a.mitglied_id === m.mitglied_id && (!a.austrittsdatum || a.austrittsdatum >= heute()) &&
         (Rechte.zeilenSicht(ktx).alle || (ktx.abteilungen || []).indexOf(a.abteilung_id) >= 0);
@@ -540,17 +556,25 @@ var Mitglieder = (function () {
       treffer: {
         name: name(m), mitgliedsnummer: m.mitgliedsnummer,
         geburtsjahr: m.geburtsdatum ? Number(String(m.geburtsdatum).slice(0, 4)) : null,
-        bereits_in: eigene
+        bereits_in: eigene,
+        token: token
       }
     };
   }
 
-  /** Zuordnen nach Exaktsuche: Suche wird serverseitig wiederholt (keine ID vom Browser). */
-  function zuordnen(ktx, kriterien, abteilungId, status) {
+  /** Zuordnen nur mit dem Einmal-Token aus einer vorangegangenen Exaktsuche desselben Benutzers. */
+  function zuordnen(ktx, token, abteilungId, status) {
     return DB.mitSperre(function () {
       pruefeAbteilung(ktx, abteilungId);
-      var m = exaktTreffer(kriterien);
-      if (!m) throw Fehler.fachlich('Kein eindeutiger Treffer – bitte Angaben prüfen.');
+      var c = CacheService.getScriptCache();
+      var schluessel = 'exakttoken:' + String(ktx.email) + ':' + String(token || '');
+      var id = typeof token === 'string' && token ? Number(c.get(schluessel)) : 0;
+      if (!id) throw Fehler.fachlich('Bitte zuerst erneut suchen – der Treffer ist nicht mehr gültig.');
+      c.remove(schluessel);
+      var m = (daten().Mitglied || []).filter(function (x) { return x.mitglied_id === id; })[0];
+      if (!m || Mitgliedschaft.status(m, zeitraeume(m.mitglied_id), heute()) !== 'aktiv') {
+        throw Fehler.fachlich('Kein eindeutiger Treffer – bitte Angaben prüfen.');
+      }
       var aenderungen = [], protokoll = [];
       zugehoerigkeitAnlegenOderReaktivieren(ktx, m.mitglied_id, Number(abteilungId), status === 'passiv' ? 'passiv' : 'aktiv', heute(), aenderungen, protokoll);
       return antwort(ktx, aenderungen, protokoll, { mitglied_id: m.mitglied_id });

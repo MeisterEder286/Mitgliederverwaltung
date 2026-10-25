@@ -178,20 +178,26 @@ test('Exaktsuche: nur ein Treffer ohne ID, mehrdeutig → kein Treffer, Zuordnen
   const snap = entpacke(rein(u.g.apiSnapshot()).daten);
   const sichtbar = new Set(snap.mitglieder.map(m => m.mitglied_id));
   const fremd = aktiveMitglieder(u).find(m => !sichtbar.has(m.mitglied_id) && m.geburtsdatum && !m.nur_funktionstraeger);
-  const t = ok(u.g.apiMitgliedSucheExakt({ mitgliedsnummer: String(fremd.mitgliedsnummer) }));
+  // Nummer allein genügt nicht mehr (Befund H1/M3): immer zwei Merkmale
+  fehler(u.g.apiMitgliedSucheExakt({ mitgliedsnummer: String(fremd.mitgliedsnummer) }), 'fachlich');
+  const t = ok(u.g.apiMitgliedSucheExakt({ mitgliedsnummer: String(fremd.mitgliedsnummer), nachname: fremd.nachname }));
   assert.ok(t.treffer);
-  assert.deepStrictEqual(Object.keys(t.treffer).sort(), ['bereits_in', 'geburtsjahr', 'mitgliedsnummer', 'name']);
+  assert.deepStrictEqual(Object.keys(t.treffer).sort(), ['bereits_in', 'geburtsjahr', 'mitgliedsnummer', 'name', 'token']);
   assert.ok(!JSON.stringify(t).includes(String(fremd.mitglied_id) + ','), 'keine ID');
   assert.strictEqual(ok(u.g.apiMitgliedSucheExakt({ nachname: fremd.nachname, geburtsdatum: '1900-01-01' })).treffer, null);
   assert.ok(ok(u.g.apiMitgliedSucheExakt({ nachname: fremd.nachname.toLowerCase(), geburtsdatum: fremd.geburtsdatum })).treffer);
   fehler(u.g.apiMitgliedSucheExakt({}), 'fachlich');
-  const z = ok(u.g.apiMitgliedZuordnen({ mitgliedsnummer: String(fremd.mitgliedsnummer) }, 1, 'aktiv'));
+  // Zuordnen ohne gültiges Token (z. B. nur mit Kriterien oder erfundenem Token) scheitert
+  fehler(u.g.apiMitgliedZuordnen({ mitgliedsnummer: String(fremd.mitgliedsnummer) }, 1, 'aktiv'), 'fachlich');
+  fehler(u.g.apiMitgliedZuordnen('erfunden', 1, 'aktiv'), 'fachlich');
+  fehler(u.g.apiMitgliedZuordnen(t.treffer.token, 2, 'aktiv'), 'zugriff');   // fremde Abteilung
+  const z = ok(u.g.apiMitgliedZuordnen(t.treffer.token, 1, 'aktiv'));
   assert.ok(z.aktualisiert.mitglieder.some(m => m.mitglied_id === fremd.mitglied_id), 'jetzt sichtbar');
-  fehler(u.g.apiMitgliedZuordnen({ mitgliedsnummer: String(fremd.mitgliedsnummer) }, 2, 'aktiv'), 'zugriff');
+  fehler(u.g.apiMitgliedZuordnen(t.treffer.token, 1, 'aktiv'), 'fachlich');   // Token nur einmal gültig
   assert.ok(u.obj('_Protokoll').some(p => p.aktion === 'eingesehen' && /Exaktsuche/.test(p.kommentar)));
-  // Begrenzung: nach 30 Suchen je Stunde ist Schluss
-  for (let i = 0; i < 30; i++) u.g.apiMitgliedSucheExakt({ mitgliedsnummer: '0000' });
-  assert.match(fehler(u.g.apiMitgliedSucheExakt({ mitgliedsnummer: '0000' }), 'fachlich').meldung, /Zu viele/);
+  // Begrenzung: nach 30 Suchen je Stunde ist Schluss (die bisherigen zählen mit)
+  for (let i = 0; i < 30; i++) u.g.apiMitgliedSucheExakt({ mitgliedsnummer: '0000', nachname: 'Niemand' });
+  assert.match(fehler(u.g.apiMitgliedSucheExakt({ mitgliedsnummer: '0000', nachname: 'Niemand' }), 'fachlich').meldung, /Zu viele/);
 });
 
 test('Zugehörigkeit: passiv setzen, beenden; Export wird protokolliert', () => {

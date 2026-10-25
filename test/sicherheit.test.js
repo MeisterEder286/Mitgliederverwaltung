@@ -45,3 +45,13 @@ test('Keine Antwort irgendeiner Lesefunktion enthält eine IBAN im Klartext (au�
   const text = JSON.stringify(antworten);
   ibans.forEach(i => assert.ok(!text.includes(i), 'IBAN gefunden: ' + i.slice(0, 6) + '…'));
 });
+
+test('M1: Einstellungen werden mit Formelschutz geschrieben', () => {
+  const { f, g } = als('Mitgliederverwalter');
+  const k = f.daten('_Konfig');
+  const iS = k[0].indexOf('schluessel'), iW = k[0].indexOf('wert');
+  const zeile = k.find(z => z[iS] === 'verein_name');
+  const a = rein(g.apiVerwaltungKonfigSpeichern('verein_name', '=IMPORTXML("https://x","//a")', zeile[iW]));
+  const nachher = f.daten('_Konfig').find(z => z[iS] === 'verein_name')[iW];
+  assert.ok(!String(nachher).startsWith('='), 'Formel ungeschützt gespeichert: ' + nachher + ' / ' + JSON.stringify(a.fehler || ''));
+});
