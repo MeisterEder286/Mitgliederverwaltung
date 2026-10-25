@@ -21,9 +21,10 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 
 | # | Thema | Access/VBA | Regeln/Datenmodell | Umgang |
 |---|---|---|---|---|
-| VBA1 | IBAN aus Homepage-Antrag | XML-Import (`Befehl1011`) übernimmt IBAN/BIC/Kontoinhaber aus der XML-Datei | Sicherheitsregel D3 + Datenmodell: **keine IBAN über Webformulare**, Erfassung erst vom unterschriebenen Formular | XML-Import füllt nur Personen-/Abteilungsdaten vor; Bankdaten werden angezeigt, aber nicht automatisch übernommen. **[E]** |
-| VBA2 | Mitgliedsnummer | `MitglNr_DblClick`/`Befehl1011`: kleinste **freie Lücke** wird neu vergeben | `_Konfig.mitgliedsnummer_wiederverwendung = nein` | Standard bleibt „keine Wiederverwendung“; Option „Lücke“ schaltbar. **[E]** |
-| VBA3 | Halbjahresbeitrag | `LaufenderEinzugHalb` – halber Beitrag (vermutlich bei Eintritt 2. Halbjahr) | `beitrag_anteilig` offen | Option `halbjahr` umgesetzt, Standard bleibt „voll“. **[E]** |
+| VBA1 | IBAN aus Beitritts-XML | Modul `BeitrittsXmlImportieren` übernimmt IBAN/BIC/Kontoinhaber | Sicherheitsregel D3 (keine IBAN über Webformulare) | **Entschieden 10/2026 (Johann): Bankdaten werden übernommen.** Bewusste, dokumentierte Abweichung von D3. Absicherung: Import nur durch Vorstand/MV, IBAN-Prüfung, Vorschau vor dem Speichern, Protokoll ohne Klartext-IBAN, Datei wird nur im Browser gelesen und nicht gespeichert. Das SEPA-Mandat braucht weiterhin die Unterschrift (Mandatsdatum prüfen). |
+| VBA2 | Mitgliedsnummer | `MitglNr_DblClick` vergab Lücken; Beitritts-Modul: `LUECKEN_FUELLEN = False` | `mitgliedsnummer_wiederverwendung = nein` | **Entschieden 10/2026: immer neue Nummer (höchste + 1), keine Lücken.** |
+| VBA3 | Halbjahresbeitrag | `LaufenderEinzugHalb` | `beitrag_anteilig` | **Entschieden 10/2026: halber Beitrag bei Eintritt ab 01.07.** (`beitrag_anteilig = halbjahr`). |
+| – | Familienbeitrag | – | – | **Bestätigt 10/2026:** Kinder bis 17, mit Ausbildungsnachweis bis 25; „Kind“ = gesetzliche Vertretung eingetragen oder > 15 Jahre jünger als das älteste Mitglied der Gemeinschaft. |
 
 ## Vorläufig gesetzt (noch zu bestätigen, im Code als `// OFFEN:` markiert)
 
