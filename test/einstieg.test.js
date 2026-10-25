@@ -39,6 +39,8 @@ function lade(optionen) {
       alle() { return { snapshot_einbetten: o.einbetten, beitragsjahr: '2026', impressum_url: 'https://x/impressum', datenschutz_url: 'https://x/ds' }; },
       wert(k) { return this.alle()[k]; }
     },
+    Schema: { TABELLEN: { Abteilung: { spalten: [{ name: 'bezeichnung', typ: 'Text', sicht: 'intern' }] } }, LISTEN: { ja_nein: ['ja', 'nein'] } },
+    Rechte: { sichtbareSpalten() { return ['bezeichnung']; } },
     Snapshot: { fuerClient() { return { bereiche: ['kern'], listen: { abteilungen: { k: ['abteilung_id', 'bezeichnung', 'aktiv', 'version'], z: [[1, 'Fußball</script>', true, 1]] }, mitglieder: { k: [], z: [] } } }; } },
     DB: { lese(tabs) { return { Abteilung: [{ abteilung_id: 1, bezeichnung: 'Fußball</script>', aktiv: true, version: 1 }] }; },
       jetzt() { return '2026-10-25T10:00:00'; } },
