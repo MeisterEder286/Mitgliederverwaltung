@@ -22,4 +22,13 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 | Rollenmatrix | Vorstand + Mitgliederverwalter: alles; Kassier: Kontakt + Finanzen, **keine** Konto-Änderung; Jugendleiter: Minderjährige + FZ; Abteilungsleiter: eigene Abteilung, Kontakt, FZ erfassen/sehen für Funktionsträger seiner Abteilung, kein Vereinsaustritt | `src/lib/rechte.js` |
 | Jugend-Definition | bis einschließlich 17 Jahre | `_Konfig.jugend_bis_alter` |
 | FZ-Fristen | `Qualifikationsart` gewinnt vor `_Konfig.fz_wiedervorlage_monate` und `Aufbewahrungsfrist` | Phase 5 |
-| Backup | eigenes, nicht deploytes Skriptprojekt mit Drive-Scope | außerhalb dieses Projekts |
+| Backup | eigenes, nicht deploytes Skriptprojekt mit Drive-Scope | `backup/` |
+| Exaktsuche Abteilungsleiter | **immer zwei Merkmale** (Nachname + Mitgliedsnummer oder Geburtsdatum) statt „Nummer oder Name+Geburtsdatum“ wie im Mockup – Sicherheitsprüfung H1/M3 (Durchzählen der Nummern). Zuordnen nur mit Einmal-Token aus der Suche. | `src/modul/Mitglieder.js` |
+| Kassier und Konten | Kassier ändert keine Konto-Stammdaten/IBAN (`konto_bearbeiten` nur Vorstand/MV) | `src/lib/rechte.js` |
+| Vereinsweite Berichte | BLSV, Jahresvergleich, Einfrieren nur mit Zeilensicht „alle“ | `src/modul/Berichte.js` |
+| Beitrag bei unterjährigem Eintritt | voller Jahresbeitrag (`beitrag_anteilig = nein`), anteilig als Option vorbereitet | `src/lib/beitrag.js` |
+| SEPA-Sequenz | FRST, solange unter dem Mandat noch kein Einzug „bezahlt“ war; Option „immer RCUR“ | `src/lib/sepa.js` |
+| Adressen in der SEPA-Datei | unvollständige Zahleradressen werden weggelassen (Warnung) – mit Hausbank klären | `src/lib/sepa.js` |
+| Vier-Augen-Prinzip SEPA | schaltbar `_Konfig.sepa_vier_augen` (Standard aus) | `src/modul/Finanzen.js` |
+| Snapshot | Start nur Kern; Finanzen/Historie werden je Sitzung einmal nachgeladen | `src/lib/snapshot.js` |
+| Anonymisierung | Zeiträume, Zugehörigkeiten, Einwilligungen, Qualifikationen werden entfernt; Mitgliedsnummer bleibt (X9 offen); Funktionen/Ehrungen je `_Konfig.chronik_bei_anonymisierung` | `src/lib/loeschung.js` |
