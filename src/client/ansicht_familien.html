@@ -1,13 +1,397 @@
 <!--
   ansicht_familien – Familien und Beitragsumstellung
 
-  Zweck:      Familienübersicht, wer aus dem Familienbeitrag herausfällt (Alter/Ausbildung), Umstellung auf Einzelbeitrag, Bezahlhistorie.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   konto_lesen / mitglied_bearbeiten – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Familienübersicht (Access „FamilienF“), wer aus dem Familienbeitrag herausfällt (Altersgrenze,
+              Ende von Schule/Studium/Ausbildung – mit prognostiziertem Ende), Umstellung auf Einzelbeitrag als
+              Sammelaktion, Nachweise anfordern, Prognose der nächsten Jahre. Außerdem über Erweiterungspunkte:
+              Reiter „Zahlungen“ im Mitglied-Detail (Bezahlhistorie aller Jahre + Ausbildung erfassen) und Abschnitt
+              „Zahlungshistorie (alle Jahre)“ im Konto-Detail.
+  Datenquelle: apiFamilie… (Server rechnet mit src/lib/familie.js), App.daten für Namen/Navigation.
+  Wer darf:   Lesen konto_lesen (Vorstand, Mitgliederverwaltung, Kasse); Umstellen/Ausbildung mitglied_bearbeiten;
+              Export export – serverseitig erzwungen, App.darf blendet nur aus.
+  Besonderheiten:
+    - Nach der Umstellung kann direkt ein Anschreiben erstellt werden: App.zeige('korrespondenz',
+      { anlass, mitglied_ids }) – die Korrespondenz-Ansicht übernimmt Anlass und Empfänger.
+    - Exporte (CSV/Druck) werden vorher protokolliert (apiFamilieExportVermerken).
 -->
+<style>
+  .fam-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+  .fam-zeile select, .fam-zeile input[type="text"] { min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); max-width: 100%; }
+  .fam-link { background: none; border: 0; padding: 0; color: var(--akzent); text-decoration: underline; font: inherit; cursor: pointer; text-align: left; min-height: 32px; }
+  .fam-hinweis { background: #fff6dc; color: #5c4400; padding: 8px 12px; border-radius: var(--radius); margin: 0 0 12px; }
+  .fam-karte { border: 1px solid var(--rand); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 10px; }
+  .fam-karte h3 { margin: 0 0 4px; font-size: 1rem; }
+  .fam-person { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 0; border-top: 1px solid var(--flaeche); }
+  .fam-person:first-of-type { border-top: 0; }
+  .fam-person .fam-name { flex: 1 1 160px; }
+  .fam-balken svg { width: 100%; max-width: 640px; height: auto; }
+  .fam-balken text { font-size: 12px; fill: var(--text); }
+  .fam-auswahl { width: 24px; height: 24px; accent-color: var(--akzent); }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+
+  var ERGEBNIS = {
+    bleibt: ['gruen', 'bleibt'], faellt_raus: ['rot', 'fällt heraus'],
+    verlaengert_bis: ['gelb', 'verlängert'], nachweis_anfordern: ['gelb', 'Nachweis anfordern']
+  };
+  var zustand = { reiter: 'uebersicht', jahr: null, nurAusscheider: false };
+
+  function jahrStandard() {
+    var k = (A.startdaten && A.startdaten.konfig) || {};
+    return (Number(k.beitragsjahr || A.startdaten.beitragsjahr) || new Date().getFullYear()) + 1;
+  }
+  function jahr() { return zustand.jahr || jahrStandard(); }
+  function laedt(ziel) { ziel.appendChild(A.el('p', 'Lädt …', { className: 'laedt' })); }
+  function personLink(id, text) {
+    return A.el('button', text, { type: 'button', className: 'fam-link', onclick: function (e) { e.stopPropagation(); A.zeige('mitglied', { id: id }); } });
+  }
+  function kontoLink(id) {
+    if (!id) return '–';
+    return A.el('button', 'Konto ' + id, { type: 'button', className: 'fam-link', onclick: function (e) { e.stopPropagation(); A.zeige('konto', { id: id }); } });
+  }
+  function ergebnis(e) {
+    var a = ERGEBNIS[e.ergebnis] || ['grau', e.ergebnis];
+    return A.ampel(a[0], a[1] + (e.verlaengert_bis ? ' bis ' + A.datum(e.verlaengert_bis) : ''));
+  }
+  function vermerken(liste, anzahl) { return A.rufe('apiFamilieExportVermerken', liste, anzahl, A.still).catch(function () {}); }
+  function jahrAuswahl() {
+    var s = A.el('select', null, { aria: { label: 'Jahr (Stichtag der Umstellung)' } });
+    var basis = jahrStandard() - 1;
+    for (var j = basis - 1; j <= basis + 5; j++) s.appendChild(A.el('option', 'Stichtag ' + j, { value: String(j) }));
+    s.value = String(jahr());
+    s.addEventListener('change', function () { zustand.jahr = Number(s.value); A.neuZeichnen(); });
+    return s;
+  }
+  function exportKnoepfe(titel, spalten, zeilen) {
+    if (!A.darf('export') || !zeilen.length) return [];
+    return [
+      A.knopf('CSV', function () { vermerken(titel, zeilen.length).then(function () { A.csv(titel.replace(/\s+/g, '_') + '.csv', spalten, zeilen); }); }, 'zweit klein'),
+      A.knopf('Drucken', function () { vermerken(titel, zeilen.length).then(function () { A.drucke(titel, spalten, zeilen); }); }, 'zweit klein')
+    ];
+  }
+
+  var REITER = [
+    { k: 'uebersicht', t: 'Übersicht' },
+    { k: 'ausscheider', t: 'Fallen heraus' },
+    { k: 'ausbildung', t: 'Ausbildung/Studium' },
+    { k: 'prognose', t: 'Prognose' }
+  ];
+
+  A.registriere('familien', {
+    titel: 'Familien', aktion: 'konto_lesen', reihenfolge: 35,
+    zeichne: function (ziel, param) {
+      if (param && param.reiter) zustand.reiter = param.reiter;
+      ziel.appendChild(A.el('h1', 'Familien'));
+      var leiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
+      REITER.forEach(function (r) {
+        var b = A.el('button', r.t, { type: 'button', role: 'tab', onclick: function () { zustand.reiter = r.k; A.neuZeichnen(); } });
+        b.setAttribute('aria-selected', zustand.reiter === r.k ? 'true' : 'false');
+        leiste.appendChild(b);
+      });
+      ziel.appendChild(leiste);
+      var bereich = A.el('div', null, { role: 'tabpanel' });
+      ziel.appendChild(bereich);
+      ({ uebersicht: zeigeUebersicht, ausscheider: zeigeAusscheider, ausbildung: zeigeAusbildung, prognose: zeigePrognose }[zustand.reiter] || zeigeUebersicht)(bereich);
+    }
+  });
+
+  // ------------------------------------------------------------------ Übersicht
+
+  function zeigeUebersicht(ziel) {
+    var nur = A.el('input', null, { type: 'checkbox', id: 'fam-nur', className: 'fam-auswahl', checked: zustand.nurAusscheider });
+    nur.addEventListener('change', function () { zustand.nurAusscheider = nur.checked; A.neuZeichnen(); });
+    ziel.appendChild(A.el('div', null, { className: 'fam-zeile' }, [jahrAuswahl(), A.el('label', null, { htmlFor: 'fam-nur' }, [nur, A.el('span', ' nur mit Ausscheidern/Hinweisen')])]));
+    var inhalt = A.el('div'); ziel.appendChild(inhalt); laedt(inhalt);
+    A.rufe('apiFamilieUebersicht', jahr()).then(function (d) {
+      A.leere(inhalt);
+      var e = d.einstellungen;
+      inhalt.appendChild(A.el('p', 'Stichtag ' + A.datum(d.stichtag) + ': Kinder bis ' + e.kinderBis + ' Jahre im Familienbeitrag, mit Schule/Studium/Ausbildung höchstens bis ' + e.ausbildungBis + '. Einstellbar unter Verwaltung → Einstellungen.', { className: 'leise' }));
+      var liste = d.gemeinschaften.filter(function (g) {
+        return !zustand.nurAusscheider || g.hinweis || g.personen.some(function (p) { return p.ergebnis !== 'bleibt'; });
+      });
+      var alle = [];
+      liste.forEach(function (g) { g.personen.forEach(function (p) { alle.push(Object.assign({ fam: g.bezeichnung }, p)); }); });
+      var kacheln = A.el('div', null, { className: 'kacheln' }, [
+        A.kachel(A.zahl(d.gemeinschaften.filter(function (g) { return g.personen.length; }).length), 'Gemeinschaften mit Festbetrag'),
+        A.kachel(A.zahl(alle.filter(function (p) { return p.ergebnis === 'faellt_raus'; }).length), 'fallen ' + jahr() + ' heraus', '', function () { zustand.reiter = 'ausscheider'; A.neuZeichnen(); }),
+        A.kachel(A.zahl(alle.filter(function (p) { return p.verlaengert_bis; }).length), 'verlängert (Ausbildung)', '', function () { zustand.reiter = 'ausbildung'; A.neuZeichnen(); })
+      ]);
+      inhalt.appendChild(kacheln);
+      inhalt.appendChild(A.el('div', null, { className: 'fam-zeile' }, exportKnoepfe('Familienübersicht ' + jahr(), [
+        { titel: 'Gemeinschaft', feld: 'fam' }, { titel: 'Name', feld: 'name' }, { titel: 'Nr.', feld: 'mitgliedsnummer' },
+        { titel: 'Rolle', feld: 'rolle' }, { titel: 'Alter', feld: 'alter' }, { titel: 'Ergebnis', feld: 'ergebnis' }, { titel: 'Grund', feld: 'grund' }
+      ], alle)));
+      if (!liste.length) { inhalt.appendChild(A.el('p', 'Keine Gemeinschaften für diese Auswahl.', { className: 'leise' })); return; }
+      liste.forEach(function (g) {
+        var karte = A.el('div', null, { className: 'fam-karte' });
+        karte.appendChild(A.el('h3', g.bezeichnung + (g.festbetrag !== null && g.festbetrag !== undefined ? ' · ' + A.betrag(g.festbetrag) : '')));
+        karte.appendChild(A.el('div', null, { className: 'leise' }, [A.el('span', g.kontoinhaber ? 'Zahler: ' + g.kontoinhaber + ' · ' : ''), g.konto_id ? kontoLink(g.konto_id) : A.el('span', g.hinweis || '')]));
+        g.personen.forEach(function (p) {
+          karte.appendChild(A.el('div', null, { className: 'fam-person' }, [
+            A.el('span', null, { className: 'fam-name' }, [personLink(p.mitglied_id, p.name)]),
+            A.el('span', (p.rolle === 'kind' ? 'Kind' : 'Erwachsen') + (p.alter !== null ? ', ' + p.alter + ' J.' : '')),
+            ergebnis(p)
+          ]));
+          if (p.grund && p.ergebnis !== 'bleibt') karte.appendChild(A.el('div', p.grund, { className: 'leise' }));
+        });
+        if (g.hinweis && g.konto_id) karte.appendChild(A.el('p', g.hinweis, { className: 'fam-hinweis' }));
+        inhalt.appendChild(karte);
+      });
+    }, function () { A.leere(inhalt); inhalt.appendChild(A.el('p', 'Konnte nicht geladen werden.', { className: 'leise' })); });
+  }
+
+  // ------------------------------------------------------------------ Fallen heraus (Umstellung)
+
+  function zeigeAusscheider(ziel) {
+    ziel.appendChild(A.el('div', null, { className: 'fam-zeile' }, [jahrAuswahl()]));
+    var inhalt = A.el('div'); ziel.appendChild(inhalt); laedt(inhalt);
+    A.rufe('apiFamilieAusscheider', jahr(), 5).then(function (d) {
+      A.leere(inhalt);
+      var raus = d.eintraege.filter(function (e) { return e.ergebnis === 'faellt_raus'; });
+      inhalt.appendChild(A.el('p', raus.length + ' Person(en) fallen zum ' + A.datum(d.stichtag) + ' aus dem Familienbeitrag heraus. Vorschlag: Einzelbeitrag nach Alter, Zahlung weiter über dasselbe Konto.', { className: 'leise' }));
+      if (!raus.length) { inhalt.appendChild(A.el('p', 'Niemand.', { className: 'leise' })); return; }
+      var gewaehlt = {}, artWahl = {};
+      raus.forEach(function (e) { gewaehlt[e.mitglied_id] = true; artWahl[e.mitglied_id] = e.vorschlag ? e.vorschlag.beitragsart_id : ''; });
+      var darf = A.darf('mitglied_bearbeiten');
+      var spalten = [];
+      if (darf) spalten.push({ titel: 'Wahl', sortierbar: false, wert: function (e) {
+        var c = A.el('input', null, { type: 'checkbox', className: 'fam-auswahl', checked: !!gewaehlt[e.mitglied_id] });
+        c.setAttribute('aria-label', 'Auswählen: ' + e.name);
+        c.addEventListener('click', function (ev) { ev.stopPropagation(); });
+        c.addEventListener('change', function () { gewaehlt[e.mitglied_id] = c.checked; });
+        return c;
+      } });
+      spalten = spalten.concat([
+        { feld: 'name', titel: 'Name', wert: function (e) { return personLink(e.mitglied_id, e.name); }, sort: function (e) { return e.name; } },
+        { feld: 'gemeinschaft', titel: 'Familie' },
+        { feld: 'alter', titel: 'Alter', zahl: true },
+        { feld: 'grund', titel: 'Grund' },
+        { feld: 'vorschlag', titel: 'Einzelbeitrag', sortierbar: false, wert: function (e) {
+          if (!darf) return e.vorschlag ? e.vorschlag.bezeichnung + ' ' + A.betrag(e.vorschlag.betrag) : '–';
+          var s = A.el('select', null, { aria: { label: 'Beitragsart für ' + e.name } });
+          s.appendChild(A.el('option', '– wählen –', { value: '' }));
+          d.beitragsarten.forEach(function (a) { s.appendChild(A.el('option', a.bezeichnung + ' (' + A.betrag(a.betrag) + ')', { value: String(a.beitragsart_id) })); });
+          s.value = String(artWahl[e.mitglied_id] || '');
+          s.addEventListener('click', function (ev) { ev.stopPropagation(); });
+          s.addEventListener('change', function () { artWahl[e.mitglied_id] = s.value; });
+          return s;
+        } },
+        { feld: 'konto_id', titel: 'Konto', wert: function (e) { return kontoLink(e.konto_id); }, sort: function (e) { return e.konto_id; } },
+        { feld: 'hinweise', titel: 'Hinweise', sortierbar: false, wert: function (e) { return (e.hinweise || []).join(' '); } }
+      ]);
+      var knoepfe = [];
+      if (darf) knoepfe.push(A.knopf('Auf Einzelbeitrag umstellen', function () { umstellen(raus, gewaehlt, artWahl, d); }));
+      if (A.darf('anschreiben_erstellen')) knoepfe.push(A.knopf('Anschreiben erstellen', function () {
+        A.zeige('korrespondenz', { anlass: 'Umstellung Einzelbeitrag', mitglied_ids: raus.filter(function (e) { return gewaehlt[e.mitglied_id]; }).map(function (e) { return e.mitglied_id; }) });
+      }, 'zweit'));
+      knoepfe = knoepfe.concat(exportKnoepfe('Ausscheider Familienbeitrag ' + jahr(), [
+        { titel: 'Name', feld: 'name' }, { titel: 'Nr.', feld: 'mitgliedsnummer' }, { titel: 'Familie', feld: 'gemeinschaft' }, { titel: 'Alter', feld: 'alter' },
+        { titel: 'Grund', feld: 'grund' }, { titel: 'Vorschlag', wert: function (e) { return e.vorschlag ? e.vorschlag.bezeichnung : ''; } },
+        { titel: 'Betrag', wert: function (e) { return e.vorschlag ? String(e.vorschlag.betrag).replace('.', ',') : ''; } }, { titel: 'Konto', feld: 'konto_id' }
+      ], raus));
+      inhalt.appendChild(A.el('div', null, { className: 'fam-zeile' }, knoepfe));
+      inhalt.appendChild(A.tabelle(spalten, raus, { sortiere: 'name', beiKlick: function (e) { A.zeige('mitglied', { id: e.mitglied_id }); } }));
+    }, function () { A.leere(inhalt); });
+  }
+
+  function umstellen(raus, gewaehlt, artWahl, d) {
+    var liste = raus.filter(function (e) { return gewaehlt[e.mitglied_id]; }).map(function (e) {
+      return { mitglied_id: e.mitglied_id, version: e.version, beitragsart_id: artWahl[e.mitglied_id] ? Number(artWahl[e.mitglied_id]) : null };
+    });
+    if (!liste.length) { A.meldung('Bitte mindestens eine Person auswählen.', 'fehler'); return; }
+    A.bestaetige('Auf Einzelbeitrag umstellen', liste.length + ' Person(en) zum ' + A.datum(d.stichtag) + ' aus der Familiengemeinschaft nehmen und den gewählten Einzelbeitrag setzen? Das Konto bleibt gleich.', 'Umstellen').then(function (ja) {
+      if (!ja) return;
+      A.rufe('apiFamilieUmstellen', liste, d.stichtag).then(function (r) {
+        A.daten.uebernehme(r);
+        A.neuZeichnen();
+        A.meldung(r.anzahl + ' Person(en) umgestellt.' + (r.hinweise && r.hinweise.length ? ' ' + r.hinweise.join(' ') : '') +
+          (A.darf('anschreiben_erstellen') ? ' Anschreiben jetzt über „Anschreiben erstellen“.' : ''), r.hinweise && r.hinweise.length ? 'hinweis' : 'ok');
+      }, function () {});
+    });
+  }
+
+  // ------------------------------------------------------------------ Ausbildung/Studium
+
+  function zeigeAusbildung(ziel) {
+    ziel.appendChild(A.el('div', null, { className: 'fam-zeile' }, [jahrAuswahl()]));
+    var inhalt = A.el('div'); ziel.appendChild(inhalt); laedt(inhalt);
+    A.rufe('apiFamilieAusscheider', jahr(), 1).then(function (d) {
+      A.leere(inhalt);
+      var verl = d.eintraege.filter(function (e) { return e.ausbildung_bis || e.verlaengert_bis || e.ergebnis === 'nachweis_anfordern'; });
+      var nachweis = verl.filter(function (e) { return e.nachweis_faellig; });
+      inhalt.appendChild(A.el('div', null, { className: 'kacheln' }, [
+        A.kachel(A.zahl(verl.length), 'mit Ausbildung/Studium'),
+        A.kachel(A.zahl(nachweis.length), 'Nachweis anfordern', nachweis.length ? 'warnung' : '')
+      ]));
+      var knoepfe = [];
+      if (nachweis.length && A.darf('anschreiben_erstellen')) knoepfe.push(A.knopf('Nachweise anfordern (Anschreiben)', function () {
+        A.zeige('korrespondenz', { anlass: 'Ausbildungsnachweis anfordern', mitglied_ids: nachweis.map(function (e) { return e.mitglied_id; }) });
+      }));
+      knoepfe = knoepfe.concat(exportKnoepfe('Ausbildung und Studium ' + jahr(), [
+        { titel: 'Name', feld: 'name' }, { titel: 'Familie', feld: 'gemeinschaft' }, { titel: 'Alter', feld: 'alter' }, { titel: 'Art', feld: 'ausbildung_art' },
+        { titel: 'voraussichtlich bis', wert: function (e) { return A.datum(e.ausbildung_bis); } },
+        { titel: 'Nachweis vom', wert: function (e) { return A.datum(e.ausbildung_nachweis_am); } }, { titel: 'Ergebnis', feld: 'ergebnis' }
+      ], verl));
+      inhalt.appendChild(A.el('div', null, { className: 'fam-zeile' }, knoepfe));
+      inhalt.appendChild(A.el('p', 'Prognostiziertes Ende und Nachweis werden im Mitglied unter „Zahlungen“ erfasst. Bis zum Ende (höchstens bis zur Altersgrenze) bleibt die Person im Familienbeitrag.', { className: 'leise' }));
+      inhalt.appendChild(A.tabelle([
+        { feld: 'name', titel: 'Name', wert: function (e) { return personLink(e.mitglied_id, e.name); }, sort: function (e) { return e.name; } },
+        { feld: 'alter', titel: 'Alter', zahl: true },
+        { feld: 'ausbildung_art', titel: 'Art' },
+        { feld: 'ausbildung_bis', titel: 'voraussichtlich bis', wert: function (e) { return A.datum(e.ausbildung_bis); } },
+        { feld: 'ausbildung_nachweis_am', titel: 'Nachweis vom', wert: function (e) { return A.datum(e.ausbildung_nachweis_am); } },
+        { feld: 'ergebnis', titel: 'Stand', wert: ergebnis }
+      ], verl, { sortiere: 'ausbildung_bis', leer: 'Keine Verlängerungen erfasst.', beiKlick: function (e) { A.zeige('mitglied', { id: e.mitglied_id, reiter: 'zahlungen' }); } }));
+    }, function () { A.leere(inhalt); });
+  }
+
+  // ------------------------------------------------------------------ Prognose
+
+  function zeigePrognose(ziel) {
+    var inhalt = A.el('div'); ziel.appendChild(inhalt); laedt(inhalt);
+    A.rufe('apiFamilieAusscheider', jahrStandard(), 5).then(function (d) {
+      A.leere(inhalt);
+      inhalt.appendChild(A.el('p', 'Wer fällt in welchem Jahr erstmals aus dem Familienbeitrag heraus (nach Alter und prognostiziertem Ende von Schule/Studium/Ausbildung), und welcher Einzelbeitrag kommt dadurch hinzu.', { className: 'leise' }));
+      inhalt.appendChild(balken(d.prognose));
+      inhalt.appendChild(A.tabelle([
+        { feld: 'jahr', titel: 'Jahr', zahl: true }, { feld: 'anzahl', titel: 'Personen', zahl: true },
+        { feld: 'mehreinnahmen', titel: 'Einzelbeiträge zusätzlich', zahl: true, wert: function (z) { return A.betrag(z.mehreinnahmen); } }
+      ], d.prognose, { sortiere: 'jahr' }));
+      var personen = [];
+      d.prognose.forEach(function (j) { j.personen.forEach(function (p) { personen.push(Object.assign({ jahr: j.jahr }, p)); }); });
+      inhalt.appendChild(A.abschnitt('Personen', exportKnoepfe('Prognose Familienbeitrag', [
+        { titel: 'Jahr', feld: 'jahr' }, { titel: 'Name', feld: 'name' }, { titel: 'Familie', feld: 'gemeinschaft' }, { titel: 'Grund', feld: 'grund' },
+        { titel: 'Ausbildung bis', wert: function (p) { return A.datum(p.ausbildung_bis); } }
+      ], personen)));
+      inhalt.appendChild(A.tabelle([
+        { feld: 'jahr', titel: 'Jahr', zahl: true },
+        { feld: 'name', titel: 'Name', wert: function (p) { return personLink(p.mitglied_id, p.name); }, sort: function (p) { return p.name; } },
+        { feld: 'gemeinschaft', titel: 'Familie' }, { feld: 'grund', titel: 'Grund' },
+        { feld: 'ausbildung_bis', titel: 'Ende Ausbildung (prognostiziert)', wert: function (p) { return A.datum(p.ausbildung_bis); } }
+      ], personen, { sortiere: 'jahr', leer: 'In den nächsten Jahren fällt niemand heraus.' }));
+    }, function () { A.leere(inhalt); });
+  }
+
+  /** Einfaches Balkendiagramm (SVG, ohne Bibliothek); die Tabelle darunter enthält dieselben Werte (barrierearm). */
+  function balken(prognose) {
+    var max = Math.max.apply(null, prognose.map(function (p) { return p.anzahl; }).concat([1]));
+    var ns = 'http://www.w3.org/2000/svg';
+    var b = 56, h = 160, breite = prognose.length * b + 20;
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + breite + ' ' + (h + 30));
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'Ausscheider je Jahr: ' + prognose.map(function (p) { return p.jahr + ': ' + p.anzahl; }).join(', '));
+    prognose.forEach(function (p, i) {
+      var hoehe = Math.round(p.anzahl / max * (h - 20));
+      var r = document.createElementNS(ns, 'rect');
+      r.setAttribute('x', 10 + i * b); r.setAttribute('y', h - hoehe); r.setAttribute('width', b - 16); r.setAttribute('height', hoehe);
+      r.setAttribute('fill', 'var(--akzent)');
+      svg.appendChild(r);
+      var t = document.createElementNS(ns, 'text');
+      t.setAttribute('x', 10 + i * b); t.setAttribute('y', h + 16); t.textContent = String(p.jahr);
+      svg.appendChild(t);
+      var z = document.createElementNS(ns, 'text');
+      z.setAttribute('x', 10 + i * b); z.setAttribute('y', h - hoehe - 4); z.textContent = String(p.anzahl);
+      svg.appendChild(z);
+    });
+    return A.el('div', null, { className: 'fam-balken' }, [svg]);
+  }
+
+  // ------------------------------------------------------------------ Mitglied-Detail: Reiter „Zahlungen“
+
+  function historieTabelle(d, mitAnteil) {
+    var spalten = [
+      { feld: 'jahr', titel: 'Jahr', zahl: true },
+      { feld: 'beitragskonto_id', titel: 'Konto', wert: function (z) { return kontoLink(z.beitragskonto_id); }, sort: function (z) { return z.beitragskonto_id; } },
+      { feld: 'soll_betrag', titel: 'Soll', zahl: true, wert: function (z) { return A.betrag(z.soll_betrag); } }
+    ];
+    if (mitAnteil) spalten.push({ feld: 'anteil', titel: 'davon Person', sortierbar: false, wert: function (z) { return z.anteil ? A.betrag(z.anteil.betrag) + (z.anteil.art === 'gemeinschaft' ? ' (Familie)' : '') : '–'; } });
+    spalten = spalten.concat([
+      { feld: 'status', titel: 'Status' },
+      { feld: 'einzugsdatum', titel: 'Einzug', wert: function (z) { return A.datum(z.einzugsdatum); } },
+      { feld: 'buchungsdatum', titel: 'Gebucht', wert: function (z) { return A.datum(z.buchungsdatum); } },
+      { feld: 'ist_betrag', titel: 'Ist', zahl: true, wert: function (z) { return z.ist_betrag === null || z.ist_betrag === undefined ? '–' : A.betrag(z.ist_betrag); } },
+      { feld: 'gebuehr', titel: 'Gebühr', zahl: true, wert: function (z) { return z.gebuehr ? A.betrag(z.gebuehr) : '–'; } },
+      { feld: 'mahnstufe', titel: 'Mahnst.', zahl: true },
+      { feld: 'ruecklastschrift_grund', titel: 'Grund' }
+    ]);
+    return A.tabelle(spalten, d.zeilen, { sortiere: 'jahr', absteigend: true, leer: 'Keine Sollstellungen.' });
+  }
+  function jahresTabelle(jahre) {
+    return A.tabelle([
+      { feld: 'jahr', titel: 'Jahr', zahl: true },
+      { feld: 'soll', titel: 'Soll', zahl: true, wert: function (j) { return A.betrag(j.soll); } },
+      { feld: 'ist', titel: 'Ist', zahl: true, wert: function (j) { return A.betrag(j.ist); } },
+      { feld: 'gebuehr', titel: 'Gebühren', zahl: true, wert: function (j) { return A.betrag(j.gebuehr); } },
+      { feld: 'offen', titel: 'offen', zahl: true, wert: function (j) { return A.betrag(j.offen); }, klasse: function (j) { return j.offen > 0 ? 'fam-offen' : ''; } }
+    ], jahre, { sortiere: 'jahr', absteigend: true });
+  }
+
+  function ausbildungFormular(z, m) {
+    var art = ((A.startdaten.listen || {}).ausbildung_art) || ['Schule', 'Studium', 'Ausbildung', 'Freiwilligendienst', 'Sonstiges'];
+    var f = A.formular([
+      { name: 'ausbildung_art', titel: 'Schule/Studium/Ausbildung', typ: 'auswahl', liste: art },
+      { name: 'ausbildung_bis', titel: 'voraussichtlich bis (prognostiziert)', typ: 'datum', hilfe: 'Bis dahin bleibt die Person im Familienbeitrag (höchstens bis zur Altersgrenze).' },
+      { name: 'ausbildung_nachweis_am', titel: 'Nachweis vorgelegt am', typ: 'datum' }
+    ], m);
+    z.appendChild(f.element);
+    var knopf = A.knopf('Ausbildung speichern', function () {
+      A.speichere(f, knopf, 'apiFamilieAusbildungSpeichern', [m.mitglied_id, m.version || 0]).then(function () {
+        A.neuZeichnen();
+        A.meldung('Ausbildung gespeichert.', 'ok');   // nach dem Neuzeichnen, sonst wäre die Meldung gleich wieder weg
+      }, function () {});
+    });
+    z.appendChild(A.el('div', null, { className: 'fam-zeile' }, [knopf]));
+  }
+
+  A.erweitere('mitglied.reiter', {
+    id: 'zahlungen', titel: 'Zahlungen', sicht: 'finanz', aktion: 'konto_lesen',
+    zeichne: function (z, m) {
+      if (m.beitragsgemeinschaft_id || m.ausbildung_bis || m.ausbildung_art) {
+        z.appendChild(A.el('h2', 'Familienbeitrag und Ausbildung'));
+        z.appendChild(A.details([
+          ['Gemeinschaft', m.beitragsgemeinschaft_id ? 'ja (Nr. ' + m.beitragsgemeinschaft_id + ')' : 'nein'],
+          ['Schule/Studium/Ausbildung', m.ausbildung_art || '–'],
+          ['voraussichtlich bis', A.datum(m.ausbildung_bis)],
+          ['Nachweis vom', A.datum(m.ausbildung_nachweis_am)]
+        ]));
+        if (A.darf('mitglied_bearbeiten')) ausbildungFormular(z, m);
+      } else if (A.darf('mitglied_bearbeiten')) {
+        var auf = A.knopf('Schule/Studium/Ausbildung erfassen', function () { auf.remove(); ausbildungFormular(z, m); }, 'zweit');
+        z.appendChild(auf);
+      }
+      z.appendChild(A.el('h2', 'Zahlungshistorie (alle Jahre)'));
+      var bereich = A.el('div'); z.appendChild(bereich); laedt(bereich);
+      A.rufe('apiFamilieBezahlhistorie', m.mitglied_id).then(function (d) {
+        A.leere(bereich);
+        if (d.konten.length > 1) bereich.appendChild(A.el('p', 'Konten: ' + d.konten.map(function (k) { return k.beitragskonto_id + ' (' + k.bezug + ')'; }).join(', '), { className: 'leise' }));
+        bereich.appendChild(jahresTabelle(d.jahre));
+        bereich.appendChild(A.el('h3', 'Einzelne Sollstellungen'));
+        bereich.appendChild(historieTabelle(d, true));
+        bereich.appendChild(A.el('p', d.hinweis, { className: 'leise' }));
+      }, function () { A.leere(bereich); bereich.appendChild(A.el('p', 'Konnte nicht geladen werden.', { className: 'leise' })); });
+    }
+  });
+
+  // ------------------------------------------------------------------ Konto-Detail: Zahlungshistorie
+
+  A.erweitere('konto.abschnitt', function (ziel, k) {
+    var kopf = A.abschnitt('Zahlungshistorie (alle Jahre)');
+    ziel.appendChild(kopf);
+    var bereich = A.el('div');
+    ziel.appendChild(bereich);
+    var auf = A.knopf('Anzeigen', function () {
+      auf.remove(); laedt(bereich);
+      A.rufe('apiFamilieKontohistorie', k.beitragskonto_id).then(function (d) {
+        A.leere(bereich);
+        bereich.appendChild(jahresTabelle(d.jahre));
+        bereich.appendChild(historieTabelle(d, false));
+      }, function () { A.leere(bereich); });
+    }, 'zweit');
+    bereich.appendChild(auf);
+  });
 })();
 </script>

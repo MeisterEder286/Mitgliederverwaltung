@@ -16,7 +16,8 @@
  * Besonderheiten:
  *   - Wer zählt im Beitragsjahr [A]: Mitgliedschaftszeitraum überschneidet das Kalenderjahr, kein Sterbedatum vor
  *     der Fälligkeit (sepa_faelligkeit, z. B. 15.02.), nicht `nur_funktionstraeger`, nicht anonymisiert.
- *     _Konfig.beitrag_anteilig = 'nein' (Standard): voller Jahresbeitrag. 'ja': monatsgenau anteilig (vorbereitet).
+ *     _Konfig.beitrag_anteilig = 'nein' (Standard): voller Jahresbeitrag. 'halbjahr': halber Beitrag bei Eintritt
+ *     ab 01.07. bzw. Austritt bis 30.06. 'monat' (früher 'ja'): monatsgenau anteilig.
  *   - Ehrenmitglieder zahlen normal (beim TSV geklärt: keine Befreiung).
  *   - Beitragsart: Gibt es mehrere Zeilen gleicher Bezeichnung (Preisänderung mit gueltig_ab), gilt die zum
  *     Stichtag gültige aktive Zeile – so bleibt die Historie stimmig, ohne Mitglieder umzuhängen.
@@ -114,19 +115,35 @@ var Beitrag = (function () {
     if (m.sterbedatum && m.sterbedatum < faellig) return { pflichtig: false, anteil: 0, grund: 'verstorben vor Fälligkeit' };
     var jahrAnfang = jahr + '-01-01', jahrEnde = jahr + '-12-31';
     var zeitraeume = index(daten).zeitraeume[m.mitglied_id] || [];
-    var monate = 0, ueberschneidung = false;
+    var monate = 0, ueberschneidung = false, frueh = null, spaet = null;
     zeitraeume.forEach(function (z) {
       var von = z.eintrittsdatum, bis = Mitgliedschaft.endeVon(z);
       if (!von || von > jahrEnde || (bis && bis < jahrAnfang)) return;
       ueberschneidung = true;
       var a = von > jahrAnfang ? von : jahrAnfang;
       var e = bis && bis < jahrEnde ? bis : jahrEnde;
+      if (frueh === null || a < frueh) frueh = a;
+      if (spaet === null || e > spaet) spaet = e;
       // angefangene Monate zählen voll
       monate += (Number(e.slice(5, 7)) - Number(a.slice(5, 7))) + 1;
     });
     if (!ueberschneidung) return { pflichtig: false, anteil: 0, grund: 'keine Mitgliedschaft im Jahr' };
-    var anteilig = konfig(daten, optionen, 'beitrag_anteilig') === 'ja';
-    return { pflichtig: true, anteil: anteilig ? Math.min(1, monate / 12) : 1, grund: null };
+    return { pflichtig: true, anteil: anteil(konfig(daten, optionen, 'beitrag_anteilig'), monate, frueh, spaet, jahr), grund: null };
+  }
+
+  /**
+   * Beitragsanteil im Jahr je _Konfig.beitrag_anteilig:
+   *   'nein' (Standard)   voller Beitrag
+   *   'halbjahr'          halber Beitrag, wenn die Mitgliedschaft im Jahr erst ab 01.07. beginnt ODER schon bis 30.06.
+   *                       endet (wie früher „Laufender Einzug Halb“ in Access); beides zusammen bleibt halb
+   *   'monat' bzw. 'ja'   monatsgenau, angefangene Monate zählen voll
+   */
+  function anteil(modus, monate, frueh, spaet, jahr) {
+    if (modus === 'halbjahr') {
+      return (frueh >= jahr + '-07-01' || spaet <= jahr + '-06-30') ? 0.5 : 1;
+    }
+    if (modus === 'monat' || modus === 'ja') return Math.min(1, monate / 12);
+    return 1;
   }
 
   /** Die zum Stichtag gültige Beitragsart zur referenzierten Art (gleiche Bezeichnung, jüngstes gueltig_ab). */
@@ -428,7 +445,7 @@ var Beitrag = (function () {
   return {
     mitIndex: mitIndex,
     konfig: konfig, tagImJahr: tagImJahr, faelligkeit: faelligkeit, index: index, pflicht: pflicht,
-    artFuerJahr: artFuerJahr, sollJeKonto: sollJeKonto, zusammensetzung: zusammensetzung,
+    artFuerJahr: artFuerJahr, anteil: anteil, altersbereichPasst: altersbereichPasst, sollJeKonto: sollJeKonto, zusammensetzung: zusammensetzung,
     letzteMandatsnutzung: letzteMandatsnutzung, mandatStatus: mandatStatus, zahleradresse: zahleradresse,
     tarifwechsel: tarifwechsel, klaerliste: klaerliste, pruefeKonto: pruefeKonto, waisenBeiAustritt: waisenBeiAustritt,
     name: name, runde: runde, euro: euro

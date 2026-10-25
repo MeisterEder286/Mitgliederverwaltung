@@ -92,8 +92,11 @@ function apiFinanzenSammelBezahlt(jahr, ids, datum) {
 }
 
 /** SEPA-Probelauf (ohne Klartext-IBAN). */
-function apiFinanzenSepaProbelauf(jahr, einzugsdatum) {
-  return Api.ausfuehren('apiFinanzenSepaProbelauf', 'sepa_lauf', function (ktx) { return Finanzen.sepaProbelauf(ktx, finanzenZahl_(jahr), einzugsdatum || null); });
+/** modus: 'neu' (Standard: nur noch nicht übermittelte Posten – Jahreslauf/Nachlauf) oder 'erneut'. */
+function apiFinanzenSepaProbelauf(jahr, einzugsdatum, modus) {
+  return Api.ausfuehren('apiFinanzenSepaProbelauf', 'sepa_lauf', function (ktx) {
+    return Finanzen.sepaProbelauf(ktx, finanzenZahl_(jahr), einzugsdatum || null, modus === 'erneut' ? 'erneut' : 'neu');
+  });
 }
 
 /** Vier-Augen-Freigabe des Probelaufs. */
@@ -102,8 +105,10 @@ function apiFinanzenSepaFreigeben(jahr) {
 }
 
 /** SEPA-Datei pain.008.001.08 erzeugen (vermerkt Sequenz/Einzugsdatum in den Sollstellungen). */
-function apiFinanzenSepaXml(jahr, einzugsdatum) {
-  return Api.ausfuehren('apiFinanzenSepaXml', 'sepa_lauf', function (ktx) { return Finanzen.sepaXml(ktx, finanzenZahl_(jahr), einzugsdatum || null); });
+function apiFinanzenSepaXml(jahr, einzugsdatum, modus) {
+  return Api.ausfuehren('apiFinanzenSepaXml', 'sepa_lauf', function (ktx) {
+    return Finanzen.sepaXml(ktx, finanzenZahl_(jahr), einzugsdatum || null, modus === 'erneut' ? 'erneut' : 'neu');
+  });
 }
 
 /** Klärliste (Waisen, Mandate, Gemeinschaften …). */
@@ -137,4 +142,14 @@ function apiFinanzenBuchhaltung(jahr) {
 /** Im Browser erzeugten Export protokollieren (Liste, Anzahl). */
 function apiFinanzenExportVermerken(liste, anzahl) {
   return Api.ausfuehren('apiFinanzenExportVermerken', 'export', function (ktx) { return Finanzen.exportVermerken(ktx, String(liste || ''), finanzenZahl_(anzahl)); });
+}
+
+/** Offene Sollstellungen von Überweisern/Barzahlern (Grundlage für Rechnungen). */
+function apiFinanzenRechnungen(jahr) {
+  return Api.ausfuehren('apiFinanzenRechnungen', 'konto_lesen', function (ktx) { return Finanzen.rechnungen(ktx, finanzenZahl_(jahr)); });
+}
+
+/** Summen aller Beitragsjahre (alle Sollstellungen). */
+function apiFinanzenJahresuebersicht() {
+  return Api.ausfuehren('apiFinanzenJahresuebersicht', 'konto_lesen', function (ktx) { return Finanzen.jahresuebersicht(ktx); });
 }

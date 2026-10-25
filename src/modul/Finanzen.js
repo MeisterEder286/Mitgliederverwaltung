@@ -526,15 +526,40 @@ var Finanzen = (function () {
     return { heute: heute(), konfig: k, einzugsdatum: einzugsdatum || undefined };
   }
 
+  /**
+   * Umfang eines SEPA-Laufs (aus Access: „Jahresbeitragseinzug“ und „Laufender Einzug“ für Nachzügler):
+   *   'neu' (Standard)  nur offene Sollstellungen, die noch in KEINER SEPA-Datei waren (sepa_sequenz leer) – der
+   *                     Jahreslauf und jeder spätere Nachlauf (Neuaufnahmen) ziehen so nie doppelt ein.
+   *   'erneut'          zusätzlich offene Posten, die schon übermittelt wurden (z. B. Bank hat die Datei abgelehnt).
+   * Liefert den Lauf mit gefilterten Posten; die übrigen stehen als Info unter „ausgeschlossen“.
+   */
+  function sepaUmfang(l, sollstellungen, modus) {
+    if (modus === 'erneut') return l;
+    var schon = {};
+    (sollstellungen || []).forEach(function (s) { if (s.sepa_sequenz) schon[s.sollstellung_id] = s.sepa_sequenz; });
+    var posten = [], summe = 0;
+    l.posten.forEach(function (p) {
+      if (schon[p.sollstellung_id]) {
+        l.ausgeschlossen.push({ sollstellung_id: p.sollstellung_id, konto_id: p.konto, name: p.name,
+          grund: 'bereits in einer SEPA-Datei übermittelt (' + schon[p.sollstellung_id] + ') – noch nicht als bezahlt gebucht', art: 'info' });
+        return;
+      }
+      posten.push(p); summe += p.betrag;
+    });
+    l.posten = posten; l.summe = Beitrag.runde(summe); l.anzahl = posten.length;
+    return l;
+  }
+
   /** Probelauf ohne Klartext-IBAN: Posten (maskiert), Ausschlüsse, Summen je Sequenz, Hinweise. */
-  function sepaProbelauf(ktx, jahr, einzugsdatum) {
+  function sepaProbelauf(ktx, jahr, einzugsdatum, modus) {
     einzugsdatum = datumPruefen(einzugsdatum, 'einzugsdatum', 'Einzugsdatum');
     var x = daten();
     jahr = jahrPruefen(jahr, x.konfig);
     // IBANs für die Prüfung gezielt lesen; sie verlassen den Server nur maskiert
     var mitIban = DB.lese(['Beitragskonto']).Beitragskonto;
     x.daten.Beitragskonto = mitIban;
-    var l = Sepa.lauf(x.daten, jahr, sepaOptionen(x.konfig, einzugsdatum));
+    var l = sepaUmfang(Sepa.lauf(x.daten, jahr, sepaOptionen(x.konfig, einzugsdatum)), x.daten.Sollstellung, modus);
+    var ohneSoll = Sollstellungslauf.plane(x.daten, jahr, heute(), x.konfig).neu.length;
     var jeSeq = {};
     l.posten.forEach(function (p) {
       var s = jeSeq[p.sequenz] = jeSeq[p.sequenz] || { anzahl: 0, summe: 0 };
@@ -551,7 +576,8 @@ var Finanzen = (function () {
       jahr: jahr, anzahl: l.anzahl, summe: l.summe, je_sequenz: jeSeq,
       posten: Sepa.kontrollliste(l), ausgeschlossen: l.ausgeschlossen,
       warnungen: warnungen, glaeubiger_fehler: pruef,
-      vier_augen: vierAugen, freigabe: vierAugen ? freigabe(jahr) : null
+      vier_augen: vierAugen, freigabe: vierAugen ? freigabe(jahr) : null,
+      modus: modus === 'erneut' ? 'erneut' : 'neu', nachzuegler_ohne_sollstellung: ohneSoll
     };
   }
 
@@ -568,7 +594,7 @@ var Finanzen = (function () {
    * SEPA-Datei erzeugen: Lauf mit Klartext-IBAN, XML pain.008.001.08, in den Sollstellungen sepa_sequenz und
    * einzugsdatum vermerken (eine Sperre), Protokoll „exportiert“ (ohne IBANs). Liefert { dateiname, xml, … }.
    */
-  function sepaXml(ktx, jahr, einzugsdatum) {
+  function sepaXml(ktx, jahr, einzugsdatum, modus) {
     einzugsdatum = datumPruefen(einzugsdatum, 'einzugsdatum', 'Einzugsdatum');
     if (einzugsdatum && einzugsdatum < heute()) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'einzugsdatum', meldung: 'Das Einzugsdatum liegt in der Vergangenheit.' }]);
     return DB.mitSperre(function () {
@@ -582,7 +608,7 @@ var Finanzen = (function () {
       var frisch = DB.lese(['Beitragskonto', 'Sollstellung']);
       x.daten.Beitragskonto = frisch.Beitragskonto;
       x.daten.Sollstellung = frisch.Sollstellung;
-      var l = Sepa.lauf(x.daten, jahr, sepaOptionen(x.konfig, einzugsdatum));
+      var l = sepaUmfang(Sepa.lauf(x.daten, jahr, sepaOptionen(x.konfig, einzugsdatum)), x.daten.Sollstellung, modus);
       if (!l.posten.length) throw Fehler.fachlich('Der Lauf enthält keine Posten – es gibt keine offenen, einziehbaren Sollstellungen für ' + jahr + '.');
       var datei = Sepa.xml(l, glaeubiger(x.konfig), { erstelltAm: DB.jetzt() });
       if (!datei.ok) throw Fehler.fachlich('Die SEPA-Datei kann noch nicht erzeugt werden: ' + datei.fehler.join(' '));
@@ -662,7 +688,41 @@ var Finanzen = (function () {
     return true;
   }
 
+  // ================================================================== Rechnungen, Jahresübersicht (aus Access)
+
+  /**
+   * Offene Sollstellungen von Konten OHNE Lastschrift (Überweisung/bar) – Grundlage für Rechnungen
+   * (Access „RechnungF“/„Rechnungen“). Das Schreiben selbst erzeugt die Korrespondenz-Ansicht (Anlass „Rechnung“).
+   */
+  function rechnungen(ktx, jahr) {
+    var x = daten();
+    jahr = jahrPruefen(jahr, x.konfig);
+    var konten = nachId(x.daten.Beitragskonto, 'beitragskonto_id');
+    return (x.daten.Sollstellung || []).filter(function (s) {
+      var k = konten[s.beitragskonto_id];
+      return s.jahr === jahr && k && k.zahlweg !== 'Lastschrift' && ['offen', 'gemahnt', 'ruecklastschrift', 'widerspruch'].indexOf(s.status) >= 0;
+    }).map(function (s) {
+      var k = konten[s.beitragskonto_id];
+      return {
+        sollstellung_id: s.sollstellung_id, beitragskonto_id: s.beitragskonto_id, kontoinhaber: k.kontoinhaber_name, zahlweg: k.zahlweg,
+        jahr: s.jahr, soll_betrag: s.soll_betrag, gebuehr: s.gebuehr, ist_betrag: s.ist_betrag, status: s.status, mahnstufe: s.mahnstufe,
+        offen: Beitrag.runde(Math.max(0, Number(s.soll_betrag || 0) + Number(s.gebuehr || 0) - Number(s.ist_betrag || 0))),
+        zusammensetzung: s.bemerkung || null, kontoinhaber_mitglied_id: k.kontoinhaber_mitglied_id || null
+      };
+    }).sort(function (a, b) { return String(a.kontoinhaber).localeCompare(String(b.kontoinhaber)); });
+  }
+
+  /**
+   * Summen aller Beitragsjahre (Access „SummederJahresBeitragseinzügeF“/„RechnungssummeF“): je Jahr Anzahl, Soll,
+   * Ist, Gebühren, Rücklastschriften, offen, storniert – über ALLE Sollstellungen (nicht nur die im Browser).
+   */
+  function jahresuebersicht(ktx) {
+    var x = daten();
+    return { jahre: Familie.jahressummen(x.daten.Sollstellung || []) };
+  }
+
   return {
+    rechnungen: rechnungen, jahresuebersicht: jahresuebersicht,
     uebersicht: uebersicht, konto: konto, ibanAufdecken: ibanAufdecken,
     kontoSpeichern: kontoSpeichern, kontoStilllegen: kontoStilllegen, personZuordnen: personZuordnen,
     gemeinschaftSpeichern: gemeinschaftSpeichern, gemeinschaftMitglied: gemeinschaftMitglied, gemeinschaftAufloesen: gemeinschaftAufloesen,

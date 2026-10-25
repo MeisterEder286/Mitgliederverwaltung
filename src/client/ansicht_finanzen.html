@@ -123,6 +123,8 @@
     { k: 'gemeinschaften', t: 'Gemeinschaften' },
     { k: 'sollstellungen', t: 'Sollstellungen' },
     { k: 'sepa', t: 'SEPA-Lauf', aktion: 'sepa_lauf' },
+    { k: 'rechnungen', t: 'Rechnungen' },
+    { k: 'jahre', t: 'Jahresübersicht' },
     { k: 'klaerliste', t: 'Klärliste' },
     { k: 'tarifwechsel', t: 'Tarifwechsel' }
   ];
@@ -145,7 +147,8 @@
       A.daten.lade('finanzen').then(function () {
         A.leere(bereich);
         var f = { uebersicht: zeigeUebersicht, konten: zeigeKonten, gemeinschaften: zeigeGemeinschaften, sollstellungen: zeigeSollstellungen,
-          sepa: zeigeSepa, klaerliste: zeigeKlaerliste, tarifwechsel: zeigeTarifwechsel }[zustand.reiter] || zeigeUebersicht;
+          sepa: zeigeSepa, klaerliste: zeigeKlaerliste, tarifwechsel: zeigeTarifwechsel,
+          rechnungen: zeigeRechnungen, jahre: zeigeJahre }[zustand.reiter] || zeigeUebersicht;
         f(bereich);
       }).catch(function () { A.leere(bereich); bereich.appendChild(A.el('p', 'Die Finanzdaten konnten nicht geladen werden.', { className: 'leise' })); });
     }
@@ -182,6 +185,12 @@
       if (A.darf('export')) {
         knoepfe.push(A.knopf('Mahnliste CSV', function () { mahnlisteExport(streitig, d.jahr, 'csv'); }, 'zweit klein'));
         knoepfe.push(A.knopf('Drucken', function () { mahnlisteExport(streitig, d.jahr, 'druck'); }, 'zweit klein'));
+      }
+      if (A.darf('anschreiben_erstellen') && streitig.length) {
+        // Mahnungen als Schreiben (Vorlage „Mahnung“) – Übergabe an die Ansicht „Schreiben“
+        knoepfe.push(A.knopf('Mahnungen erstellen', function () {
+          A.zeige('korrespondenz', { anlass: 'Mahnung', jahr: d.jahr, sollstellung_ids: streitig.map(function (x) { return x.sollstellung_id; }) });
+        }, 'zweit klein'));
       }
       inhalt.appendChild(A.abschnitt('Offen und streitig ' + d.jahr, knoepfe));
       inhalt.appendChild(A.el('p', 'Summe offen/streitig: ' + A.betrag(summe), { className: 'fin-summe' }));
@@ -720,7 +729,15 @@
     var datum = A.el('input', null, { type: 'text', placeholder: 'Einzugsdatum TT.MM.JJJJ (leer = laut Sollstellung)', inputMode: 'numeric' });
     datum.setAttribute('aria-label', 'Einzugsdatum');
     var ergebnis = A.el('div');
-    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen), datum, A.knopf('Probelauf', probelauf)]));
+    // Umfang (aus Access: Jahresbeitragseinzug / „Laufender Einzug“ für Nachzügler)
+    var umfang = A.el('select', null, { aria: { label: 'Umfang des Laufs' } });
+    umfang.style.maxWidth = '100%';
+    umfang.appendChild(A.el('option', 'Nur neue Posten', { value: 'neu' }));
+    umfang.appendChild(A.el('option', 'Auch übermittelte erneut', { value: 'erneut' }));
+    umfang.value = zustand.sepaUmfang || 'neu';
+    umfang.addEventListener('change', function () { zustand.sepaUmfang = umfang.value; A.leere(ergebnis); });
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen), umfang, datum, A.knopf('Probelauf', probelauf)]));
+    ziel.appendChild(A.el('p', 'Standard: nur Sollstellungen, die noch in keiner SEPA-Datei waren – so kann derselbe Lauf später für Nachzügler (Neuaufnahmen) wiederholt werden, ohne doppelt einzuziehen.', { className: 'leise' }));
     ziel.appendChild(A.el('p', 'Format pain.008.001.08 mit strukturierten Adressen (Pflicht ab 15.11.2026). Vor dem ersten echten Einsatz eine Datei aus dem Testsystem bei der Hausbank als Test einreichen.', { className: 'fin-hinweis' }));
     ziel.appendChild(ergebnis);
 
@@ -735,7 +752,7 @@
       var e;
       try { e = einzug(); } catch (x) { return; }
       A.leere(ergebnis); laedt(ergebnis);
-      A.rufe('apiFinanzenSepaProbelauf', jahr(), e).then(function (p) { zeigeProbelauf(p, e); }, function () { A.leere(ergebnis); });
+      A.rufe('apiFinanzenSepaProbelauf', jahr(), e, umfang.value).then(function (p) { zeigeProbelauf(p, e); }, function () { A.leere(ergebnis); });
     }
     function zeigeProbelauf(p, e) {
       A.leere(ergebnis);
@@ -752,6 +769,12 @@
         ergebnis.appendChild(box);
       }
       p.warnungen.forEach(function (w) { ergebnis.appendChild(A.el('p', w, { className: 'fin-hinweis' })); });
+      if (p.nachzuegler_ohne_sollstellung) {
+        ergebnis.appendChild(A.el('div', null, { className: 'fin-hinweis' }, [
+          A.el('span', p.nachzuegler_ohne_sollstellung + ' Konto/Konten haben für ' + p.jahr + ' noch keine Sollstellung (z. B. Neuaufnahmen). Zuerst unter „Sollstellungen“ den Lauf erneut ausführen, dann hier den Nachlauf. '),
+          A.knopf('Zu den Sollstellungen', function () { zustand.reiter = 'sollstellungen'; A.neuZeichnen(); }, 'zweit klein')
+        ]));
+      }
       var knoepfe = [];
       if (p.vier_augen) {
         var f = p.freigabe || {};
@@ -788,7 +811,7 @@
     function xmlErzeugen(p, e) {
       A.bestaetige('SEPA-Datei erzeugen', p.anzahl + ' Lastschriften über ' + A.betrag(p.summe) + ' in eine Datei schreiben? Die Sollstellungen werden als „eingezogen“ (Sequenz und Einzugsdatum) vermerkt.', 'Datei erzeugen').then(function (ja) {
         if (!ja) return;
-        A.rufe('apiFinanzenSepaXml', jahr(), e).then(function (r) {
+        A.rufe('apiFinanzenSepaXml', jahr(), e, umfang.value).then(function (r) {
           A.herunterladen(r.dateiname, r.xml, 'application/xml');
           var x = Object.assign({}, r); delete x.xml;
           A.daten.uebernehme(x); infoVerwerfen();
@@ -796,6 +819,74 @@
         }, function () {});
       });
     }
+  }
+
+  // ------------------------------------------------------------------ Rechnungen (Überweiser/bar)
+
+  /** Offene Beiträge von Konten ohne Lastschrift; das Schreiben erzeugt die Korrespondenz (Anlass „Rechnung“). */
+  function zeigeRechnungen(ziel) {
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen)]));
+    var inhalt = A.el('div'); ziel.appendChild(inhalt); laedt(inhalt);
+    A.rufe('apiFinanzenRechnungen', jahr()).then(function (liste) {
+      A.leere(inhalt);
+      var summe = liste.reduce(function (n, r) { return n + r.offen; }, 0);
+      inhalt.appendChild(A.el('div', null, { className: 'kacheln' }, [
+        A.kachel(A.zahl(liste.length), 'offene Rechnungen ' + jahr()), A.kachel(A.betrag(summe), 'Summe offen')
+      ]));
+      var gewaehlt = {};
+      liste.forEach(function (r) { gewaehlt[r.beitragskonto_id] = true; });
+      var knoepfe = [];
+      if (A.darf('anschreiben_erstellen') && liste.length) knoepfe.push(A.knopf('Rechnungen erstellen', function () {
+        A.zeige('korrespondenz', { anlass: 'Rechnung', jahr: jahr(), beitragskonto_ids: liste.filter(function (r) { return gewaehlt[r.beitragskonto_id]; }).map(function (r) { return r.beitragskonto_id; }) });
+      }));
+      if (A.darf('export') && liste.length) knoepfe.push(A.knopf('CSV', function () {
+        A.csv('Rechnungen_' + jahr() + '.csv', [
+          { titel: 'Konto', feld: 'beitragskonto_id' }, { titel: 'Zahler', feld: 'kontoinhaber' }, { titel: 'Zahlweg', feld: 'zahlweg' },
+          { titel: 'Soll', wert: function (r) { return String(r.soll_betrag).replace('.', ','); } }, { titel: 'offen', wert: function (r) { return String(r.offen).replace('.', ','); } },
+          { titel: 'Status', feld: 'status' }, { titel: 'Zusammensetzung', feld: 'zusammensetzung' }
+        ], liste);
+        exportVermerken('Rechnungen ' + jahr(), liste.length);
+      }, 'zweit'));
+      inhalt.appendChild(A.el('div', null, { className: 'fin-zeile' }, knoepfe));
+      inhalt.appendChild(A.tabelle([
+        { titel: 'Wahl', sortierbar: false, wert: function (r) {
+          var c = A.el('input', null, { type: 'checkbox', checked: true });
+          c.setAttribute('aria-label', 'Rechnung für ' + r.kontoinhaber);
+          c.addEventListener('click', function (ev) { ev.stopPropagation(); });
+          c.addEventListener('change', function () { gewaehlt[r.beitragskonto_id] = c.checked; });
+          return c;
+        } },
+        { feld: 'beitragskonto_id', titel: 'Konto', zahl: true, wert: function (r) { return kontoLink(r.beitragskonto_id); }, sort: function (r) { return r.beitragskonto_id; } },
+        { feld: 'kontoinhaber', titel: 'Zahler' }, { feld: 'zahlweg', titel: 'Zahlweg' },
+        { feld: 'offen', titel: 'offen', zahl: true, wert: function (r) { return A.betrag(r.offen); } },
+        { feld: 'status', titel: 'Status', wert: function (r) { return STATUSTEXT[r.status] || r.status; } },
+        { feld: 'zusammensetzung', titel: 'Zusammensetzung' }
+      ], liste, { sortiere: 'kontoinhaber', leer: 'Keine offenen Beiträge von Überweisern oder Barzahlern.' }));
+    }, function () { A.leere(inhalt); });
+  }
+
+  // ------------------------------------------------------------------ Jahresübersicht (alle Jahre)
+
+  function zeigeJahre(ziel) {
+    var inhalt = A.el('div'); ziel.appendChild(inhalt); laedt(inhalt);
+    A.rufe('apiFinanzenJahresuebersicht').then(function (d) {
+      A.leere(inhalt);
+      inhalt.appendChild(A.el('p', 'Summen aller Beitragsjahre (alle Sollstellungen, auch ältere als im Browser geladen).', { className: 'leise' }));
+      var spalten = [
+        { feld: 'jahr', titel: 'Jahr', zahl: true }, { feld: 'anzahl', titel: 'Sollst.', zahl: true },
+        { feld: 'soll', titel: 'Soll', zahl: true, wert: function (j) { return A.betrag(j.soll); } },
+        { feld: 'ist', titel: 'Ist', zahl: true, wert: function (j) { return A.betrag(j.ist); } },
+        { feld: 'gebuehr', titel: 'Gebühren', zahl: true, wert: function (j) { return A.betrag(j.gebuehr); } },
+        { feld: 'ruecklastschriften', titel: 'Rücklast.', zahl: true },
+        { feld: 'offen', titel: 'offen', zahl: true, wert: function (j) { return A.betrag(j.offen); } },
+        { feld: 'storniert', titel: 'storniert', zahl: true }
+      ];
+      if (A.darf('export') && d.jahre.length) inhalt.appendChild(A.el('div', null, { className: 'fin-zeile' }, [A.knopf('CSV', function () {
+        A.csv('Beitragseinzuege_Jahre.csv', spalten.map(function (s) { return { titel: s.titel, wert: function (j) { var v = j[s.feld]; return typeof v === 'number' ? String(v).replace('.', ',') : v; } }; }), d.jahre);
+        exportVermerken('Jahresübersicht Beitragseinzüge', d.jahre.length);
+      }, 'zweit')]));
+      inhalt.appendChild(A.tabelle(spalten, d.jahre, { sortiere: 'jahr', absteigend: true, leer: 'Noch keine Sollstellungen.' }));
+    }, function () { A.leere(inhalt); });
   }
 
   // ------------------------------------------------------------------ Klärliste
