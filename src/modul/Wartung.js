@@ -23,7 +23,7 @@ var Wartung = (function () {
   var MAX_MS = 4.5 * 60 * 1000;
   var FORTSCHRITT = 'wartung_fortschritt';
   var MESSUNG_MONATE = 3;
-  var SCHRITTE = ['status', 'fristen', 'loeschbarkeit', 'protokoll', 'messung', 'snapshot'];
+  var SCHRITTE = ['status', 'fristen', 'loeschbarkeit', 'protokoll', 'messung', 'korrespondenz', 'snapshot'];
 
   function heute() { return DB.jetzt().slice(0, 10); }
 
@@ -152,6 +152,8 @@ var Wartung = (function () {
       loeschbarkeit: function () { return loeschbarkeit(ktx); },
       protokoll: function () { return protokoll(ktx); },
       messung: messungAufraeumen,
+      // (g) Anschreiben: Inhalt/Anschrift nach Aufbewahrungsfrist leeren (Aufbewahrungsfrist „Anschreiben“)
+      korrespondenz: function () { var r = Korrespondenz.fristBereinigung(); return r && r.anzahl !== undefined ? r.anzahl : r; },
       snapshot: snapshotNeu
     };
     for (var i = 0; i < SCHRITTE.length; i++) {

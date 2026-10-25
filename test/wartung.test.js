@@ -34,7 +34,7 @@ test('wartungNachts: Status nachgezogen, Löschbarkeit gesetzt, alte Messwerte e
   const g = ladeProjekt(f.globale);
   const erg = rein(g.wartungNachts());
   assert.ok(erg && !erg.abgebrochen, JSON.stringify(erg));
-  assert.deepStrictEqual(Object.keys(erg.ergebnisse), ['status', 'fristen', 'loeschbarkeit', 'protokoll', 'messung', 'snapshot']);
+  assert.deepStrictEqual(Object.keys(erg.ergebnisse), ['status', 'fristen', 'loeschbarkeit', 'protokoll', 'messung', 'korrespondenz', 'snapshot']);
   Object.values(erg.ergebnisse).forEach(v => assert.ok(!String(v).startsWith('Fehler'), JSON.stringify(erg.ergebnisse)));
   const m = objekte(f, 'Mitglied').find(x => x.mitglied_id === id);
   assert.strictEqual(m.status, 'ausgetreten');

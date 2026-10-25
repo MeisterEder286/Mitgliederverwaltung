@@ -64,3 +64,20 @@ test('Protokollbereinigung, Betroffenenfrist, Auskunft', () => {
   assert.ok(titel.includes('Stammdaten und Kontakt') && titel.includes('Beitragskonto und Bankverbindung') && titel.includes('Einwilligungen'));
   assert.strictEqual(a.abschnitte[0].eintraege[0].Geburtsdatum, '14.03.1978');
 });
+
+test('Anonymisierung leert Anschreiben-Inhalte und entfernt Dokument-Links (Mandat bleibt ohne Personenbezug)', () => {
+  const { ladeFachdaten, kopie } = require('./hilfe/fachdaten');
+  const { g, daten, konfig } = ladeFachdaten();
+  const d = kopie(daten);
+  d.Anschreiben = [{ anschreiben_id: 1, mitglied_id: 14, inhalt: 'Sehr geehrter …', empfaenger: 'X', betreff: 'Austritt' }];
+  d.Dokument = [{ dokument_id: 1, mitglied_id: 14, art: 'Aufnahmeantrag', link: 'https://drive.google.com/x' },
+    { dokument_id: 2, mitglied_id: 14, art: 'SEPA-Mandat', beitragskonto_id: 11, link: 'https://drive.google.com/y' }];
+  const m = d.Mitglied.find(x => x.mitglied_id === 14);
+  const plan = kopie(g.Loeschung.anonymisierePlan(m, d, konfig || {}));
+  const a = (plan.aenderungen.Anschreiben || [])[0];
+  assert.ok(a, 'Anschreiben wird geändert');
+  const felder = a.felder;
+  assert.strictEqual(felder.inhalt, null);
+  assert.deepStrictEqual(plan.entfernen.Dokument, [1]);
+  assert.ok((plan.aenderungen.Dokument || []).length === 1);
+});

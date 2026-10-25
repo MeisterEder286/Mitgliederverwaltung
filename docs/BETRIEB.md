@@ -40,6 +40,8 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
 - Lokal ändern → `npm run push` → im Editor **Bereitstellungen verwalten → bestehende Bereitstellung
   bearbeiten → Neue Version**. Nie ein neues Deployment anlegen, sonst ändert sich die URL (A1/B6).
 - Alternativ per clasp: `clasp deploy -i <DEPLOYMENT_ID> -d "Beschreibung"`.
+- **Nach jedem Update mit neuen Tabs oder Spalten** (z. B. 10/2026: `Vorlage`, `Dokument`, `Anschreiben`, Ausbildungsfelder)
+  im Editor `setup` ausführen – legt Fehlendes an und füllt neue Stammdaten-Tabs, ändert nichts Bestehendes.
 - Datenmodell ändern: CSV in `docs/daten/` anpassen → `npm run schema` → `npm run push` → `setup` ausführen
   (hängt neue Spalten hinten an, löscht nie etwas).
 

@@ -202,6 +202,16 @@ var Loeschung = (function () {
     liste(daten, 'Abteilungszugehoerigkeit').forEach(function (z) { if (z.mitglied_id === id) entferne('Abteilungszugehoerigkeit', z.zugehoerigkeit_id); });
     liste(daten, 'Einwilligung').forEach(function (e) { if (e.mitglied_id === id) entferne('Einwilligung', e.einwilligung_id); });
     liste(daten, 'Qualifikation').forEach(function (q) { if (q.mitglied_id === id) entferne('Qualifikation', q.qualifikation_id); });
+    // Anschreiben: Datum/Anlass bleiben als Nachweis, Inhalt und Anschrift werden geleert
+    liste(daten, 'Anschreiben').forEach(function (a) {
+      if (a.mitglied_id === id) aendere('Anschreiben', a.anschreiben_id, { inhalt: null, empfaenger: null, betreff: 'Schreiben (anonymisiert)', dokument_link: null, bemerkung: null });
+    });
+    // Dokument-Links: entfernen – außer SEPA-Mandat (Nachweis für gesperrte Buchungen, Personenbezug gelöst)
+    liste(daten, 'Dokument').forEach(function (doc) {
+      if (doc.mitglied_id !== id) return;
+      if (doc.art === 'SEPA-Mandat' && doc.beitragskonto_id) aendere('Dokument', doc.dokument_id, { mitglied_id: null, titel: 'SEPA-Mandat (anonymisiert)', bemerkung: null });
+      else entferne('Dokument', doc.dokument_id);
+    });
 
     var fArten = {};
     liste(daten, 'Funktionsart').forEach(function (a) { fArten[a.funktionsart_id] = a; });
