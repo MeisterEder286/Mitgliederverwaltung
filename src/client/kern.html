@@ -1,0 +1,616 @@
+<!--
+  kern – gemeinsame Browser-Grundlage der WebApp (eingebunden in client/index vor allen Ansichten).
+
+  Zweck:      Stellt den Namensraum window.App bereit: Server-Aufrufe (rufe), Startdaten und lokaler
+              Datenbestand (App.daten), Router für Ansichten (registriere/zeige), DOM- und Formular-Bausteine,
+              Tabellen mit Sortierung und „mehr anzeigen“, Dialoge, Export (CSV/Druck), Formatierung.
+  Datenquelle: Startdaten (eingebettet oder über apiStart), danach nur über App.rufe('api…').
+  Wer darf was: App.darf(aktion) blendet nur Bedienelemente aus. Das ist Bequemlichkeit, KEIN Schutz –
+              erzwungen wird jede Berechtigung auf dem Server (Sicherheitsregel A2).
+  Besonderheiten:
+    - Ansichten liegen je in einer eigenen Datei client/ansicht_*.html und melden sich mit
+      App.registriere(schluessel, { titel, aktion, reihenfolge, zeichne(ziel, param) }) an.
+    - Texte immer über textContent (App.el), nie innerHTML – kein Einschleusen von HTML aus Daten.
+    - App.rufe misst jeden Server-Aufruf (Auftragspunkt 8); die Ansicht „Messwerte“ zeigt die Werte.
+    - Suche/Filter/Sortierung laufen im Browser auf App.daten (Architektur „einmal laden, lokal arbeiten“).
+      Schreibaufrufe liefern geänderte Datensätze zurück; App.daten.uebernehme() pflegt sie ein.
+-->
+<script>
+(function () {
+  'use strict';
+
+  var MAX_MESSUNGEN = 200;
+  var messungen = [];
+  var gemeldet = 0;
+  var ansichten = {};
+  var aktuelle = { schluessel: null, param: null };
+  var verlauf = [];
+
+  var App = window.App = {
+    startdaten: null,
+    startBisBedienbar: null,
+    messungen: messungen
+  };
+
+  // ================================================================== DOM-Bausteine
+
+  App.$ = function (id) { return document.getElementById(id); };
+
+  /** Element mit Text erzeugen: App.el('td', 'Text', { className: 'zahl' }, [kinder]). */
+  App.el = function (tag, text, attrs, kinder) {
+    var e = document.createElement(tag);
+    if (text !== undefined && text !== null) e.textContent = String(text);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === 'dataset') Object.keys(attrs.dataset).forEach(function (d) { e.dataset[d] = attrs.dataset[d]; });
+      else if (k === 'onclick' || k === 'oninput' || k === 'onchange' || k === 'onsubmit') e.addEventListener(k.slice(2), attrs[k]);
+      else if (k === 'aria' ) Object.keys(attrs.aria).forEach(function (a) { e.setAttribute('aria-' + a, attrs.aria[a]); });
+      else e[k] = attrs[k];
+    });
+    (kinder || []).forEach(function (k) { if (k) e.appendChild(k); });
+    return e;
+  };
+  App.leere = function (k) { while (k.firstChild) k.removeChild(k.firstChild); return k; };
+  App.knopf = function (text, aktion, art) {
+    return App.el('button', text, { type: 'button', className: 'knopf' + (art ? ' ' + art : ''), onclick: aktion });
+  };
+  App.sichereUrl = function (url) { return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null; };
+
+  // ================================================================== Formatierung
+
+  /** 'JJJJ-MM-TT' oder 'JJJJ-MM-TTThh:mm:ss' → 'TT.MM.JJJJ' (bzw. mit Uhrzeit). */
+  App.datum = function (iso, mitZeit) {
+    if (!iso) return '–';
+    var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(String(iso));
+    if (!m) return String(iso);
+    return m[3] + '.' + m[2] + '.' + m[1] + (mitZeit && m[4] ? ' ' + m[4] + ':' + m[5] : '');
+  };
+  /** Eingabe 'TT.MM.JJJJ' oder 'JJJJ-MM-TT' → 'JJJJ-MM-TT' oder null. */
+  App.isoDatum = function (text) {
+    if (!text) return null;
+    var s = String(text).trim();
+    var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s);
+    if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  };
+  App.heute = function () {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  };
+  App.betrag = function (n) {
+    if (n === null || n === undefined || n === '') return '–';
+    return Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  };
+  App.zahl = function (n) { return n === null || n === undefined ? '–' : Number(n).toLocaleString('de-DE'); };
+  App.janein = function (b) { return b === true ? 'ja' : b === false ? 'nein' : '–'; };
+  App.name = function (m) { return m ? [m.nachname, m.vorname].filter(Boolean).join(', ') : '–'; };
+
+  /** Suchtext normalisieren: klein, Umlaute/ß gefaltet, Akzente entfernt. */
+  App.falte = function (s) {
+    return String(s || '').toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '');
+  };
+  App.verzoegert = function (fn, ms) {
+    var t = null;
+    return function () { var a = arguments, self = this; clearTimeout(t); t = setTimeout(function () { fn.apply(self, a); }, ms || 150); };
+  };
+
+  // ================================================================== Meldungen
+
+  App.meldung = function (text, art) {
+    var m = App.$('meldung');
+    App.leere(m);
+    m.className = 'meldung' + (art === 'ok' ? ' ok' : art === 'hinweis' ? ' hinweis' : '');
+    m.appendChild(App.el('span', text));
+    m.appendChild(App.knopf('Schließen', function () { m.hidden = true; }, 'zweit klein'));
+    m.hidden = false;
+    if (art === 'ok') setTimeout(function () { m.hidden = true; }, 4000);
+  };
+  App.fehler = function (f) {
+    var text = (f && f.meldung) || 'Es ist ein Fehler aufgetreten.';
+    if (f && f.nr) text += ' (Fehler-Nr. ' + f.nr + ')';
+    App.meldung(text, 'fehler');
+  };
+
+  // ================================================================== Server-Aufrufe
+
+  function merke(funktion, clientMs, antwort) {
+    var m = antwort && antwort.messung ? antwort.messung : {};
+    messungen.push({
+      funktion: funktion, client_ms: Math.round(clientMs),
+      server_ms: typeof m.server_ms === 'number' ? m.server_ms : null,
+      sheets: typeof m.sheets === 'number' ? m.sheets : null,
+      ok: !!(antwort && antwort.ok), zeit: new Date().toISOString()
+    });
+    if (messungen.length > MAX_MESSUNGEN) {
+      var weg = messungen.length - MAX_MESSUNGEN;
+      messungen.splice(0, weg);
+      gemeldet = Math.max(0, gemeldet - weg);
+    }
+  }
+
+  /**
+   * Ruft eine öffentliche Server-Funktion auf → Promise mit antwort.daten.
+   * Abgelehnt mit Error (err.art, err.nr, err.aktuell, err.felder) bei ok:false oder Verbindungsfehler.
+   * optionen.still = true: keine automatische Fehlermeldung (Aufrufer zeigt selbst an).
+   */
+  App.rufe = function (name) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var still = false;
+    if (args.length && args[args.length - 1] && args[args.length - 1].__still) { still = true; args.pop(); }
+    return new Promise(function (resolve, reject) {
+      var t0 = performance.now();
+      var runner = google.script.run
+        .withSuccessHandler(function (antwort) {
+          merke(name, performance.now() - t0, antwort);
+          if (antwort && antwort.ok) { resolve(antwort.daten); return; }
+          var f = (antwort && antwort.fehler) || { art: 'intern', meldung: 'Unerwartete Antwort vom Server.' };
+          if (!still) {
+            if (f.art === 'konflikt') App.meldung('Der Datensatz wurde inzwischen von jemand anderem geändert. Die aktuelle Fassung wurde geladen – bitte Änderung erneut vornehmen.', 'fehler');
+            else App.fehler(f);
+          }
+          var err = new Error(f.meldung || 'Fehler');
+          err.art = f.art; err.nr = f.nr; err.aktuell = f.aktuell; err.felder = f.felder;
+          reject(err);
+        })
+        .withFailureHandler(function (fehler) {
+          merke(name, performance.now() - t0, null);
+          if (!still) App.fehler({ meldung: 'Keine Verbindung zum Server. Bitte erneut versuchen.' });
+          var err = new Error('netz'); err.art = 'netz'; err.ursache = fehler;
+          reject(err);
+        });
+      runner[name].apply(runner, args);
+    });
+  };
+  App.still = { __still: true };
+
+  /** Noch nicht gemeldete Client-Messungen gebündelt an den Server schicken. */
+  App.meldeMessungen = function () {
+    var neu = messungen.slice(gemeldet);
+    if (!neu.length) return Promise.resolve();
+    var bis = messungen.length;
+    return App.rufe('apiClientMessungen', neu, App.still).then(function () { gemeldet = bis; });
+  };
+
+  App.darf = function (aktion) {
+    var s = App.startdaten;
+    return !!(s && s.aktionen && s.aktionen.indexOf(aktion) >= 0);
+  };
+  App.sieht = function (sichtklasse) {
+    var s = App.startdaten;
+    return !!(s && s.sicht && s.sicht.indexOf(sichtklasse) >= 0);
+  };
+
+  // ================================================================== Lokaler Datenbestand
+
+  /**
+   * App.daten hält den rollenbeschnittenen Snapshot (aus apiStart.snapshot). Ansichten lesen nur hier.
+   * Struktur siehe docs/ENTWICKLUNG.md („Snapshot“). Nach Schreibaufrufen: App.daten.uebernehme(antwort).
+   */
+  var beobachter = [];
+  App.daten = {
+    snapshot: null,
+    index: {},
+    setze: function (snapshot) {
+      App.daten.snapshot = snapshot || {};
+      App.daten.indexiere();
+      beobachter.forEach(function (f) { try { f(); } catch (e) { console.error(e); } });
+    },
+    indexiere: function () {
+      var s = App.daten.snapshot || {};
+      var ix = App.daten.index = {};
+      Object.keys(s).forEach(function (k) {
+        if (!Array.isArray(s[k])) return;
+        var id = s[k].length && Object.keys(s[k][0]).filter(function (f) { return /_id$/.test(f); })[0];
+        if (s[k].length && s[k][0].id !== undefined) id = 'id';
+        if (!id) return;
+        var m = ix[k] = {};
+        s[k].forEach(function (z) { m[z[id]] = z; });
+      });
+    },
+    /** Liste aus dem Snapshot, z. B. App.daten.liste('mitglieder'). */
+    liste: function (name) { return (App.daten.snapshot && App.daten.snapshot[name]) || []; },
+    /** Datensatz über ID, z. B. App.daten.hole('mitglieder', 17). */
+    hole: function (name, id) { return (App.daten.index[name] || {})[id] || null; },
+    /**
+     * Übernimmt eine Schreibantwort { aktualisiert: { listenname: [datensaetze] }, entfernt: { listenname: [ids] } }
+     * bzw. einen vollständigen neuen Snapshot { snapshot: … }.
+     */
+    uebernehme: function (antwort) {
+      if (!antwort) return;
+      if (antwort.snapshot) { App.daten.setze(antwort.snapshot); return; }
+      var s = App.daten.snapshot = App.daten.snapshot || {};
+      var akt = antwort.aktualisiert || {};
+      Object.keys(akt).forEach(function (name) {
+        var liste = s[name] = s[name] || [];
+        akt[name].forEach(function (neu) {
+          var idFeld = neu.id !== undefined ? 'id' : Object.keys(neu).filter(function (f) { return /_id$/.test(f); })[0];
+          var i = -1;
+          for (var j = 0; j < liste.length; j++) if (liste[j][idFeld] === neu[idFeld]) { i = j; break; }
+          if (i >= 0) liste[i] = neu; else liste.push(neu);
+        });
+      });
+      var weg = antwort.entfernt || {};
+      Object.keys(weg).forEach(function (name) {
+        var ids = weg[name];
+        s[name] = (s[name] || []).filter(function (z) {
+          var idFeld = z.id !== undefined ? 'id' : Object.keys(z).filter(function (f) { return /_id$/.test(f); })[0];
+          return ids.indexOf(z[idFeld]) < 0;
+        });
+      });
+      App.daten.indexiere();
+      beobachter.forEach(function (f) { try { f(); } catch (e) { console.error(e); } });
+    },
+    beobachte: function (f) { beobachter.push(f); }
+  };
+
+  /** Snapshot komplett neu vom Server holen (z. B. nach Versionskonflikt oder auf Wunsch). */
+  App.ladeNeu = function () {
+    return App.rufe('apiSnapshot').then(function (snap) { App.daten.setze(snap); App.neuZeichnen(); return snap; });
+  };
+
+  // ================================================================== Router
+
+  /** Ansicht anmelden: { titel, aktion (Recht oder null), reihenfolge (Zahl), zeichne(ziel, param), versteckt }. */
+  App.registriere = function (schluessel, def) { ansichten[schluessel] = def; };
+  App.ansichten = ansichten;
+
+  App.zeige = function (schluessel, param, ohneVerlauf) {
+    var a = ansichten[schluessel];
+    if (!a) return;
+    if (!ohneVerlauf && aktuelle.schluessel) verlauf.push({ schluessel: aktuelle.schluessel, param: aktuelle.param });
+    aktuelle = { schluessel: schluessel, param: param || null };
+    var hauptschluessel = a.gehoertZu || schluessel;
+    Array.prototype.forEach.call(App.$('navigation').querySelectorAll('button'), function (k) {
+      if (k.dataset.ansicht === hauptschluessel) k.setAttribute('aria-current', 'page');
+      else k.removeAttribute('aria-current');
+    });
+    var inhalt = App.leere(App.$('inhalt'));
+    App.$('meldung').hidden = true;
+    try { a.zeichne(inhalt, param || null); } catch (e) {
+      console.error(e);
+      inhalt.appendChild(App.el('p', 'Diese Ansicht konnte nicht angezeigt werden.', { className: 'leise' }));
+    }
+    inhalt.focus();
+    window.scrollTo(0, 0);
+  };
+  App.zurueck = function () {
+    var v = verlauf.pop();
+    if (v) App.zeige(v.schluessel, v.param, true); else App.zeige('start', null, true);
+  };
+  App.aktuell = function () { return aktuelle; };
+  App.neuZeichnen = function () { if (aktuelle.schluessel) App.zeige(aktuelle.schluessel, aktuelle.param, true); };
+
+  function fuelleGeruest() {
+    var s = App.startdaten;
+    App.$('beitragsjahr').textContent = s.beitragsjahr ? '· Beitragsjahr ' + s.beitragsjahr : '';
+    var b = s.benutzer || {};
+    var benutzer = App.leere(App.$('benutzer'));
+    benutzer.appendChild(App.el('span', b.name || b.email || ''));
+    if (b.rollen && b.rollen.length) benutzer.appendChild(App.el('span', ' · ' + b.rollen.join(', ')));
+    [['link-impressum', s.impressum_url], ['link-datenschutz', s.datenschutz_url]].forEach(function (p) {
+      var url = App.sichereUrl(p[1]); var a = App.$(p[0]);
+      if (url) { a.href = url; a.hidden = false; } else a.hidden = true;
+    });
+    var nav = App.leere(App.$('navigation'));
+    Object.keys(ansichten)
+      .filter(function (k) { var a = ansichten[k]; return !a.versteckt && (!a.aktion || App.darf(a.aktion)); })
+      .sort(function (x, y) { return (ansichten[x].reihenfolge || 99) - (ansichten[y].reihenfolge || 99); })
+      .forEach(function (k) {
+        var knopf = App.el('button', ansichten[k].titel, { type: 'button', dataset: { ansicht: k } });
+        knopf.addEventListener('click', function () { App.zeige(k); });
+        nav.appendChild(knopf);
+      });
+  }
+
+  // ================================================================== Tabelle
+
+  /**
+   * Tabelle mit sortierbaren Spalten und „mehr anzeigen“ (Paginierung in Blöcken, Auftragspunkt 6).
+   * spalten: [{ feld, titel, zahl, wert(z) → Anzeige, sort(z) → Sortierwert, klasse(z) }]
+   * optionen: { beiKlick(z), block (Standard 50), leer: 'Text', sortiere: feld, absteigend }
+   */
+  App.tabelle = function (spalten, zeilen, optionen) {
+    optionen = optionen || {};
+    var block = optionen.block || 50;
+    var anzahl = block;
+    var sort = { feld: optionen.sortiere || null, ab: !!optionen.absteigend };
+    var rahmen = App.el('div', null, { className: 'tabelle-rahmen' });
+    var info = App.el('p', '', { className: 'leise tabelle-info' });
+    var mehr = App.knopf('Mehr anzeigen', function () { anzahl += block; zeichne(); }, 'zweit');
+    var huelle = App.el('div', null, null, [rahmen, info, mehr]);
+
+    function wertVon(s, z) { return s.wert ? s.wert(z) : z[s.feld]; }
+    function sortWert(s, z) { var v = s.sort ? s.sort(z) : z[s.feld]; return typeof v === 'string' ? App.falte(v) : v; }
+
+    function zeichne() {
+      var liste = zeilen.slice();
+      if (sort.feld) {
+        var s = spalten.filter(function (x) { return x.feld === sort.feld; })[0];
+        if (s) liste.sort(function (a, b) {
+          var x = sortWert(s, a), y = sortWert(s, b);
+          if (x === y) return 0;
+          if (x === null || x === undefined || x === '') return 1;
+          if (y === null || y === undefined || y === '') return -1;
+          return (x < y ? -1 : 1) * (sort.ab ? -1 : 1);
+        });
+      }
+      App.leere(rahmen);
+      if (!liste.length) { rahmen.appendChild(App.el('p', optionen.leer || 'Keine Einträge.', { className: 'leise' })); info.textContent = ''; mehr.hidden = true; return; }
+      var t = App.el('table');
+      var kopf = App.el('tr');
+      spalten.forEach(function (s) {
+        var th = App.el('th', null, { className: s.zahl ? 'zahl' : '', scope: 'col' });
+        if (s.feld && s.sortierbar !== false) {
+          var b = App.el('button', s.titel + (sort.feld === s.feld ? (sort.ab ? ' ▼' : ' ▲') : ''), { type: 'button', className: 'sortierknopf' });
+          b.addEventListener('click', function () { sort.ab = sort.feld === s.feld ? !sort.ab : false; sort.feld = s.feld; zeichne(); });
+          th.appendChild(b);
+          if (sort.feld === s.feld) th.setAttribute('aria-sort', sort.ab ? 'descending' : 'ascending');
+        } else th.textContent = s.titel;
+        kopf.appendChild(th);
+      });
+      t.appendChild(App.el('thead', null, null, [kopf]));
+      var tbody = App.el('tbody');
+      liste.slice(0, anzahl).forEach(function (z) {
+        var tr = App.el('tr');
+        if (optionen.beiKlick) {
+          tr.className = 'klickbar'; tr.tabIndex = 0;
+          tr.addEventListener('click', function () { optionen.beiKlick(z); });
+          tr.addEventListener('keydown', function (e) { if (e.key === 'Enter') optionen.beiKlick(z); });
+        }
+        spalten.forEach(function (s) {
+          var v = wertVon(s, z);
+          var td = App.el('td', null, { className: (s.zahl ? 'zahl ' : '') + (s.klasse ? s.klasse(z) || '' : '') });
+          if (v instanceof Node) td.appendChild(v); else td.textContent = v === null || v === undefined || v === '' ? '–' : v;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      t.appendChild(tbody);
+      rahmen.appendChild(t);
+      info.textContent = Math.min(anzahl, liste.length) + ' von ' + liste.length + ' angezeigt';
+      mehr.hidden = liste.length <= anzahl;
+    }
+    huelle.aktualisiere = function (neueZeilen) { zeilen = neueZeilen; anzahl = block; zeichne(); };
+    zeichne();
+    return huelle;
+  };
+
+  /** Kleine Kennzahlenkachel. */
+  App.kachel = function (zahl, text, art, beiKlick) {
+    var k = App.el(beiKlick ? 'button' : 'div', null, { className: 'kachel' + (art ? ' ' + art : ''), type: beiKlick ? 'button' : undefined },
+      [App.el('span', zahl, { className: 'kachel-zahl' }), App.el('span', text, { className: 'kachel-text' })]);
+    if (beiKlick) k.addEventListener('click', beiKlick);
+    return k;
+  };
+  App.ampel = function (stufe, text) {   // stufe: 'gruen' | 'gelb' | 'rot' | 'grau'
+    var zeichen = { gruen: '●', gelb: '▲', rot: '■', grau: '○' }[stufe] || '○';
+    return App.el('span', zeichen + ' ' + text, { className: 'ampel ' + stufe });
+  };
+
+  // ================================================================== Formulare
+
+  /**
+   * Formular aus Felddefinitionen. felder: [{ name, titel, typ: 'text'|'datum'|'zahl'|'betrag'|'auswahl'|'janein'|
+   * 'langtext'|'email'|'tel', liste: [werte] oder [{wert, text}], pflicht, hilfe, nurLesen, breit }]
+   * werte: Startwerte. Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name) }.
+   */
+  App.formular = function (felder, werte, optionen) {
+    werte = werte || {};
+    optionen = optionen || {};
+    var form = App.el('form', null, { className: 'formular', noValidate: true });
+    form.addEventListener('submit', function (e) { e.preventDefault(); if (optionen.beiAbsenden) optionen.beiAbsenden(); });
+    var eingaben = {};
+    felder.forEach(function (f) {
+      var id = 'f-' + f.name + '-' + Math.random().toString(36).slice(2, 7);
+      var eingabe;
+      var v = werte[f.name];
+      if (f.typ === 'auswahl' || f.typ === 'janein') {
+        eingabe = App.el('select', null, { id: id });
+        var opts = f.typ === 'janein' ? [{ wert: '', text: '–' }, { wert: 'ja', text: 'ja' }, { wert: 'nein', text: 'nein' }]
+          : [{ wert: '', text: '–' }].concat((f.liste || []).map(function (o) { return typeof o === 'object' ? o : { wert: o, text: o }; }));
+        opts.forEach(function (o) { eingabe.appendChild(App.el('option', o.text, { value: String(o.wert) })); });
+        eingabe.value = f.typ === 'janein' ? (v === true ? 'ja' : v === false ? 'nein' : '') : (v === null || v === undefined ? '' : String(v));
+      } else if (f.typ === 'langtext') {
+        eingabe = App.el('textarea', null, { id: id, rows: 3 });
+        eingabe.value = v || '';
+      } else {
+        var typ = { datum: 'text', zahl: 'number', betrag: 'text', email: 'email', tel: 'tel' }[f.typ] || 'text';
+        eingabe = App.el('input', null, { id: id, type: typ });
+        if (f.typ === 'datum') { eingabe.placeholder = 'TT.MM.JJJJ'; eingabe.inputMode = 'numeric'; eingabe.value = v ? App.datum(v) : ''; }
+        else if (f.typ === 'betrag') { eingabe.inputMode = 'decimal'; eingabe.value = v === null || v === undefined ? '' : String(v).replace('.', ','); }
+        else eingabe.value = v === null || v === undefined ? '' : String(v);
+      }
+      if (f.nurLesen) eingabe.disabled = true;
+      if (f.pflicht) eingabe.required = true;
+      var fehler = App.el('span', '', { className: 'feldfehler', id: id + '-fehler' });
+      eingabe.setAttribute('aria-describedby', id + '-fehler');
+      var label = App.el('label', f.titel + (f.pflicht ? ' *' : ''), { htmlFor: id });
+      var zeile = App.el('div', null, { className: 'feld' + (f.breit || f.typ === 'langtext' ? ' breit' : '') }, [label, eingabe,
+        f.hilfe ? App.el('span', f.hilfe, { className: 'leise hilfe' }) : null, fehler]);
+      form.appendChild(zeile);
+      eingaben[f.name] = { def: f, eingabe: eingabe, fehler: fehler };
+    });
+    return {
+      element: form,
+      feld: function (name) { return eingaben[name] && eingaben[name].eingabe; },
+      werte: function () {
+        var o = {};
+        Object.keys(eingaben).forEach(function (n) {
+          var e = eingaben[n], s = e.eingabe.value.trim();
+          if (e.def.nurLesen) return;
+          if (e.def.typ === 'janein') o[n] = s === 'ja' ? true : s === 'nein' ? false : null;
+          else if (e.def.typ === 'datum') o[n] = s ? (App.isoDatum(s) || s) : null;
+          else if (e.def.typ === 'zahl') o[n] = s === '' ? null : Number(s);
+          else if (e.def.typ === 'betrag') o[n] = s === '' ? null : Number(s.replace(/\./g, '').replace(',', '.'));
+          else o[n] = s === '' ? null : s;
+        });
+        return o;
+      },
+      setzeFehler: function (liste) {
+        Object.keys(eingaben).forEach(function (n) { eingaben[n].fehler.textContent = ''; eingaben[n].eingabe.removeAttribute('aria-invalid'); });
+        var erstes = null;
+        (liste || []).forEach(function (f) {
+          var e = eingaben[f.feld];
+          if (!e) return;
+          e.fehler.textContent = f.meldung; e.eingabe.setAttribute('aria-invalid', 'true');
+          if (!erstes) erstes = e.eingabe;
+        });
+        if (erstes) erstes.focus();
+      }
+    };
+  };
+
+  /**
+   * Speichern-Ablauf für Formulare: ruft apiName(…args, werte) und zeigt Feldfehler (err.felder) am Formular.
+   * Liefert Promise mit den Antwortdaten; übernimmt sie in App.daten.
+   */
+  App.speichere = function (formular, knopf, apiName, args) {
+    knopf.disabled = true;
+    formular.setzeFehler([]);
+    return App.rufe.apply(null, [apiName].concat(args || []).concat([formular.werte()])).then(function (daten) {
+      App.daten.uebernehme(daten);
+      App.meldung('Gespeichert.', 'ok');
+      return daten;
+    }, function (err) {
+      if (err.felder) formular.setzeFehler(err.felder);
+      if (err.art === 'konflikt') App.ladeNeu();
+      throw err;
+    }).then(function (d) { knopf.disabled = false; return d; }, function (e) { knopf.disabled = false; throw e; });
+  };
+
+  // ================================================================== Dialog
+
+  /** Modaler Dialog (natives <dialog>). inhalt: Node; knoepfe: [{ text, art, aktion(schliessen) }]. */
+  App.dialog = function (titel, inhalt, knoepfe) {
+    var d = App.el('dialog', null, { className: 'dialog' });
+    d.setAttribute('aria-label', titel);
+    var schliessen = function () { d.close(); d.remove(); };
+    d.appendChild(App.el('h2', titel));
+    if (inhalt) d.appendChild(inhalt);
+    var leiste = App.el('div', null, { className: 'knopfleiste' });
+    (knoepfe || [{ text: 'Schließen' }]).forEach(function (k) {
+      leiste.appendChild(App.knopf(k.text, function () { if (k.aktion) k.aktion(schliessen); else schliessen(); }, k.art || 'zweit'));
+    });
+    d.appendChild(leiste);
+    d.addEventListener('cancel', function () { d.remove(); });
+    document.body.appendChild(d);
+    if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+    return { schliessen: schliessen, element: d };
+  };
+  App.bestaetige = function (titel, text, jaText) {
+    return new Promise(function (resolve) {
+      App.dialog(titel, App.el('p', text), [
+        { text: 'Abbrechen', aktion: function (s) { s(); resolve(false); } },
+        { text: jaText || 'OK', art: '', aktion: function (s) { s(); resolve(true); } }
+      ]);
+    });
+  };
+
+  // ================================================================== Export
+
+  /** CSV (Semikolon, UTF-8 mit BOM – öffnet in Excel korrekt) herunterladen. */
+  App.csv = function (dateiname, spalten, zeilen) {
+    var zelle = function (v) {
+      var s = v === null || v === undefined ? '' : String(v);
+      if (/^[=+\-@]/.test(s)) s = "'" + s;   // Formel-Injektion in Excel verhindern
+      return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    var text = [spalten.map(function (s) { return zelle(s.titel); }).join(';')].concat(zeilen.map(function (z) {
+      return spalten.map(function (s) { return zelle(s.wert ? s.wert(z) : z[s.feld]); }).join(';');
+    })).join('\r\n');
+    App.herunterladen(dateiname, '﻿' + text, 'text/csv;charset=utf-8');
+  };
+  App.herunterladen = function (dateiname, inhalt, mime) {
+    var blob = new Blob([inhalt], { type: mime || 'application/octet-stream' });
+    var a = App.el('a', null, { href: URL.createObjectURL(blob), download: dateiname });
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  };
+  /** Druckansicht einer Tabelle (Browser-Druck → auch „Als PDF speichern“). */
+  App.drucke = function (titel, spalten, zeilen, untertitel) {
+    var w = window.open('', '_blank');
+    if (!w) { App.meldung('Das Druckfenster wurde blockiert. Bitte Pop-ups für diese Seite erlauben.', 'fehler'); return; }
+    var doc = w.document;
+    doc.title = titel;
+    var st = doc.createElement('style');
+    st.textContent = 'body{font-family:system-ui,sans-serif;font-size:11pt;margin:16mm}h1{font-size:15pt;margin:0 0 4px}p{margin:0 0 10px;color:#444}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #999;padding:3px 6px;text-align:left}th{background:#eee}';
+    doc.head.appendChild(st);
+    var h = doc.createElement('h1'); h.textContent = titel; doc.body.appendChild(h);
+    var p = doc.createElement('p'); p.textContent = (untertitel ? untertitel + ' · ' : '') + 'Stand ' + App.datum(App.heute()) + ' · TSV Ergoldsbach e. V. · vertraulich'; doc.body.appendChild(p);
+    var t = doc.createElement('table'); var tr = doc.createElement('tr');
+    spalten.forEach(function (s) { var th = doc.createElement('th'); th.textContent = s.titel; tr.appendChild(th); });
+    t.appendChild(tr);
+    zeilen.forEach(function (z) {
+      var r = doc.createElement('tr');
+      spalten.forEach(function (s) { var td = doc.createElement('td'); var v = s.wert ? s.wert(z) : z[s.feld]; td.textContent = v === null || v === undefined ? '' : (v instanceof Node ? v.textContent : v); r.appendChild(td); });
+      t.appendChild(r);
+    });
+    doc.body.appendChild(t);
+    w.focus(); w.print();
+  };
+
+  // ================================================================== Bausteine für Ansichten
+
+  /** Suchfeld + Filterleiste. filter: [{ name, titel, liste: [{wert,text}] }] → beiAenderung({ suche, name: wert }) */
+  App.filterleiste = function (filter, beiAenderung, platzhalter) {
+    var zustand = { suche: '' };
+    var suche = App.el('input', null, { type: 'search', placeholder: platzhalter || 'Suchen …', className: 'suche' });
+    suche.setAttribute('aria-label', platzhalter || 'Suchen');
+    suche.addEventListener('input', App.verzoegert(function () { zustand.suche = suche.value; beiAenderung(zustand); }, 120));
+    var leiste = App.el('div', null, { className: 'filterleiste' }, [suche]);
+    (filter || []).forEach(function (f) {
+      var s = App.el('select');
+      s.setAttribute('aria-label', f.titel);
+      [{ wert: '', text: f.titel + ': alle' }].concat(f.liste).forEach(function (o) { s.appendChild(App.el('option', o.text, { value: String(o.wert) })); });
+      if (f.start !== undefined) { s.value = String(f.start); zustand[f.name] = String(f.start); }
+      s.addEventListener('change', function () { zustand[f.name] = s.value; beiAenderung(zustand); });
+      leiste.appendChild(s);
+    });
+    leiste.zustand = zustand;
+    return leiste;
+  };
+
+  /** Abschnitt mit Überschrift und optionalen Knöpfen rechts. */
+  App.abschnitt = function (titel, knoepfe, ebene) {
+    return App.el('div', null, { className: 'abschnittskopf' }, [App.el(ebene || 'h2', titel), App.el('div', null, { className: 'knopfleiste' }, knoepfe || [])]);
+  };
+
+  /** Definitionsliste für Detailansichten: paare = [[titel, wert], …]; leere Werte werden ausgelassen, wenn ohneLeere. */
+  App.details = function (paare, ohneLeere) {
+    var dl = App.el('dl', null, { className: 'details' });
+    paare.forEach(function (p) {
+      if (ohneLeere && (p[1] === null || p[1] === undefined || p[1] === '' || p[1] === '–')) return;
+      dl.appendChild(App.el('dt', p[0]));
+      var dd = App.el('dd');
+      if (p[1] instanceof Node) dd.appendChild(p[1]); else dd.textContent = p[1] === null || p[1] === undefined || p[1] === '' ? '–' : p[1];
+      dl.appendChild(dd);
+    });
+    return dl;
+  };
+
+  // ================================================================== Start
+
+  function lesestartdaten() {
+    var block = App.$('startdaten');
+    var text = block ? block.textContent.trim() : '';
+    if (text) { try { return Promise.resolve(JSON.parse(text)); } catch (e) { /* weiter mit apiStart */ } }
+    return App.rufe('apiStart');
+  }
+
+  /** Wird von client/start nach dem Laden aller Ansichten aufgerufen. */
+  App.starte = function () {
+    lesestartdaten().then(function (daten) {
+      App.startdaten = daten || {};
+      App.daten.setze(App.startdaten.snapshot || {});
+      fuelleGeruest();
+      App.zeige('start', null, true);
+      // performance.now() zählt ab dem Laden des (inneren) Dokuments; die Apps-Script-Hülle davor fehlt.
+      App.startBisBedienbar = Math.round(performance.now());
+    }).catch(function () {
+      var l = App.$('laedt');
+      if (l) l.textContent = 'Die Startdaten konnten nicht geladen werden. Bitte Seite neu laden.';
+    });
+  };
+})();
+</script>

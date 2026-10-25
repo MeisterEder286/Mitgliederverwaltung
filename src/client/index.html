@@ -2,7 +2,7 @@
   index – Seitengerüst der WebApp (Template, ausgeliefert von doGet in src/Einstieg.js).
 
   Zweck:      Kopfleiste, Navigation, Inhaltsbereich, Fußzeile mit Impressum/Datenschutz (D1).
-              Logik in client/app, Gestaltung in client/stil (beide per include_ eingebunden).
+              Logik in client/kern (Grundlage) und client/ansicht_* (je Ansicht), Gestaltung in client/stil (beide per include_ eingebunden).
   Datenquelle: Startdaten werden – falls _Konfig.snapshot_einbetten = ja – als JSON im Block
               <script type="application/json" id="startdaten"> mitgeliefert, sonst lädt app sie über apiStart.
               Sie enthalten nur, was die Rolle sehen darf (serverseitig geschnitten).
@@ -45,6 +45,17 @@
   </footer>
 
   <script type="application/json" id="startdaten"><?!= startdatenJson ?></script>
-  <?!= include_('client/app') ?>
+  <?!= include_('client/kern') ?>
+  <?!= include_('client/ansicht_start') ?>
+  <?!= include_('client/ansicht_mitglieder') ?>
+  <?!= include_('client/ansicht_funktionen') ?>
+  <?!= include_('client/ansicht_finanzen') ?>
+  <?!= include_('client/ansicht_nachweise') ?>
+  <?!= include_('client/ansicht_ehrungen') ?>
+  <?!= include_('client/ansicht_berichte') ?>
+  <?!= include_('client/ansicht_datenschutz') ?>
+  <?!= include_('client/ansicht_verwaltung') ?>
+  <?!= include_('client/ansicht_messwerte') ?>
+  <?!= include_('client/start') ?>
 </body>
 </html>

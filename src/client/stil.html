@@ -126,7 +126,52 @@
   .fuss a { min-height: 44px; display: inline-flex; align-items: center; }
   .fuss-verein { margin-left: auto; display: inline-flex; align-items: center; }
 
+  /* ---- Bausteine aus client/kern ---- */
+  .knopf.klein { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; }
+  .knopf.gefahr { background: var(--fehler-text); border-color: var(--fehler-text); color: #fff; }
+  .knopfleiste { display: flex; flex-wrap: wrap; gap: 8px; }
+  .abschnittskopf { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 20px 0 8px; }
+  .abschnittskopf h1, .abschnittskopf h2 { margin: 0; }
+  .meldung.hinweis { background: #fff6dc; color: #5c4400; }
+  .tabelle-info { margin: 6px 0; }
+  tr.klickbar { cursor: pointer; }
+  tr.klickbar:hover td, tr.klickbar:focus td { background: #eef4fb; }
+  .sortierknopf { background: none; border: 0; font: inherit; font-weight: 600; cursor: pointer; padding: 0; color: inherit; }
+  .filterleiste { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .filterleiste .suche { flex: 1 1 220px; }
+  .filterleiste input, .filterleiste select, .formular input, .formular select, .formular textarea {
+    min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); color: var(--text); width: 100%;
+  }
+  .filterleiste select { width: auto; max-width: 100%; }
+  .formular { display: grid; grid-template-columns: 1fr; gap: 10px 16px; margin: 0 0 12px; }
+  .feld { display: flex; flex-direction: column; gap: 4px; }
+  .feld label { font-weight: 600; font-size: 0.9rem; }
+  .feld .hilfe { font-size: 0.8rem; }
+  .feldfehler { color: var(--fehler-text); font-size: 0.85rem; min-height: 0; }
+  [aria-invalid="true"] { border-color: var(--fehler-text) !important; }
+  .details { display: grid; grid-template-columns: minmax(110px, 40%) 1fr; gap: 4px 12px; margin: 0 0 12px; }
+  .details dt { color: var(--text-leise); font-size: 0.9rem; }
+  .details dd { margin: 0; overflow-wrap: anywhere; }
+  .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 0 0 12px; }
+  .kachel { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--rand); border-radius: var(--radius); background: var(--grund); text-align: left; font: inherit; color: inherit; }
+  button.kachel { cursor: pointer; }
+  .kachel-zahl { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kachel-text { font-size: 0.85rem; color: var(--text-leise); }
+  .kachel.warnung { border-color: #d39b00; background: #fffaeb; }
+  .kachel.fehler { border-color: var(--fehler-text); background: var(--fehler-grund); }
+  .ampel { white-space: nowrap; font-weight: 600; }
+  .ampel.gruen { color: #135c2c; } .ampel.gelb { color: #7a5600; } .ampel.rot { color: var(--fehler-text); } .ampel.grau { color: var(--text-leise); }
+  .marke { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: var(--flaeche); border: 1px solid var(--rand); margin: 0 4px 2px 0; }
+  .dialog { border: 1px solid var(--rand); border-radius: var(--radius); padding: var(--abstand); max-width: min(640px, calc(100vw - 24px)); width: 100%; }
+  .dialog::backdrop { background: rgba(0,0,0,0.4); }
+  .reiter { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--rand); margin: 0 0 12px; }
+  .reiter button { min-height: 40px; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0; background: none; font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; }
+  .reiter button[aria-selected="true"] { border-color: var(--rand); background: var(--grund); font-weight: 600; margin-bottom: -1px; }
+  @media print { .kopf, .navigation, .fuss, .knopfleiste, .filterleiste, .meldung { display: none !important; } }
+
   @media (min-width: 720px) {
+    .formular { grid-template-columns: 1fr 1fr; }
+    .feld.breit { grid-column: 1 / -1; }
     .kopf { align-items: center; }
     h1 { font-size: 1.5rem; }
   }

@@ -1,0 +1,122 @@
+<!--
+  ansicht_messwerte – Zeitmessung (Auftragspunkt 8): Server-Aufrufe aus Sicht des Browsers und des Servers.
+
+  Zweck:      Zeigt je Server-Funktion Anzahl, Median/P90 der Laufzeit, Tabellenzugriffe und Browserzeit.
+              Die Differenz Browser − Server entspricht dem Overhead von google.script.run.
+  Datenquelle: App.messungen (dieser Browser) und apiMessungen (alle Benutzer, aus _Messung + Puffer).
+  Wer darf:   Aktion messung_lesen (Vorstand, Mitgliederverwalter) – serverseitig erzwungen.
+  Besonderheiten: Beim Öffnen werden die Browser-Messungen gebündelt an den Server gemeldet.
+-->
+<script>
+(function () {
+  'use strict';
+  var A = window.App;
+
+  // ------------------------------------------------------------------ Ansicht: Messwerte
+
+  function median(liste) { return quantil(liste, 0.5); }
+  function quantil(liste, q) {
+    var w = liste.filter(function (x) { return typeof x === 'number'; }).sort(function (a, b) { return a - b; });
+    if (!w.length) return null;
+    var i = Math.min(w.length - 1, Math.ceil(q * w.length) - 1);
+    return w[Math.max(0, i)];
+  }
+
+  function tabelle(spalten, zeilen) {
+    var rahmen = A.el('div', null, { className: 'tabelle-rahmen' });
+    var t = A.el('table');
+    var kopf = A.el('tr');
+    spalten.forEach(function (s) { kopf.appendChild(A.el('th', s.titel, { className: s.zahl ? 'zahl' : '', scope: 'col' })); });
+    var thead = A.el('thead'); thead.appendChild(kopf); t.appendChild(thead);
+    var tbody = A.el('tbody');
+    zeilen.forEach(function (z) {
+      var tr = A.el('tr');
+      spalten.forEach(function (s) {
+        var v = z[s.feld];
+        tr.appendChild(A.el('td', v === null || v === undefined ? '–' : v, { className: s.zahl ? 'zahl' : '' }));
+      });
+      tbody.appendChild(tr);
+    });
+    t.appendChild(tbody);
+    rahmen.appendChild(t);
+    return rahmen;
+  }
+
+  function clientAuswertung() {
+    var je = {};
+    A.messungen.forEach(function (m) { (je[m.funktion] = je[m.funktion] || []).push(m); });
+    return Object.keys(je).sort().map(function (f) {
+      var l = je[f];
+      return {
+        funktion: f,
+        anzahl: l.length,
+        client_median: median(l.map(function (m) { return m.client_ms; })),
+        client_p90: quantil(l.map(function (m) { return m.client_ms; }), 0.9),
+        server_median: median(l.map(function (m) { return m.server_ms; })),
+        sheets_median: median(l.map(function (m) { return m.sheets; }))
+      };
+    });
+  }
+
+  /** Server-Auswertung (Messung.auswertung → Statistik.auswerten): je Funktion Kennzahlen {median, p90, anzahl}. */
+  function serverTabelle(liste) {
+    if (!Array.isArray(liste) || !liste.length) return A.el('p', 'Noch keine Server-Messwerte vorhanden.', { className: 'leise' });
+    var k = function (z, feld, wert) { return z[feld] && z[feld][wert] !== null && z[feld][wert] !== undefined ? z[feld][wert] : null; };
+    var zeilen = liste.map(function (z) {
+      return {
+        funktion: z.funktion, anzahl: z.anzahl, fehler: z.fehler,
+        server_median: k(z, 'server_ms', 'median'), server_p90: k(z, 'server_ms', 'p90'),
+        sheets_median: k(z, 'sheets', 'median'), client_median: k(z, 'client_ms', 'median')
+      };
+    });
+    return tabelle([
+      { feld: 'funktion', titel: 'Funktion' },
+      { feld: 'anzahl', titel: 'Anzahl', zahl: true },
+      { feld: 'fehler', titel: 'Fehler', zahl: true },
+      { feld: 'server_median', titel: 'Server ms (Median)', zahl: true },
+      { feld: 'server_p90', titel: 'Server ms (P90)', zahl: true },
+      { feld: 'sheets_median', titel: 'Sheets-Aufrufe', zahl: true },
+      { feld: 'client_median', titel: 'Client ms (Median)', zahl: true }
+    ], zeilen);
+  }
+
+  App.registriere('messwerte', {
+    titel: 'Messwerte',
+    reihenfolge: 90,
+    aktion: 'messung_lesen',
+    zeichne: function (ziel) {
+      ziel.appendChild(A.el('h1', 'Messwerte'));
+      ziel.appendChild(A.el('p', 'Start bis bedienbar (diese Sitzung): ' +
+        (A.startBisBedienbar === null ? '–' : A.startBisBedienbar + ' ms'), { className: 'karte' }));
+
+      ziel.appendChild(A.el('h2', 'Dieser Browser'));
+      ziel.appendChild(tabelle([
+        { feld: 'funktion', titel: 'Funktion' },
+        { feld: 'anzahl', titel: 'Anzahl', zahl: true },
+        { feld: 'client_median', titel: 'Client ms (Median)', zahl: true },
+        { feld: 'client_p90', titel: 'Client ms (P90)', zahl: true },
+        { feld: 'server_median', titel: 'Server ms (Median)', zahl: true },
+        { feld: 'sheets_median', titel: 'Sheets-Aufrufe', zahl: true }
+      ], clientAuswertung()));
+      ziel.appendChild(A.el('p', 'Differenz Client − Server ≈ Übertragung und Aufruf-Overhead von google.script.run.', { className: 'leise' }));
+
+      ziel.appendChild(A.el('h2', 'Server (alle Benutzer)'));
+      var bereich = A.el('div', null);
+      bereich.appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
+      ziel.appendChild(bereich);
+
+      A.meldeMessungen().catch(function () {}).then(function () {
+        return A.rufe('apiMessungen');
+      }).then(function (daten) {
+        if (A.aktuell().schluessel !== 'messwerte') return;
+        A.leere(bereich);
+        bereich.appendChild(serverTabelle(daten));
+      }).catch(function () {
+        A.leere(bereich);
+        bereich.appendChild(A.el('p', 'Server-Messwerte konnten nicht geladen werden.', { className: 'leise' }));
+      });
+    }
+  });
+
+})();
+</script>

@@ -7,7 +7,7 @@
  * Datenquelle: keine eigene; nutzt Zugriff (Tab Benutzer), Messung, DB-Zähler.
  * Wer darf was: entscheidet Zugriff.pruefe(aktion) anhand der Rechtematrix (lib/rechte.js).
  * Besonderheiten:
- *   - Antwortformat: { ok: true, daten, messung } oder { ok: false, fehler: { art, meldung, nr, aktuell? }, messung }.
+ *   - Antwortformat: { ok: true, daten, messung } oder { ok: false, fehler: { art, meldung, nr, aktuell?, felder? }, messung }.
  *   - Interne Fehler bekommen eine kurze Fehler-Nr.; Details (Stacktrace) stehen nur im Server-Log
  *     (console.error → Ausführungsprotokoll), nie in der Antwort.
  *   - Die Antwort wird JSON-sauber gemacht (google.script.run verträgt keine Date-Objekte und kein undefined
@@ -38,6 +38,7 @@ var Api = (function () {
       if (art) {
         antwort = { ok: false, fehler: { art: art, meldung: e.meldung } };
         if (art === 'konflikt') antwort.fehler.aktuell = sauber(e.aktuell);
+        if (e.felder) antwort.fehler.felder = sauber(e.felder);
       } else {
         var nr = fehlerNr();
         console.error('Fehler-Nr. ' + nr + ' in ' + name + ': ' + (e && e.message) + '\n' + (e && e.stack));

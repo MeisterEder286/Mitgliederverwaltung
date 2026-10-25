@@ -18,9 +18,12 @@ var Fehler = (function () {
     return e;
   }
 
-  /** Fehler mit einer für den Nutzer verständlichen, selbst formulierten Meldung. */
-  function fachlich(meldung) {
-    return erzeuge('fachlich', meldung);
+  /**
+   * Fehler mit einer für den Nutzer verständlichen, selbst formulierten Meldung.
+   * felder (optional): [{ feld, meldung }] – der Browser zeigt sie direkt am Eingabefeld an.
+   */
+  function fachlich(meldung, felder) {
+    return erzeuge('fachlich', meldung, felder && felder.length ? { felder: felder } : null);
   }
 
   /** Versionskonflikt: jemand anderes hat den Datensatz zwischenzeitlich geändert. */

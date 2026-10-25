@@ -119,3 +119,57 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 ### Client (`src/client/`)
 `index.html` (Gerüst), `stil.html`, `app.html`. Startdaten kommen als `<script type="application/json" id="startdaten">`.
 `rufe(name, ...args)` → Promise, misst die Zeit je Aufruf (Auftragspunkt 8).
+
+## 6. Ausbau ab Phase 3 – Verträge für Fachmodule
+
+### Dateien je Bereich
+| Ebene | Ort | Inhalt |
+|---|---|---|
+| Fachlogik (rein, testbar) | `src/lib/<thema>.js` | z. B. `Mitgliedschaft`, `Beitrag`, `Sepa`, `Ehrung`, `Blsv`, `Fristen`, `Loeschung`, `Pruefregeln`, `Snapshot`-Kern |
+| Servermodul | `src/modul/<Bereich>.js` | Namensraum je Bereich; liest/schreibt über `DB`, protokolliert, pflegt den Snapshot |
+| Öffentliche API | `src/api/<Bereich>.js` | nur Top-Level-Funktionen `api<Bereich><Aktion>(…)`, jede = `return Api.ausfuehren('<name>', '<aktion>', function (ktx) { … })` |
+| Ansicht | `src/client/ansicht_<bereich>.html` | `App.registriere(…)`, nutzt nur `App.*` aus `client/kern` |
+
+### `Mitgliedschaft` (`src/lib/mitgliedschaft.js`, rein)
+`alter`, `alterImJahr`, `laeuft`, `zeitraeumeVon`, `laufenderZeitraum`, `status`, `mitgliedSeit`, `gekuendigt`,
+`mitgliedsjahre(zeitraeume, stichtag, modus, stichtagModus)`, `funktionsjahre`, `istJugend`, `laufendeFunktionen`,
+`volleMonate`, `volleJahre`, `plusMonate`, `plusTage`.
+
+### Snapshot (`src/lib/snapshot.js` rein, `src/Snapshot.js`, `src/Cache.js`)
+- **Basis** (nur Server, im CacheService, gzip + Teilstücke ≤ 100 KB, Generationszähler): Rohzeilen der Tabs
+  `Mitglied, Mitgliedschaftszeitraum, Abteilung, Abteilungszugehoerigkeit, Funktionsart, Funktion, Beitragsart,
+  Beitragsgemeinschaft, Beitragskonto, Sollstellung, Qualifikationsart, Qualifikation, Ehrungsregel, Ehrung, Einwilligung`
+  plus benötigte `_Konfig`-Werte. **Ohne** IBAN/BIC im Klartext (nur `iban_maskiert`, `iban_ok`). Nicht in der Basis:
+  `Benutzer, _Konfig (roh), _Protokoll, _Messung, Betroffenenanfrage, Aufnahmeantrag, Aufbewahrungsfrist, Statistik_Jahr`
+  (werden bei Bedarf einzeln geladen).
+- **Client-Snapshot** = `Snapshot.fuer(ktx)`: rollenbeschnitten (Zeilen + Felder), Listen in Kleinschreibung:
+  `mitglieder` (inkl. abgeleiteter Felder `status_abgeleitet, mitglied_seit, alter, jugend, gekuendigt_zum,
+  abteilungen` [laufende abteilung_ids], `funktionen_laufend` [funktionsart_ids], `fz_ampel`), `zeitraeume`,
+  `zugehoerigkeiten`, `funktionen`, `abteilungen`, `funktionsarten`, `beitragsarten`, `ehrungsregeln`,
+  `qualifikationsarten`, `ehrungen`, `einwilligungen` und nur mit Sichtklasse `finanz`: `konten`, `gemeinschaften`,
+  `sollstellungen`; nur mit `hochsensibel`: `qualifikationen` (bei Abteilungsleitern nur Personen mit laufender
+  Funktion in der eigenen Abteilung). Gesperrte (`verarbeitung_eingeschraenkt`) und anonymisierte Mitglieder nur für
+  Rollen mit Sichtklasse `verwaltung`.
+- `Snapshot.schreibe(ktx, aenderungen)` mit `aenderungen = [{ tab, neu: zeile } | { tab, entfernt: id }]` – nur
+  innerhalb `DB.mitSperre`, aktualisiert die Basis (write-through) und liefert die Client-Antwort
+  `{ aktualisiert: { liste: [datensaetze] }, entfernt: { liste: [ids] } }` (inkl. neu abgeleiteter Mitglieder).
+- `Snapshot.pruefeMitglied(ktx, mitgliedId)` wirft `Fehler.keinZugriff()`, wenn die Person für ktx nicht sichtbar ist
+  (Zeilenschutz bei Schreibzugriffen, z. B. Abteilungsleiter).
+- `Snapshot.verwerfen()` – Cache ungültig machen (z. B. nach Setup, Massenänderung).
+- `apiSnapshot()` liefert `Snapshot.fuer(ktx)`; `apiStart()` liefert zusätzlich `snapshot`.
+
+### Schreibmuster in Servermodulen
+```js
+function apiMitgliedSpeichern(id, version, werte) {
+  return Api.ausfuehren('apiMitgliedSpeichern', 'mitglied_bearbeiten', function (ktx) {
+    return DB.mitSperre(function () {
+      Snapshot.pruefeMitglied(ktx, id);
+      var felder = Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', werte);   // nur Felder sichtbarer Sichtklassen
+      var r = DB.aktualisieren('Mitglied', id, felder, version, ktx);
+      Protokoll.schreibe(ktx, Protokoll.ausDiff('Mitglied', id, r.diff));
+      return Snapshot.schreibe(ktx, [{ tab: 'Mitglied', neu: r.neu }]);
+    });
+  });
+}
+```
+Feldfehler: `throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld, meldung }])` – der Browser zeigt sie am Feld.
