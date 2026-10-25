@@ -3,6 +3,7 @@
  *
  * Zweck:      Zählt die Mitglieder zum Stichtag je BLSV-Sportart und für den Verein gesamt (Geschlecht,
  *             Altersklassen, davon passiv), erzeugt daraus die Zeilen für den Tab Statistik_Jahr und eine CSV.
+ *             nachmeldung(): Neumitglieder und neue Sportart-Zugehörigkeiten seit dem Meldestichtag.
  * Datenquelle: `daten` je Tab wie aus DB.lese (Mitglied, Mitgliedschaftszeitraum, Abteilung,
  *             Abteilungszugehoerigkeit, Funktion, Beitragsgemeinschaft, Sollstellung).
  * Wer darf was: – (Rechteprüfung vor dem Aufruf; Bericht/Export: Aktion export, Einfrieren: Verwaltung).
@@ -122,6 +123,88 @@ var Blsv = (function () {
     };
   }
 
+  /**
+   * Nachmeldung (früher Access „BLSVJahrNachmeldungMakro“ / „BLSVneuM“): Was ist seit dem Meldestichtag bis `bis` neu?
+   *   - Neumitglied: am Stichtag nicht aktiv, am Tag `bis` aktiv (Eintritt bzw. Wiedereintritt nach dem Stichtag);
+   *     zählt in jeder meldepflichtigen Sportart, in der die Person am Tag `bis` ist, und im Verein.
+   *   - neue Sportart: war am Stichtag schon Mitglied, ist aber seit dem Stichtag in einer Sportart, in der sie am
+   *     Stichtag nicht war (zählt nur in dieser Sportart, nicht im Verein).
+   * Alter und Geschlecht wie bestand() (Jahrgang des Meldejahres = Jahr des Stichtags).
+   * Ergebnis: { stichtag, bis, verein, sportarten: [{ sportart, neumitglieder, neue_sportart, …Zahlen }], eintraege }
+   */
+  function nachmeldung(daten, stichtag, bis, optionen) {
+    optionen = optionen || {};
+    var M = Mitgliedschaft;
+    var zeitraeume = {};
+    liste(daten, 'Mitgliedschaftszeitraum').forEach(function (z) { (zeitraeume[z.mitglied_id] = zeitraeume[z.mitglied_id] || []).push(z); });
+    var abteilungen = {};
+    liste(daten, 'Abteilung').forEach(function (a) { abteilungen[a.abteilung_id] = a; });
+    var zug = {};
+    liste(daten, 'Abteilungszugehoerigkeit').forEach(function (z) { (zug[z.mitglied_id] = zug[z.mitglied_id] || []).push(z); });
+    function sportartenAm(id, tag) {
+      var o = {};
+      (zug[id] || []).forEach(function (z) {
+        var a = abteilungen[z.abteilung_id];
+        if (a && a.meldepflichtig === true && a.blsv_sportart && laeuft(z.eintrittsdatum, z.austrittsdatum, tag)) {
+          if (!o[a.blsv_sportart] || o[a.blsv_sportart].eintrittsdatum < z.eintrittsdatum) o[a.blsv_sportart] = z;
+        }
+      });
+      return o;
+    }
+    var verein = leereZahlen(), pro = {}, eintraege = [];
+    function sportart(n) { return pro[n] = pro[n] || { sportart: n, neumitglieder: 0, neue_sportart: 0, zahlen: leereZahlen() }; }
+    liste(daten, 'Mitglied').forEach(function (m) {
+      if (m.nur_funktionstraeger === true || m.anonymisiert === true) return;
+      var zs = (zeitraeume[m.mitglied_id] || []).slice().sort(function (a, b) { return String(a.eintrittsdatum).localeCompare(String(b.eintrittsdatum)); });
+      if (M.status(m, zs, bis) !== 'aktiv') return;
+      var warAktiv = M.status(m, zs, stichtag) === 'aktiv';
+      var alter = !m.geburtsdatum ? null
+        : optionen.altersmodus === 'exakt' ? M.alter(m.geburtsdatum, bis) : M.alterImJahr(m.geburtsdatum, Number(String(stichtag).slice(0, 4)));
+      var jetzt = sportartenAm(m.mitglied_id, bis);
+      if (!warAktiv) {
+        var lauf = M.laufenderZeitraum(zs, bis);
+        zaehle(verein, m, alter, false);
+        Object.keys(jetzt).forEach(function (n) {
+          var s = sportart(n); s.neumitglieder++;
+          zaehle(s.zahlen, m, alter, jetzt[n].status === 'passiv');
+          eintraege.push({ mitglied_id: m.mitglied_id, art: 'Neumitglied', sportart: n, datum: lauf ? lauf.eintrittsdatum : null });
+        });
+        if (!Object.keys(jetzt).length) eintraege.push({ mitglied_id: m.mitglied_id, art: 'Neumitglied', sportart: null, datum: lauf ? lauf.eintrittsdatum : null });
+        return;
+      }
+      var vorher = sportartenAm(m.mitglied_id, stichtag);
+      Object.keys(jetzt).forEach(function (n) {
+        if (vorher[n]) return;
+        var s = sportart(n); s.neue_sportart++;
+        zaehle(s.zahlen, m, alter, jetzt[n].status === 'passiv');
+        eintraege.push({ mitglied_id: m.mitglied_id, art: 'neue Sportart', sportart: n, datum: jetzt[n].eintrittsdatum || null });
+      });
+    });
+    var sportarten = Object.keys(pro).sort().map(function (k) {
+      var o = { sportart: pro[k].sportart, neumitglieder: pro[k].neumitglieder, neue_sportart: pro[k].neue_sportart };
+      Object.keys(pro[k].zahlen).forEach(function (f) { o[f] = pro[k].zahlen[f]; });
+      return o;
+    });
+    eintraege.sort(function (a, b) { return String(a.datum).localeCompare(String(b.datum)); });
+    return { stichtag: stichtag, bis: bis, verein: verein, sportarten: sportarten, eintraege: eintraege };
+  }
+
+  /** CSV der Nachmeldung je Sportart (Semikolon, mit Escaping wie csv()). */
+  function nachmeldungCsv(n) {
+    function feld(v) {
+      var t = String(v === null || v === undefined ? '' : v);
+      if (/^[=+\-@]/.test(t)) t = "'" + t;
+      return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    }
+    var kopf = ['Sportart', 'Neumitglieder', 'neue Sportart', 'gesamt', 'männlich', 'weiblich', 'divers', 'bis 14', '15–18', '19–26', 'ab 27'];
+    var z = n.sportarten.map(function (s) {
+      return [feld(s.sportart), s.neumitglieder, s.neue_sportart, s.gesamt, s.maennlich, s.weiblich, s.divers, s.alter_bis_14, s.alter_15_18, s.alter_19_26, s.alter_ab_27].join(';');
+    });
+    var v = n.verein;
+    z.push(['Neumitglieder im Verein', v.gesamt, '', v.gesamt, v.maennlich, v.weiblich, v.divers, v.alter_bis_14, v.alter_15_18, v.alter_19_26, v.alter_ab_27].join(';'));
+    return [kopf.join(';')].concat(z).join('\r\n');
+  }
+
   /** Bewegungs- und Finanzkennzahlen des Berichtsjahres (Jahr vor dem Stichtag bei Stichtag 01.01.). */
   function kennzahlen(daten, stichtag) {
     var j = Number(stichtag.slice(0, 4));
@@ -214,5 +297,5 @@ var Blsv = (function () {
       .concat([z('Mitglieder im Verein', b.verein)]).join('\r\n');
   }
 
-  return { KLASSEN: KLASSEN, bestand: bestand, kennzahlen: kennzahlen, statistikZeilen: statistikZeilen, csv: csv };
+  return { KLASSEN: KLASSEN, bestand: bestand, nachmeldung: nachmeldung, nachmeldungCsv: nachmeldungCsv, kennzahlen: kennzahlen, statistikZeilen: statistikZeilen, csv: csv };
 })();

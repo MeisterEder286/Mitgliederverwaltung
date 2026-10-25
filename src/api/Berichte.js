@@ -17,6 +17,15 @@ function apiBerichteBlsvExport(stichtag) {
   return Api.ausfuehren('apiBerichteBlsvExport', 'export', function (ktx) { return BerichteModul.blsvExport(ktx, stichtag); });
 }
 
+/** BLSV-Nachmeldung: Neumitglieder/neue Sportarten zwischen Meldestichtag und bis (Access BLSVJahrNachmeldungMakro). */
+function apiBerichteBlsvNachmeldung(stichtag, bis) {
+  return Api.ausfuehren('apiBerichteBlsvNachmeldung', 'export', function (ktx) { return BerichteModul.blsvNachmeldung(ktx, stichtag, bis); });
+}
+
+function apiBerichteBlsvNachmeldungExport(stichtag, bis) {
+  return Api.ausfuehren('apiBerichteBlsvNachmeldungExport', 'export', function (ktx) { return BerichteModul.blsvNachmeldungExport(ktx, stichtag, bis); });
+}
+
 function apiBerichteStatistikEinfrieren(jahr, stichtag, gemeldetAm) {
   return Api.ausfuehren('apiBerichteStatistikEinfrieren', 'konfig_aendern', function (ktx) {
     return BerichteModul.einfrieren(ktx, jahr, stichtag, gemeldetAm);

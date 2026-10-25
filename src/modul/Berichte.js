@@ -2,7 +2,7 @@
  * BerichteModul – BLSV-Bestandserhebung, eingefrorene Jahresstatistik, Jahresvergleich und Listen
  * (Geburtstage/Jubiläen fürs Gemeindeblatt, Abteilungsübersicht, Ein- und Austritte).
  *
- * Zweck:      Serverseite der Ansicht „Berichte“. Zählregeln stehen in src/lib/blsv.js und src/lib/mitgliedschaft.js.
+ * Zweck:      Serverseite der Ansicht „Berichte“ (inkl. BLSV-Nachmeldung). Zählregeln stehen in src/lib/blsv.js und src/lib/mitgliedschaft.js.
  * Datenquelle: Snapshot-Basis bzw. der rollenbeschnittene Ausschnitt (Bereichsdaten.fuer); Tab Statistik_Jahr
  *             (nicht in der Basis) wird bei Bedarf gelesen.
  * Wer darf was: Aktion export für alles Lesende. BLSV, Jahresvergleich und Einfrieren nur mit Zeilensicht „alle“
@@ -46,6 +46,28 @@ var BerichteModul = (function () {
     var b = blsv(ktx, stichtag);
     exportiert(ktx, 'BLSV-Bestandserhebung zum ' + b.stichtag, b.sportarten.length + 1);
     return { dateiname: 'BLSV_Bestand_' + b.stichtag + '.csv', inhalt: Blsv.csv(b) };
+  }
+
+  /**
+   * BLSV-Nachmeldung: Neumitglieder und neue Sportarten zwischen Meldestichtag und `bis` (Standard heute).
+   * Vereinsweit → nur Zeilensicht „alle“. Liste mit Namen für die interne Prüfung.
+   */
+  function blsvNachmeldung(ktx, stichtag, bis) {
+    nurAlle(ktx);
+    stichtag = datumPruefen(stichtag);
+    var bd = Bereichsdaten.fuer(ktx);
+    bis = bis ? datumPruefen(bis, 'bis') : bd.heute;
+    if (bis < stichtag) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'bis', meldung: '„bis“ liegt vor dem Stichtag.' }]);
+    var n = Blsv.nachmeldung(bd.daten, stichtag, bis);
+    var m = Bereichsdaten.index(bd.daten.Mitglied, 'mitglied_id');
+    n.eintraege.forEach(function (e) { e.name = Bereichsdaten.name(m[e.mitglied_id]); e.mitgliedsnummer = (m[e.mitglied_id] || {}).mitgliedsnummer || null; });
+    return n;
+  }
+
+  function blsvNachmeldungExport(ktx, stichtag, bis) {
+    var n = blsvNachmeldung(ktx, stichtag, bis);
+    exportiert(ktx, 'BLSV-Nachmeldung ' + n.stichtag + ' bis ' + n.bis, n.sportarten.length + 1);
+    return { dateiname: 'BLSV_Nachmeldung_' + n.stichtag + '_' + n.bis + '.csv', inhalt: Blsv.nachmeldungCsv(n) };
   }
 
   /** Statistik_Jahr für `jahr` einfrieren (Verein + je Abteilung). */
@@ -176,5 +198,5 @@ var BerichteModul = (function () {
   }
 
   return { blsv: blsv, blsvExport: blsvExport, einfrieren: einfrieren, jahresvergleich: jahresvergleich,
-    geburtstage: geburtstage, jubilaeen: jubilaeen, abteilungen: abteilungen, bewegungen: bewegungen, exportiert: exportiert };
+    geburtstage: geburtstage, jubilaeen: jubilaeen, abteilungen: abteilungen, bewegungen: bewegungen, exportiert: exportiert, blsvNachmeldung: blsvNachmeldung, blsvNachmeldungExport: blsvNachmeldungExport };
 })();

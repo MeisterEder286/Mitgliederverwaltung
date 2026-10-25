@@ -1,5 +1,5 @@
 <!--
-  ansicht_berichte – Berichte: BLSV-Bestandserhebung, Jahresstatistik/Jahresvergleich, Geburtstage, Jubiläen,
+  ansicht_berichte – Berichte: BLSV-Bestandserhebung und -Nachmeldung, Jahresstatistik/Jahresvergleich, Geburtstage, Jubiläen,
   Abteilungsübersicht, Ein- und Austritte.
 
   Zweck:      Auswertungen für Verband, Vorstand und Gemeindeblatt. BLSV-Meldung (Frist 31.01.) als Tabelle, CSV und
@@ -71,17 +71,55 @@
 
   function blsv(ziel) {
     var stichtag = datumEingabe('Stichtag', jahr() + '-01-01');
+    var bis = datumEingabe('Nachmeldung bis', A.heute());
+    var modusWahl = A.el('select', null, { aria: { label: 'Art der Meldung' } }, [
+      A.el('option', 'Bestandserhebung', { value: 'bestand' }), A.el('option', 'Nachmeldung (neu seit Stichtag)', { value: 'nachmeldung' })]);
+    var modus = A.el('label', 'Meldung', null, [modusWahl]);
     var ergebnis = A.el('div');
     var los = A.knopf('Berechnen', rechne);
-    ziel.appendChild(A.el('div', null, { className: 'ber-zeile' }, [stichtag, los]));
+    function sichtbar() { bis.style.display = modusWahl.value === 'nachmeldung' ? '' : 'none'; }
+    modusWahl.addEventListener('change', function () { sichtbar(); rechne(); });
+    ziel.appendChild(A.el('div', null, { className: 'ber-zeile' }, [modus, stichtag, bis, los]));
     ziel.appendChild(ergebnis);
+    sichtbar();
     function rechne() {
       var s = stichtag.iso();
       if (!s) { A.meldung('Bitte den Stichtag als TT.MM.JJJJ angeben.', 'fehler'); return; }
       laedt(ergebnis);
+      if (modusWahl.value === 'nachmeldung') {
+        if (!bis.iso()) { A.meldung('Bitte „bis“ als TT.MM.JJJJ angeben.', 'fehler'); A.leere(ergebnis); return; }
+        A.rufe('apiBerichteBlsvNachmeldung', s, bis.iso()).then(function (n) { zeichneNachmeldung(A.leere(ergebnis), n); }).catch(function () { A.leere(ergebnis); });
+        return;
+      }
       A.rufe('apiBerichteBlsv', s).then(function (b) { zeichneBlsv(A.leere(ergebnis), b); }).catch(function () { A.leere(ergebnis); });
     }
     rechne();
+  }
+
+  /** Nachmeldung (früher Access „BLSVJahrNachmeldungMakro“): neu seit dem Meldestichtag, je Sportart. */
+  function zeichneNachmeldung(ziel, n) {
+    var zeilen = n.sportarten.map(function (s) { return Object.assign({ name: s.sportart }, s); });
+    zeilen.push(Object.assign({ name: 'Neumitglieder im Verein', summe: true, neumitglieder: n.verein.gesamt, neue_sportart: null }, n.verein));
+    var summe = function (z) { return z.summe ? 'ber-summe' : ''; };
+    var spalten = [{ feld: 'name', titel: 'Sportart', klasse: summe, sortierbar: false },
+      { feld: 'neumitglieder', titel: 'Neumitglieder', zahl: true, klasse: summe, sortierbar: false },
+      { feld: 'neue_sportart', titel: 'neue Sportart', zahl: true, klasse: summe, sortierbar: false }].concat(KLASSEN.slice(1, 8).map(function (k) {
+      return { feld: k.feld, titel: k.titel, zahl: true, klasse: summe, sortierbar: false };
+    }));
+    ziel.appendChild(A.abschnitt('Nachmeldung ' + A.datum(n.stichtag) + ' – ' + A.datum(n.bis), [
+      A.knopf('CSV', function () {
+        A.rufe('apiBerichteBlsvNachmeldungExport', n.stichtag, n.bis).then(function (d) { A.herunterladen(d.dateiname, '\ufeff' + d.inhalt, 'text/csv;charset=utf-8'); }).catch(function () {});
+      }, 'zweit klein'),
+      A.knopf('Drucken', function () { A.drucke('BLSV-Nachmeldung', spalten, zeilen, A.datum(n.stichtag) + ' – ' + A.datum(n.bis)); protokolliere('BLSV-Nachmeldung (Druck)', zeilen.length); }, 'zweit klein')
+    ]));
+    ziel.appendChild(A.tabelle(spalten, zeilen, { block: 200, leer: 'Seit dem Stichtag nichts Neues.' }));
+    ziel.appendChild(A.el('p', '„Neumitglieder“ sind seit dem Stichtag eingetreten; „neue Sportart“ waren schon Mitglied und sind seither in einer weiteren Sportart. Neumitglieder ohne meldepflichtige Abteilung zählen nur im Verein.', { className: 'leise' }));
+    ziel.appendChild(A.el('h2', 'Personen'));
+    ziel.appendChild(A.tabelle([
+      { feld: 'datum', titel: 'seit', wert: function (e) { return A.datum(e.datum); } },
+      { feld: 'name', titel: 'Name', wert: function (e) { return mitgliedLink(e.mitglied_id, e.name + (e.mitgliedsnummer ? ' (' + e.mitgliedsnummer + ')' : '')); }, sort: function (e) { return e.name; } },
+      { feld: 'art', titel: 'Art' }, { feld: 'sportart', titel: 'Sportart' }
+    ], n.eintraege, { sortiere: 'datum', leer: 'Keine.' }));
   }
 
   function zeichneBlsv(ziel, b) {

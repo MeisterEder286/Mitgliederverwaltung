@@ -1,13 +1,495 @@
 <!--
-  ansicht_auswertungen – Auswertungen
+  ansicht_auswertungen – Auswertungen und Listen (Nachfolger der Access-Abfragen/Berichte AltersgruppenA,
+  Gesamtmitglieder, Statistik, Jug19A, 65neuA, SchiriA, MitgliederlisteB, Mitgliederliste-kurz) sowie Eingabehilfen
+  aus dem Access-Formular „Personalien“ (Anrede → Geschlecht, PLZ → Ort, XML-Import eines Antrags).
 
-  Zweck:      Auswertungen und Listen (Altersgruppen, Entwicklung, Beitragsstruktur …), Hilfen aus dem Access-Formular.
-  Datenquelle: App.daten (Snapshot) und api…-Funktionen (siehe docs/ENTWICKLUNG.md).
-  Wer darf:   export – serverseitig erzwungen; App.darf blendet nur aus.
-  Besonderheiten: PLATZHALTER – wird in der laufenden Ausbaustufe gefüllt.
+  Zweck:      Ein Aufruf (apiAuswertungen) liefert alle Zahlen; danach wird lokal zwischen den Reitern umgeschaltet.
+              Mitgliederlisten entstehen direkt aus dem lokalen Datenbestand (App.daten).
+  Datenquelle: apiAuswertungen (Server rechnet auf dem Sichtkreis des Benutzers), App.daten (Mitgliederliste, PLZ/Ort).
+  Wer darf:   Aktion export. Abteilungs-/Jugendleitung sehen nur Zahlen ihres Sichtbereichs; Entwicklung/Austrittsgründe
+              nur Vorstand, Mitgliederverwaltung, Kasse; Beitragsstruktur nur mit Finanzsicht – alles serverseitig erzwungen.
+  Besonderheiten:
+    - Jeder Export (CSV/Druck) wird protokolliert (apiAuswertungExportVermerken, ohne Personendaten im Protokoll).
+    - Diagramme ohne Bibliothek (SVG); dieselben Zahlen stehen immer auch als Tabelle daneben (barrierearm).
+    - XML-Import: Die Datei wird NUR im Browser gelesen (FileReader/DOMParser), nichts wird hochgeladen. Bankdaten aus
+      der Datei werden bewusst NICHT übernommen (Sicherheitsregel D3: keine IBAN über Webformulare – Erfassung erst
+      vom unterschriebenen Formular im Bereich Finanzen).
 -->
+<style>
+  .aw-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0 0 12px; }
+  .aw-zeile label { display: flex; flex-direction: column; font-size: 0.9rem; font-weight: 600; gap: 4px; }
+  .aw-zeile input, .aw-zeile select { min-height: 44px; padding: 6px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; max-width: 100%; }
+  .aw-diagramm { width: 100%; max-width: 640px; height: auto; margin: 8px 0 16px; }
+  .aw-diagramm text { font: 15px system-ui, sans-serif; fill: var(--text); }
+  td.aw-summe { font-weight: 700; border-top: 2px solid var(--text); }
+  .aw-xml { border: 1px dashed var(--rand); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px; }
+  .aw-xml input[type=file] { max-width: 100%; min-height: 44px; margin-top: 6px; }
+  .aw-hinweis { font-size: 0.85rem; color: var(--text-leise); margin: 4px 0 0; }
+</style>
 <script>
 (function () {
   'use strict';
+  var A = window.App;
+  var zustand = { reiter: 'ueberblick', ergebnis: null, optionen: { grenzen: '14, 18, 26', nach: '', stichtag: null } };
+
+  // ================================================================== Hilfen
+
+  function protokolliere(liste, anzahl) { A.rufe('apiAuswertungExportVermerken', liste, anzahl, A.still).catch(function () {}); }
+  function exportKnoepfe(titel, dateiname, spalten, zeilenFn) {
+    if (!A.darf('export')) return [];
+    return [
+      A.knopf('CSV', function () { var z = zeilenFn(); A.csv(dateiname + '.csv', spalten, z); protokolliere(titel, z.length); }, 'zweit klein'),
+      A.knopf('Drucken', function () { var z = zeilenFn(); A.drucke(titel, spalten, z, 'Stichtag ' + A.datum(zustand.ergebnis.stichtag)); protokolliere(titel + ' (Druck)', z.length); }, 'zweit klein')
+    ];
+  }
+  function abschnitt(ziel, titel, dateiname, spalten, zeilen, optionen) {
+    ziel.appendChild(A.abschnitt(titel, exportKnoepfe(titel, dateiname, spalten, function () { return zeilen; })));
+    ziel.appendChild(A.tabelle(spalten, zeilen, Object.assign({ block: 100 }, optionen || {})));
+  }
+  function mitgliedLink(id, text) {
+    if (!A.ansichten.mitglied || !id) return A.el('span', text);
+    var b = A.el('button', text, { type: 'button', className: 'sortierknopf' });
+    b.style.textDecoration = 'underline';
+    b.addEventListener('click', function () { A.zeige('mitglied', { id: id }); });
+    return b;
+  }
+  function svgEl(tag, attrs, text) {
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    if (text !== undefined) e.textContent = String(text);
+    return e;
+  }
+  /** Einfaches Balkendiagramm (SVG): werte [{ titel, wert }]. */
+  function balken(werte, beschreibung) {
+    // Balkenbreite begrenzt, damit die Grafik auf dem Handy nicht zu stark verkleinert wird (Schrift bleibt lesbar)
+    var h = 160, b = Math.max(22, Math.min(48, Math.floor(420 / Math.max(1, werte.length)) - 6)), max = Math.max.apply(null, werte.map(function (w) { return w.wert; }).concat([1]));
+    var breite = werte.length * (b + 6) + 40;
+    var svg = svgEl('svg', { viewBox: '0 0 ' + breite + ' ' + (h + 40), class: 'aw-diagramm', role: 'img', 'aria-label': beschreibung });
+    werte.forEach(function (w, i) {
+      var hh = Math.round(w.wert / max * h);
+      var x = 30 + i * (b + 6);
+      svg.appendChild(svgEl('rect', { x: x, y: h - hh + 10, width: b, height: Math.max(hh, 0), fill: 'var(--akzent)' }));
+      svg.appendChild(svgEl('text', { x: x + b / 2, y: h - hh + 6, 'text-anchor': 'middle' }, w.wert));
+      svg.appendChild(svgEl('text', { x: x + b / 2, y: h + 30, 'text-anchor': 'middle' }, w.titel));
+    });
+    return svg;
+  }
+  function liste(n) { return (A.startdaten.listen && A.startdaten.listen[n]) || []; }
+
+  // ================================================================== Ansicht
+
+  A.registriere('auswertungen', {
+    titel: 'Auswertungen', aktion: 'export', reihenfolge: 65,
+    zeichne: function (ziel) {
+      ziel.appendChild(A.el('h1', 'Auswertungen'));
+      var o = zustand.optionen;
+      var stichtag = A.el('input', null, { type: 'text', value: A.datum(o.stichtag || A.startdaten.heute || A.heute()), placeholder: 'TT.MM.JJJJ', inputMode: 'numeric' });
+      var grenzen = A.el('input', null, { type: 'text', value: o.grenzen, inputMode: 'numeric' });
+      var vorgabe = A.el('select', null, { aria: { label: 'Vorgabe Altersgrenzen' } }, [
+        A.el('option', 'Vorgabe wählen …', { value: '' }), A.el('option', 'BLSV (bis 14 / 15–18 / 19–26 / ab 27)', { value: '14, 18, 26' }),
+        A.el('option', 'fein (bis 6 / … / ab 61)', { value: '6, 14, 18, 26, 40, 60' }), A.el('option', 'Jugend (bis 10 / 11–14 / 15–18)', { value: '10, 14, 18' })]);
+      vorgabe.addEventListener('change', function () { if (vorgabe.value) grenzen.value = vorgabe.value; });
+      var nach = A.el('select', null, null, [A.el('option', 'ohne', { value: '' }), A.el('option', 'Abteilung', { value: 'abteilung' }), A.el('option', 'Geschlecht', { value: 'geschlecht' })]);
+      nach.value = o.nach || '';
+      var inhalt = A.el('div');
+      var los = A.knopf('Berechnen', function () {
+        var iso = A.isoDatum(stichtag.value);
+        if (!iso) { A.meldung('Bitte den Stichtag als TT.MM.JJJJ angeben.', 'fehler'); return; }
+        o.stichtag = iso; o.grenzen = grenzen.value; o.nach = nach.value;
+        lade(inhalt);
+      });
+      ziel.appendChild(A.el('div', null, { className: 'aw-zeile' }, [
+        A.el('label', 'Stichtag', null, [stichtag]), A.el('label', 'Altersgrenzen', null, [grenzen]), A.el('label', 'Vorgabe', null, [vorgabe]),
+        A.el('label', 'Altersgruppen je', null, [nach]), los]));
+      ziel.appendChild(inhalt);
+      if (zustand.ergebnis) zeichneErgebnis(inhalt); else lade(inhalt);
+    }
+  });
+
+  function lade(inhalt) {
+    A.leere(inhalt).appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
+    var o = zustand.optionen;
+    var g = String(o.grenzen || '').split(/[^0-9]+/).filter(Boolean).map(Number);
+    A.rufe('apiAuswertungen', { stichtag: o.stichtag, grenzen: g, nach: o.nach || null }).then(function (d) {
+      zustand.ergebnis = d;
+      if (A.aktuell().schluessel === 'auswertungen') zeichneErgebnis(A.leere(inhalt));
+    }).catch(function () { A.leere(inhalt); });
+  }
+
+  function reiterListe(d) {
+    var r = [['ueberblick', 'Überblick', ueberblick], ['alter', 'Altersgruppen', altersgruppen]];
+    if (d.entwicklung) r.push(['entwicklung', 'Entwicklung', entwicklung]);
+    r.push(['abteilungen', 'Abteilungen', abteilungen]);
+    if (d.beitragsstruktur) r.push(['beitraege', 'Beiträge', beitraege]);
+    if (d.uebergaenge) r.push(['uebergaenge', 'Altersübergänge', uebergaenge]);
+    r.push(['dauer', 'Mitgliedsdauer', dauer]);
+    if (d.wohnorte) r.push(['wohnorte', 'Wohnorte', wohnorte]);
+    r.push(['funktionen', 'Funktionen', funktionen], ['listen', 'Mitgliederlisten', listen]);
+    return r;
+  }
+
+  function zeichneErgebnis(ziel) {
+    var d = zustand.ergebnis;
+    var rl = reiterListe(d);
+    if (!rl.some(function (r) { return r[0] === zustand.reiter; })) zustand.reiter = rl[0][0];
+    (d.hinweise || []).forEach(function (h) { ziel.appendChild(A.el('p', h, { className: 'leise' })); });
+    var reiter = A.el('div', null, { className: 'reiter', role: 'tablist' });
+    var inhalt = A.el('div', null, { role: 'tabpanel' });
+    function zeige(s) {
+      zustand.reiter = s;
+      Array.prototype.forEach.call(reiter.children, function (b) { b.setAttribute('aria-selected', String(b.dataset.r === s)); });
+      var r = rl.filter(function (x) { return x[0] === s; })[0];
+      try { r[2](A.leere(inhalt), d); } catch (e) { console.error(e); inhalt.appendChild(A.el('p', 'Konnte nicht angezeigt werden.', { className: 'leise' })); }
+    }
+    rl.forEach(function (r) {
+      var b = A.el('button', r[1], { type: 'button', role: 'tab', dataset: { r: r[0] } });
+      b.addEventListener('click', function () { zeige(r[0]); });
+      reiter.appendChild(b);
+    });
+    ziel.appendChild(reiter);
+    ziel.appendChild(inhalt);
+    zeige(zustand.reiter);
+  }
+
+  // ------------------------------------------------------------------ Überblick (Access „Gesamtmitglieder“)
+
+  function ueberblick(ziel, d) {
+    var g = d.gesamt;
+    ziel.appendChild(A.el('div', null, { className: 'kacheln' }, [
+      A.kachel(A.zahl(g.status.aktiv), d.verein ? 'aktive Mitglieder' : 'aktiv in Ihrem Sichtbereich'),
+      A.kachel(A.zahl(g.status.davon_gekuendigt), 'davon gekündigt', g.status.davon_gekuendigt ? 'warnung' : ''),
+      A.kachel(A.zahl(g.status.ausgetreten), 'ausgetreten (geführt)'),
+      A.kachel(A.zahl(g.status.verstorben), 'verstorben (geführt)'),
+      A.kachel(A.zahl(g.status.nur_funktionstraeger), 'Funktionsträger ohne Mitgliedschaft')
+    ]));
+    var ge = g.geschlecht;
+    var gz = [{ t: 'männlich', n: ge.maennlich }, { t: 'weiblich', n: ge.weiblich }, { t: 'divers', n: ge.divers }, { t: 'ohne Angabe', n: ge.ohne_angabe }]
+      .map(function (x) { return { geschlecht: x.t, anzahl: x.n, anteil: g.status.aktiv ? Math.round(x.n / g.status.aktiv * 1000) / 10 + ' %' : '–' }; });
+    abschnitt(ziel, 'Geschlecht (aktive Mitglieder)', 'Geschlecht', [{ feld: 'geschlecht', titel: 'Geschlecht' }, { feld: 'anzahl', titel: 'Anzahl', zahl: true }, { feld: 'anteil', titel: 'Anteil', zahl: true }], gz);
+    abschnitt(ziel, 'Abteilungen (laufende Zugehörigkeiten)', 'Abteilungen', [
+      { feld: 'bezeichnung', titel: 'Abteilung' }, { feld: 'gesamt', titel: 'gesamt', zahl: true }, { feld: 'aktiv', titel: 'aktiv', zahl: true }, { feld: 'passiv', titel: 'passiv', zahl: true }
+    ], g.abteilungen, { sortiere: 'bezeichnung' });
+    var an = g.anzahl_abteilungen;
+    abschnitt(ziel, 'Anzahl Abteilungen je Person', 'Abteilungen_je_Person', [{ feld: 'anzahl', titel: 'Abteilungen' }, { feld: 'personen', titel: 'Personen', zahl: true }],
+      ['0', '1', '2', '3+'].map(function (k) { return { anzahl: k === '0' ? 'keine' : k, personen: an[k] }; }), { sortierbar: false });
+  }
+
+  // ------------------------------------------------------------------ Altersgruppen (Access „AltersgruppenA“)
+
+  function altersgruppen(ziel, d) {
+    var a = d.altersgruppen;
+    var gesamtZeile = Object.assign({ summe: true }, a.gesamt);
+    var zeilen = a.zeilen.length ? a.zeilen.concat([gesamtZeile]) : [gesamtZeile];
+    var summe = function (z) { return z.summe ? 'aw-summe' : ''; };
+    var spalten = [{ feld: 'titel', titel: zustand.optionen.nach === 'abteilung' ? 'Abteilung' : zustand.optionen.nach === 'geschlecht' ? 'Geschlecht' : '', klasse: summe, sortierbar: false }]
+      .concat(a.gruppen.map(function (gr, i) { return { feld: 'g' + i, titel: gr.titel, zahl: true, klasse: summe, sortierbar: false, wert: function (z) { return z.werte[i]; } }; }))
+      .concat([{ feld: 'gesamt', titel: 'gesamt', zahl: true, klasse: summe, sortierbar: false },
+        { feld: 'davon_passiv', titel: 'davon passiv', zahl: true, klasse: summe, sortierbar: false },
+        { feld: 'ohne_geburtsdatum', titel: 'ohne Geb.-Datum', zahl: true, klasse: summe, sortierbar: false }]);
+    ziel.appendChild(balken(a.gruppen.map(function (gr, i) { return { titel: gr.titel, wert: a.gesamt.werte[i] }; }), 'Altersgruppen der aktiven Mitglieder'));
+    abschnitt(ziel, 'Altersgruppen zum ' + A.datum(a.stichtag), 'Altersgruppen_' + a.stichtag, spalten, zeilen, { sortierbar: false });
+    ziel.appendChild(A.el('p', 'Alter nach Jahrgang (Stichtagsjahr minus Geburtsjahr) wie in der BLSV-Meldung. Grenzen oben frei änderbar (Obergrenzen, durch Komma getrennt). Bei „je Abteilung“ zählt eine Person in jeder ihrer Abteilungen.', { className: 'leise' }));
+  }
+
+  // ------------------------------------------------------------------ Entwicklung
+
+  function entwicklung(ziel, d) {
+    ziel.appendChild(balken(d.entwicklung.map(function (e) { return { titel: String(e.jahr).slice(2), wert: e.bestand }; }), 'Mitgliederbestand je Jahr'));
+    abschnitt(ziel, 'Mitgliederentwicklung', 'Mitgliederentwicklung', [
+      { feld: 'jahr', titel: 'Jahr' }, { feld: 'eintritte', titel: 'Eintritte', zahl: true }, { feld: 'davon_wiedereintritte', titel: 'davon Wiedereintritte', zahl: true },
+      { feld: 'austritte', titel: 'Austritte', zahl: true }, { feld: 'saldo', titel: 'Saldo', zahl: true, wert: function (e) { return (e.saldo > 0 ? '+' : '') + e.saldo; } },
+      { feld: 'bestand', titel: 'Bestand', zahl: true }, { feld: 'bestand_am', titel: 'Bestand am', wert: function (e) { return A.datum(e.bestand_am); } }
+    ], d.entwicklung, { sortiere: 'jahr', absteigend: true });
+    ziel.appendChild(A.el('p', 'Austritte zählen im Jahr des wirksamen Austritts (auch Sterbefälle); der Bestand gilt zum Jahreswechsel, im laufenden Jahr zum Stichtag.', { className: 'leise' }));
+    var jahre = d.entwicklung.map(function (e) { return e.jahr; });
+    var spalten = [{ feld: 'grund', titel: 'Austrittsgrund' }, { feld: 'gesamt', titel: 'gesamt', zahl: true }]
+      .concat(jahre.slice(-5).map(function (j) { return { feld: 'j' + j, titel: String(j), zahl: true, wert: function (g) { return g.je_jahr[j] || 0; } }; }));
+    abschnitt(ziel, 'Austrittsgründe ' + jahre[0] + '–' + jahre[jahre.length - 1], 'Austrittsgruende', spalten, d.austrittsgruende, { sortiere: 'gesamt', absteigend: true, leer: 'Keine Austritte im Zeitraum.' });
+  }
+
+  // ------------------------------------------------------------------ Abteilungen (Kreuztabelle)
+
+  function abteilungen(ziel, d) {
+    var k = d.kreuztabelle;
+    var zeilen = k.abteilungen.map(function (a, i) {
+      var z = { bezeichnung: a.bezeichnung };
+      k.abteilungen.forEach(function (b, j) { z['a' + j] = k.matrix[i][j]; });
+      return z;
+    }).filter(function (z, i) { return k.matrix[i][i] > 0; });
+    var spalten = [{ feld: 'bezeichnung', titel: 'Abteilung' }].concat(k.abteilungen.map(function (a, j) {
+      return { feld: 'a' + j, titel: a.bezeichnung, zahl: true, sortierbar: false };
+    })).filter(function (s, j) { return j === 0 || k.matrix[j - 1][j - 1] > 0; });
+    abschnitt(ziel, 'Mitglieder in mehreren Abteilungen', 'Abteilungen_Kreuztabelle', spalten, zeilen, { sortierbar: false, leer: 'Keine laufenden Zugehörigkeiten.' });
+    ziel.appendChild(A.el('p', 'Diagonale = Personen in der Abteilung; übrige Felder = Personen, die gleichzeitig in beiden Abteilungen sind.', { className: 'leise' }));
+  }
+
+  // ------------------------------------------------------------------ Beiträge
+
+  function beitraege(ziel, d) {
+    var b = d.beitragsstruktur;
+    ziel.appendChild(A.el('div', null, { className: 'kacheln' }, [
+      A.kachel(A.betrag(b.soll_jahr), 'Soll ' + b.jahr + ' (Sollstellungen)'),
+      A.kachel(A.zahl(b.gemeinschaften.anzahl), 'Gemeinschaften mit Festbetrag'),
+      A.kachel(A.zahl(b.gemeinschaften.personen), 'Personen in Gemeinschaften'),
+      A.kachel(A.zahl(b.ohne_beitrag), 'aktiv ohne Beitrag', b.ohne_beitrag ? 'warnung' : '')
+    ]));
+    abschnitt(ziel, 'Beitragsarten (aktive Einzelzahler)', 'Beitragsarten', [
+      { feld: 'bezeichnung', titel: 'Beitragsart' }, { feld: 'betrag', titel: 'Betrag', zahl: true, wert: function (x) { return A.betrag(x.betrag); } },
+      { feld: 'anzahl', titel: 'Personen', zahl: true }, { feld: 'summe', titel: 'Summe', zahl: true, wert: function (x) { return A.betrag(x.summe); } }
+    ], b.beitragsarten, { sortiere: 'anzahl', absteigend: true });
+    var je = Object.keys(b.gemeinschaften.je_betrag).map(function (k) { return { festbetrag: Number(k), anzahl: b.gemeinschaften.je_betrag[k] }; });
+    abschnitt(ziel, 'Gemeinschaften nach Festbetrag', 'Gemeinschaften', [
+      { feld: 'festbetrag', titel: 'Festbetrag', zahl: true, wert: function (x) { return A.betrag(x.festbetrag); } }, { feld: 'anzahl', titel: 'Gemeinschaften', zahl: true }
+    ], je, { sortiere: 'festbetrag' });
+    ziel.appendChild(A.el('p', 'Rechnerische Summen aus Beitragsart × Personen (Stand ' + A.datum(b.stichtag) + '); das tatsächliche Soll steht in den Sollstellungen. Zusammenfassung „Gemeinschaften“: ' + A.betrag(b.gemeinschaften.summe) + '.', { className: 'leise' }));
+  }
+
+  // ------------------------------------------------------------------ Altersübergänge (Access „Jug19A“, „65neuA“)
+
+  function uebergaenge(ziel, d) {
+    var u = d.uebergaenge;
+    ziel.appendChild(A.el('p', 'Aktive Mitglieder, die ' + d.uebergang_jahr + ' 18, 19 oder 65 Jahre alt werden – mit aktueller und künftiger Beitragsart (Wechsel zum Jahreswechsel).', { className: 'leise' }));
+    if (A.darf('mitglied_bearbeiten') && A.ansichten.finanzen) {
+      ziel.appendChild(A.knopf('Tarifwechsel in Finanzen öffnen', function () { A.zeige('finanzen'); }, 'zweit klein'));
+    }
+    abschnitt(ziel, 'Altersübergänge ' + d.uebergang_jahr, 'Altersuebergaenge_' + d.uebergang_jahr, [
+      { feld: 'wird', titel: 'wird', zahl: true },
+      { feld: 'name', titel: 'Name', wert: function (x) { return mitgliedLink(x.mitglied_id, x.name + (x.mitgliedsnummer ? ' (' + x.mitgliedsnummer + ')' : '')); }, sort: function (x) { return x.name; } },
+      { feld: 'geburtsdatum', titel: 'Geburtsdatum', wert: function (x) { return A.datum(x.geburtsdatum); } },
+      { feld: 'aktuell', titel: 'aktuell' }, { feld: 'kuenftig', titel: 'künftig' },
+      { feld: 'hinweis', titel: 'Hinweis', wert: function (x) { return x.hinweis || (x.wechsel ? 'Wechsel nötig' : ''); } }
+    ], u, { sortiere: 'wird', leer: 'Niemand erreicht im nächsten Jahr eine dieser Altersgrenzen.' });
+  }
+
+  // ------------------------------------------------------------------ Dauer, Wohnorte, Funktionen
+
+  function dauer(ziel, d) {
+    var m = d.mitgliedsdauer;
+    ziel.appendChild(balken(m.klassen.map(function (k) { return { titel: String(k.von), wert: k.anzahl }; }), 'Mitgliedsdauer in Jahren'));
+    abschnitt(ziel, 'Mitgliedsdauer (Durchschnitt ' + (m.durchschnitt === null ? '–' : String(m.durchschnitt).replace('.', ',')) + ' Jahre)', 'Mitgliedsdauer',
+      [{ feld: 'titel', titel: 'Dauer' }, { feld: 'anzahl', titel: 'Personen', zahl: true }], m.klassen, { sortierbar: false });
+    ziel.appendChild(A.el('p', 'Gezählt wie die Ehrungen (Einstellung ehrung_zaehlweise): ab letztem Eintritt bzw. gesamt.', { className: 'leise' }));
+  }
+
+  function wohnorte(ziel, d) {
+    abschnitt(ziel, 'Wohnorte (aktive Mitglieder)', 'Wohnorte', [
+      { feld: 'ort', titel: 'PLZ Ort' }, { feld: 'anzahl', titel: 'Personen', zahl: true },
+      { feld: 'anteil', titel: 'Anteil', zahl: true, wert: function (x) { return String(x.anteil).replace('.', ',') + ' %'; } }
+    ], d.wohnorte.orte, { sortiere: 'anzahl', absteigend: true });
+  }
+
+  function funktionen(ziel, d) {
+    var f = d.funktionstraeger;
+    ziel.appendChild(A.el('div', null, { className: 'kacheln' }, [A.kachel(A.zahl(f.personen), 'Personen mit laufender Funktion'),
+      A.kachel(A.zahl(d.schiedsrichter.length), 'Schiedsrichter')]));
+    abschnitt(ziel, 'Funktionen je Art und Ebene', 'Funktionen_Uebersicht', [
+      { feld: 'funktion', titel: 'Funktion' }, { feld: 'ebene', titel: 'Ebene/Abteilung' }, { feld: 'anzahl', titel: 'Anzahl', zahl: true }
+    ], f.je_funktion, { sortiere: 'anzahl', absteigend: true });
+    var personenSpalten = [
+      { feld: 'name', titel: 'Name', wert: function (x) { return mitgliedLink(x.mitglied_id, x.name); }, sort: function (x) { return x.name; } },
+      { feld: 'funktion', titel: 'Funktion' }, { feld: 'ebene', titel: 'Ebene' }, { feld: 'zusatz', titel: 'Zusatz' },
+      { feld: 'seit', titel: 'seit', wert: function (x) { return A.datum(x.seit); } }
+    ];
+    var exportSpalten = [{ feld: 'name', titel: 'Name' }, { feld: 'funktion', titel: 'Funktion' }, { feld: 'ebene', titel: 'Ebene' },
+      { feld: 'zusatz', titel: 'Zusatz' }, { feld: 'seit', titel: 'seit', wert: function (x) { return A.datum(x.seit); } }];
+    ziel.appendChild(A.abschnitt('Schiedsrichter', exportKnoepfe('Schiedsrichter', 'Schiedsrichter', exportSpalten, function () { return d.schiedsrichter; })));
+    ziel.appendChild(A.tabelle(personenSpalten, d.schiedsrichter, { sortiere: 'name', leer: 'Keine laufende Funktion „Schiedsrichter“.' }));
+    ziel.appendChild(A.abschnitt('Alle laufenden Funktionen', exportKnoepfe('Funktionsträger', 'Funktionstraeger', exportSpalten, function () { return f.eintraege; })));
+    ziel.appendChild(A.tabelle(personenSpalten, f.eintraege, { sortiere: 'name' }));
+  }
+
+  // ------------------------------------------------------------------ Mitgliederlisten (Access „MitgliederlisteB“, „Mitgliederliste-kurz“)
+
+  function listen(ziel) {
+    var abt = {};
+    A.daten.liste('abteilungen').forEach(function (a) { abt[a.abteilung_id] = a.bezeichnung; });
+    var aktive = A.daten.liste('mitglieder').filter(function (m) { return (m.status_abgeleitet || m.status) === 'aktiv' && !m.nur_funktionstraeger; });
+    var abtText = function (m) { return (m.abteilungen || []).map(function (id) { return abt[id] || id; }).join(', '); };
+    var kurz = [
+      { feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'name', titel: 'Name', wert: function (m) { return A.name(m); } },
+      { feld: 'geburtsjahr', titel: 'Jg.', wert: function (m) { return m.geburtsdatum ? String(m.geburtsdatum).slice(0, 4) : ''; } },
+      { feld: 'abteilungen', titel: 'Abteilungen', wert: abtText }
+    ];
+    var lang = [
+      { feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'anrede', titel: 'Anrede' }, { feld: 'name', titel: 'Name', wert: function (m) { return A.name(m); } },
+      { feld: 'anschrift', titel: 'Anschrift', wert: function (m) { return [[m.strasse, m.hausnummer].filter(Boolean).join(' '), [m.plz, m.ort].filter(Boolean).join(' ')].filter(Boolean).join(', '); } },
+      { feld: 'geburtsdatum', titel: 'Geburtsdatum', wert: function (m) { return m.geburtsdatum ? A.datum(m.geburtsdatum) : ''; } },
+      { feld: 'telefon', titel: 'Telefon', wert: function (m) { return m.telefon || m.handy || ''; } }, { feld: 'email', titel: 'E-Mail' },
+      { feld: 'mitglied_seit', titel: 'Mitglied seit', wert: function (m) { return m.mitglied_seit ? A.datum(m.mitglied_seit) : ''; } },
+      { feld: 'abteilungen', titel: 'Abteilungen', wert: abtText }
+    ];
+    var sortiert = aktive.slice().sort(function (a, b) { return A.falte(A.name(a)).localeCompare(A.falte(A.name(b))); });
+    ziel.appendChild(A.el('p', aktive.length + ' aktive Mitglieder in Ihrem Sichtbereich. Die Listen entstehen aus dem geladenen Datenbestand.', { className: 'leise' }));
+    ziel.appendChild(A.abschnitt('Mitgliederliste kurz', exportKnoepfe('Mitgliederliste kurz', 'Mitgliederliste_kurz', kurz, function () { return sortiert; })));
+    if (A.sieht('kontakt')) ziel.appendChild(A.abschnitt('Mitgliederliste lang', exportKnoepfe('Mitgliederliste lang', 'Mitgliederliste_lang', lang, function () { return sortiert; })));
+    ziel.appendChild(A.tabelle(kurz.map(function (s) { return s.feld === 'name' ? Object.assign({}, s, { wert: function (m) { return mitgliedLink(m.mitglied_id, A.name(m)); }, sort: function (m) { return A.name(m); } }) : s; }),
+      sortiert, { sortiere: 'name' }));
+  }
+
+  // ================================================================== Eingabehilfen im Mitglied-Formular
+
+  /** Anrede → Geschlecht (korrigiert den Access-Fehler „alles außer Herr wird w“): nur Herr/Frau/Divers, nur wenn leer. */
+  function geschlechtAusAnrede(anrede) { return { Herr: 'm', Frau: 'w', Divers: 'd' }[String(anrede || '').trim()] || null; }
+
+  /** PLZ → häufigster Ort aus den geladenen Mitgliedern (früher Access-Tabelle Postlz). */
+  function ortZuPlz(plz) {
+    var z = {};
+    A.daten.liste('mitglieder').forEach(function (m) { if (m.plz === plz && m.ort) z[m.ort] = (z[m.ort] || 0) + 1; });
+    var orte = Object.keys(z).sort(function (a, b) { return z[b] - z[a] || a.localeCompare(b); });
+    return orte[0] || null;
+  }
+
+  function setze(formular, name, wert) {
+    var e = formular.feld(name);
+    if (!e || wert === null || wert === undefined || wert === '') return false;
+    if (e.tagName === 'SELECT' && !Array.prototype.some.call(e.options, function (o) { return o.value === String(wert); })) return false;
+    e.value = String(wert);
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
+  A.erweitere('mitglied.formular', function (formular, ziel, modus) {
+    var anrede = formular.feld('anrede'), geschlecht = formular.feld('geschlecht');
+    if (anrede && geschlecht) anrede.addEventListener('change', function () {
+      var g = geschlechtAusAnrede(anrede.value);
+      if (g && !geschlecht.value) setze(formular, 'geschlecht', g);
+    });
+    var plz = formular.feld('plz'), ort = formular.feld('ort');
+    if (plz && ort) {
+      var hinweis = A.el('p', '', { className: 'aw-hinweis', hidden: true });
+      if (ort.parentNode) ort.parentNode.appendChild(hinweis);
+      var pruefe = function () {
+        var p = plz.value.trim();
+        if (!/^\d{5}$/.test(p) || ort.value.trim()) return;
+        var o = ortZuPlz(p);
+        if (o) { ort.value = o; hinweis.textContent = 'Ort aus vorhandenen Anschriften vorgeschlagen – bitte prüfen.'; hinweis.hidden = false; }
+      };
+      plz.addEventListener('change', pruefe);
+      plz.addEventListener('input', pruefe);
+    }
+    if (modus === 'neu') ziel.insertBefore(xmlImportBox(formular, ziel), formular.element);
+  });
+
+  // ================================================================== XML-Import (Access „Befehl1011“)
+
+  /** _x0020_ usw. aus Access-XML-Elementnamen entschlüsseln: „Abteilung_x0020_1“ → „Abteilung 1“. */
+  function xmlName(n) { return String(n).replace(/_x([0-9A-Fa-f]{4})_/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); }); }
+  function schluessel(n) { return A.falte(xmlName(n)).replace(/[^a-z0-9]/g, ''); }
+  function isoAus(t) {
+    if (!t) return null;
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    return A.isoDatum(String(t).split(' ')[0]);
+  }
+
+  /**
+   * Liest einen Mitgliedsantrag im XML-Format des Access-Exports (/dataroot/Daten16). Rein im Browser.
+   * Ergebnis: { felder: { name: wert }, abteilungen: [{ name, status }], gesamtbeitrag, bank: {...}, unbekannt: [..] }
+   * oder { fehler: 'Text' }. Bankdaten werden nur gemeldet, nie in Felder übernommen (Sicherheitsregel D3).
+   */
+  function leseXml(text) {
+    var doc;
+    try { doc = new DOMParser().parseFromString(String(text || ''), 'application/xml'); } catch (e) { return { fehler: 'Die Datei konnte nicht gelesen werden.' }; }
+    if (!doc || doc.getElementsByTagName('parsererror').length) return { fehler: 'Die Datei ist keine gültige XML-Datei.' };
+    var person = doc.getElementsByTagName('Daten16')[0];
+    if (!person) return { fehler: 'In der Datei wurde kein Eintrag „Daten16“ gefunden.' };
+    var w = {};
+    Array.prototype.forEach.call(person.children, function (k) { w[schluessel(k.tagName)] = (k.textContent || '').trim(); });
+    var genutzt = {};
+    function hole(n) { var k = schluessel(n); genutzt[k] = true; return w[k] || null; }
+    var strasse = hole('Strasse'), hausnummer = null;
+    if (strasse) {
+      var m = /^(.*?\D)\s*(\d+\s*[a-zA-Z]?(?:\s*[-\/]\s*\d+\s*[a-zA-Z]?)?(?:\s+\d\/\d)?)$/.exec(strasse);
+      if (m && !/\d/.test(m[1].replace(/\d+\.\s/, ''))) { strasse = m[1].trim(); hausnummer = m[2].trim(); }
+    }
+    var g = (hole('Geschlecht') || '').toLowerCase();
+    var anrede = hole('Anrede');
+    var felder = {
+      anrede: anrede, titel: hole('Titel'), vorname: hole('Vorname'), nachname: hole('Nachname'),
+      strasse: strasse, hausnummer: hausnummer, plz: hole('Plz'), ort: hole('Ort'),
+      telefon: hole('Telefon'), handy: hole('Handy'), email: hole('email'),
+      geschlecht: g === 'm' || g === 'männlich' || g === 'maennlich' ? 'm' : g === 'w' || g === 'weiblich' ? 'w' : g === 'd' || g === 'divers' ? 'd' : geschlechtAusAnrede(anrede),
+      geburtsdatum: isoAus(hole('GebDat')), eintrittsdatum: isoAus(hole('EinDat')), bemerkung: hole('Bemerkung')
+    };
+    var abteilungen = [];
+    for (var i = 1; i <= 4; i++) {
+      var name = hole('Abteilung ' + i);
+      if (name) abteilungen.push({ name: name, status: i === 1 && /passiv/i.test(hole('Status Abteilung 1') || '') ? 'passiv' : 'aktiv' });
+    }
+    if (!abteilungen.length) hole('Status Abteilung 1');
+    var bank = { iban: hole('IBAN'), bic: hole('BIC'), kontoinhaber: hole('Kontoinhaber'), bank: hole('BANK') };
+    var gesamt = hole('Gesamtbeitrag');
+    ['ID', 'MitglNr', 'ReZiff', 'BLZ', 'KONTO', 'Zahler', 'Arbeitsdatum', 'Zahlung', 'AusDat'].forEach(hole);
+    for (var j = 1; j <= 4; j++) { hole('Betrag ' + j); hole('Beitrag Abt ' + j); }
+    var unbekannt = Object.keys(w).filter(function (k) { return !genutzt[k] && w[k]; });
+    return { felder: felder, abteilungen: abteilungen, gesamtbeitrag: gesamt ? Number(String(gesamt).replace(',', '.')) : null, bank: bank, unbekannt: unbekannt };
+  }
+  A.xmlAntrag = { lese: leseXml, geschlechtAusAnrede: geschlechtAusAnrede };   // für Tests und Nachfolger
+
+  function maskiere(iban) {
+    var s = String(iban || '').replace(/\s/g, '');
+    return s.length > 8 ? s.slice(0, 4) + ' •••• ' + s.slice(-4) : (s ? '••••' : '');
+  }
+
+  function xmlImportBox(formular, ziel) {
+    var datei = A.el('input', null, { type: 'file', accept: '.xml,application/xml,text/xml' });
+    datei.setAttribute('aria-label', 'XML-Datei des Mitgliedsantrags');
+    var ergebnis = A.el('div');
+    var box = A.el('div', null, { className: 'aw-xml' }, [
+      A.el('strong', 'Aus XML-Datei übernehmen'),
+      A.el('p', 'Mitgliedsantrag im XML-Format (wie bisher aus Access). Die Datei wird nur in diesem Browser gelesen und nicht gespeichert.', { className: 'aw-hinweis' }),
+      datei, ergebnis]);
+    datei.addEventListener('change', function () {
+      var f = datei.files && datei.files[0];
+      A.leere(ergebnis);
+      if (!f) return;
+      if (f.size > 200000) { ergebnis.appendChild(A.el('p', 'Die Datei ist zu groß für einen einzelnen Antrag.', { className: 'feldfehler' })); return; }
+      var leser = new FileReader();
+      leser.onload = function () { uebernimm(leseXml(leser.result), formular, ziel, ergebnis); };
+      leser.onerror = function () { ergebnis.appendChild(A.el('p', 'Die Datei konnte nicht gelesen werden.', { className: 'feldfehler' })); };
+      leser.readAsText(f, 'utf-8');
+    });
+    return box;
+  }
+
+  function uebernimm(x, formular, ziel, ergebnis) {
+    if (x.fehler) { ergebnis.appendChild(A.el('p', x.fehler, { className: 'feldfehler' })); return; }
+    var uebernommen = [];
+    Object.keys(x.felder).forEach(function (n) {
+      var v = x.felder[n];
+      if (v === null || v === '') return;
+      var e = formular.feld(n);
+      if (!e) return;
+      var wert = (n === 'geburtsdatum' || n === 'eintrittsdatum') ? A.datum(v) : v;
+      if (setze(formular, n, wert)) uebernommen.push(n);
+    });
+    // Abteilungen: Namen tolerant (Fussball = Fußball) den Ankreuzfeldern zuordnen
+    var abtNichtGefunden = [];
+    x.abteilungen.forEach(function (a) {
+      var ziel_ = A.falte(a.name).replace(/[^a-z]/g, '');
+      var treffer = null;
+      Array.prototype.forEach.call(ziel.querySelectorAll('.mv-abteilungswahl label'), function (l) {
+        var t = A.falte(l.textContent).replace(/aktiv|passiv/g, '').replace(/[^a-z]/g, '');
+        if (t === ziel_ || t.replace(/ss/g, 's') === ziel_.replace(/ss/g, 's')) treffer = l;
+      });
+      if (!treffer) { abtNichtGefunden.push(a.name); return; }
+      var cb = treffer.querySelector('input[type=checkbox]'), st = treffer.querySelector('select');
+      if (cb) cb.checked = true;
+      if (st) st.value = a.status;
+      uebernommen.push('Abteilung ' + a.name);
+    });
+    // Gesamtbeitrag → Beitragsart-Vorschlag
+    if (x.gesamtbeitrag !== null && formular.feld('beitragsart_id') && !formular.feld('beitragsart_id').value) {
+      var art = A.daten.liste('beitragsarten').filter(function (b) { return b.aktiv !== false && Number(b.betrag) === x.gesamtbeitrag; })[0];
+      if (art && setze(formular, 'beitragsart_id', art.beitragsart_id)) uebernommen.push('Beitragsart ' + art.bezeichnung);
+    }
+    ergebnis.appendChild(A.el('p', 'Übernommen: ' + (uebernommen.length ? uebernommen.length + ' Angaben – bitte prüfen und ergänzen.' : 'nichts.'), { className: 'meldung ok' }));
+    if (abtNichtGefunden.length) ergebnis.appendChild(A.el('p', 'Abteilung nicht zugeordnet: ' + abtNichtGefunden.join(', '), { className: 'aw-hinweis' }));
+    if (x.bank && (x.bank.iban || x.bank.kontoinhaber)) {
+      ergebnis.appendChild(A.el('p', 'Bankdaten in der Datei (' + [x.bank.kontoinhaber, maskiere(x.bank.iban)].filter(Boolean).join(', ') +
+        ') wurden NICHT übernommen: Bankverbindung und Mandat werden erst vom unterschriebenen Formular erfasst (Sicherheitsregel D3) – im Bereich Finanzen.', { className: 'meldung hinweis' }));
+    }
+    if (x.unbekannt.length) ergebnis.appendChild(A.el('p', 'Nicht verwendete Angaben: ' + x.unbekannt.join(', '), { className: 'aw-hinweis' }));
+  }
 })();
 </script>
