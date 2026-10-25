@@ -46,7 +46,7 @@ function apiBerichteBewegungen(von, bis) {
 /** Im Browser erzeugten Export protokollieren (liste: Bezeichnung, anzahl: Zeilen). */
 function apiBerichteExportProtokollieren(liste, anzahl) {
   return Api.ausfuehren('apiBerichteExportProtokollieren', 'export', function (ktx) {
-    BerichteModul.exportiert(ktx, String(liste || 'Liste').slice(0, 120), Number(anzahl) || 0);
+    BerichteModul.exportiert(ktx, Protokoll.listenname(liste || 'Liste'), Number(anzahl) || 0);
     return true;
   });
 }

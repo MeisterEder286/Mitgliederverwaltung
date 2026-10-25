@@ -42,6 +42,15 @@ var Protokoll = (function () {
    * @param ktx  Kontext mit email (bei Abweisungen die abgewiesene Adresse)
    * @param eintraege [{ aktion, tabelle, datensatz_id, feld?, alt_wert?, neu_wert?, kommentar? }]
    */
+  /**
+   * Listenname aus dem Browser für Export-Vermerke: nur Buchstaben, Ziffern und einfache Satzzeichen, max. 60
+   * Zeichen – der Browser soll keinen beliebigen Text ins Audit-Log schreiben können (Befund N1).
+   */
+  function listenname(x) {
+    var s = String(x === null || x === undefined ? '' : x).replace(/[^0-9A-Za-zÄÖÜäöüß .,()\/–-]/g, '').trim().slice(0, 60);
+    return s || 'Liste';
+  }
+
   function schreibe(ktx, eintraege) {
     if (!eintraege || !eintraege.length) return 0;
     // Fortlaufende protokoll_id = Zeilennummer → nur unter der Sperre korrekt. Aufrufer ohne Sperre (z. B. reine
@@ -83,5 +92,5 @@ var Protokoll = (function () {
     });
   }
 
-  return { schreibe: schreibe, ausDiff: ausDiff, text: text };
+  return { schreibe: schreibe, ausDiff: ausDiff, text: text, listenname: listenname };
 })();

@@ -657,7 +657,7 @@ var Finanzen = (function () {
   /** Exporte, die der Browser aus seinen Daten erzeugt (Mahnliste, Kontenliste), werden hier protokolliert. */
   function exportVermerken(ktx, liste, anzahl) {
     DB.mitSperre(function () {
-      Protokoll.schreibe(ktx, [{ aktion: 'exportiert', tabelle: 'Finanzen', datensatz_id: '-', kommentar: String(liste).slice(0, 100) + ': ' + Number(anzahl || 0) + ' Zeilen' }]);
+      Protokoll.schreibe(ktx, [{ aktion: 'exportiert', tabelle: 'Finanzen', datensatz_id: '-', kommentar: Protokoll.listenname(liste) + ': ' + Number(anzahl || 0) + ' Zeilen' }]);
     });
     return true;
   }

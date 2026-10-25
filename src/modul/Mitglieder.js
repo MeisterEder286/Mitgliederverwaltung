@@ -165,6 +165,10 @@ var Mitglieder = (function () {
       var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', werte || {}));
       delete felder.status;          // Cache, nur vom Skript
       delete felder.mitgliedsnummer; // bleibt lebenslang gleich
+      // Datenschutz-Status nur über den Datenschutz-Ablauf (Sperren/Anonymisieren mit Protokoll), nicht per
+      // normalem Bearbeiten (Befund N2 der Sicherheitsprüfung).
+      ['anonymisiert', 'anonymisiert_am', 'verarbeitung_eingeschraenkt', 'sperre_grund', 'loeschbar_ab']
+        .forEach(function (f) { delete felder[f]; });
       pruefeSchema('Mitglied', felder, true);
       var p = plausibel(felder, alt);
       feldfehler(p.fehler);

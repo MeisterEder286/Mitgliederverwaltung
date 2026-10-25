@@ -26,7 +26,24 @@ Gefunden wurden:
 
 Die drei schwersten Befunde (K1, H1, H2) sind jeweils mit wenigen Zeilen behebbar und sollten vor dem Go-live erledigt sein.
 
-## Befundtabelle
+## Stand der Behebung (nach der Prüfung)
+
+| Nr. | Status | Umsetzung | Regressionstest |
+|---|---|---|---|
+| K1 | ✅ behoben | `apiFinanzenBuchhaltung` verlangt `konto_lesen` **und** `export` | `test/sicherheit.test.js` K1 |
+| H1 | ✅ behoben | Zuordnen nur mit Einmal-Token (10 min, je Benutzer) aus einer vorangegangenen Exaktsuche; Token nach Gebrauch verbraucht | `test/mitglieder.test.js` Exaktsuche |
+| H2 | ✅ behoben | Konflikt-Antwort enthält keinen Datensatz mehr; der Browser lädt den Snapshot neu | `test/sicherheit.test.js` H2, `test/api.test.js` |
+| M1 | ✅ behoben | `_Konfig`-Werte mit Formelschutz (`Werte.zelleSchreiben`); ebenso `Konfig.setze` | `test/sicherheit.test.js` M1 |
+| M2 | ✅ behoben | `Protokoll.schreibe` nimmt selbst die Sperre (wiedereintrittsfähig) | `test/api.test.js` |
+| M3 | ✅ behoben | Exaktsuche braucht immer zwei Merkmale (Nachname + Nummer oder Geburtsdatum); Begrenzung 30/Std. und 60/Tag, gezählt unter Sperre | `test/mitglieder.test.js` |
+| M4 | ✅ behoben | Nächtliche Wartung (`wartungNachts`): Protokoll-Bereinigung am Monatsersten, `_Messung` > 3 Monate entfernen | `test/wartung.test.js` |
+| N1 | ✅ behoben | Export-Vermerke: Listenname bereinigt (`Protokoll.listenname`), kein freier Text | `test/sicherheit.test.js` N1/N5 |
+| N2 | ✅ behoben | Datenschutz-Felder (`anonymisiert`, `verarbeitung_eingeschraenkt`, `sperre_grund`, `loeschbar_ab`) nur über den Datenschutz-Ablauf | `test/sicherheit.test.js` N2 |
+| N3 | akzeptiert | Benutzer-Cache 5 min; Änderungen über die Oberfläche wirken sofort (Cache wird verworfen). Direkte Sheet-Änderungen macht nur das Funktionskonto. | – |
+| N4 | akzeptiert | Erfundene Messwerte möglich, keine Personendaten, nur Statistik betroffen | – |
+| N5 | ✅ behoben | BLSV-CSV mit Feld-Escaping und Formelschutz | `test/sicherheit.test.js` N1/N5 |
+
+## Befundtabelle (Stand der Prüfung)
 
 | Nr. | Schwere | Ort | Kurzbeschreibung |
 |---|---|---|---|

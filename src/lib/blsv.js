@@ -201,8 +201,14 @@ var Blsv = (function () {
   /** Tabelle als CSV (Semikolon, eine Zeile je Sportart + Verein). [?] Format von verein360 vor Nutzung prüfen. */
   function csv(b) {
     var kopf = ['Sportart', 'gesamt', 'männlich', 'weiblich', 'divers', 'bis 14', '15–18', '19–26', 'ab 27'];
+    // Feld-Escaping + Formelschutz (Befund N5): Abteilungsnamen stammen aus den Stammdaten.
+    function feld(v) {
+      var t = String(v === null || v === undefined ? '' : v);
+      if (/^[=+\-@]/.test(t)) t = "'" + t;
+      return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    }
     function z(name, x) {
-      return [name, x.gesamt, x.maennlich, x.weiblich, x.divers, x.alter_bis_14, x.alter_15_18, x.alter_19_26, x.alter_ab_27].join(';');
+      return [feld(name), x.gesamt, x.maennlich, x.weiblich, x.divers, x.alter_bis_14, x.alter_15_18, x.alter_19_26, x.alter_ab_27].join(';');
     }
     return [kopf.join(';')].concat(b.sportarten.map(function (s) { return z(s.sportart, s); }))
       .concat([z('Mitglieder im Verein', b.verein)]).join('\r\n');

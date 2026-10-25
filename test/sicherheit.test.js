@@ -55,3 +55,22 @@ test('M1: Einstellungen werden mit Formelschutz geschrieben', () => {
   const nachher = f.daten('_Konfig').find(z => z[iS] === 'verein_name')[iW];
   assert.ok(!String(nachher).startsWith('='), 'Formel ungeschützt gespeichert: ' + nachher + ' / ' + JSON.stringify(a.fehler || ''));
 });
+
+test('N2: Datenschutz-Status lässt sich nicht über normales Bearbeiten setzen', () => {
+  const { f, g } = als('Mitgliederverwalter');
+  const kopf = f.daten('Mitglied')[0];
+  const z = f.daten('Mitglied')[1];
+  const id = z[kopf.indexOf('mitglied_id')], version = Number(z[kopf.indexOf('version')] || 0);
+  const a = rein(g.apiMitgliedSpeichern(id, version, { ort: 'Neufahrn', anonymisiert: true, verarbeitung_eingeschraenkt: true }));
+  assert.strictEqual(a.ok, true, JSON.stringify(a.fehler));
+  const neu = f.daten('Mitglied').find(r => r[kopf.indexOf('mitglied_id')] === id);
+  assert.notStrictEqual(neu[kopf.indexOf('anonymisiert')], 'ja');
+  assert.notStrictEqual(neu[kopf.indexOf('verarbeitung_eingeschraenkt')], 'ja');
+});
+
+test('N1/N5: Export-Vermerk ohne Freitext, BLSV-CSV mit Escaping', () => {
+  const { g } = als('Mitgliederverwalter');
+  assert.strictEqual(g.Protokoll.listenname('=HYPERLINK("x")<script>'), 'HYPERLINK(x)script');
+  const csv = g.Blsv.csv({ sportarten: [{ sportart: '=Fußball;Herren' }], verein: {} });
+  assert.ok(csv.includes('"\'=Fußball;Herren"'), csv);
+});
