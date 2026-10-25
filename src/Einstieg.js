@@ -157,17 +157,18 @@ function setup() {
 /** Legt den stündlichen Trigger zum Wegschreiben der Messwerte an (vorhandene werden ersetzt). */
 function triggerEinrichten() {
   Zugriff.nurFunktionskonto();
+  // Vorhandene Trigger dieser Funktionen erst entfernen – so entstehen bei wiederholtem Aufruf keine Doppelten.
+  var verwaltet = ['messungSchreiben', 'wartungNachts', 'wartungFortsetzen', 'snapshotWarmhalten', 'protokollBereinigenTrigger'];
   ScriptApp.getProjectTriggers().forEach(function (tr) {
-    if (tr.getHandlerFunction() === 'messungSchreiben') ScriptApp.deleteTrigger(tr);
+    if (verwaltet.indexOf(tr.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(tr);
   });
   ScriptApp.newTrigger('messungSchreiben').timeBased().everyHours(1).create();
-  var text = 'Trigger messungSchreiben (stündlich) eingerichtet.';
-  ScriptApp.getProjectTriggers().forEach(function (tr) {
-    if (tr.getHandlerFunction() === 'snapshotWarmhalten') ScriptApp.deleteTrigger(tr);
-  });
+  // Nächtliche Pflege (Status-Cache, Fristen, Löschbarkeit, Protokoll-Bereinigung am Monatsersten, Messwerte, Snapshot)
+  ScriptApp.newTrigger('wartungNachts').timeBased().everyDays(1).atHour(2).inTimezone('Europe/Berlin').create();
+  var text = 'Trigger eingerichtet: messungSchreiben (stündlich), wartungNachts (täglich gegen 02:00).';
   if (Konfig.wert('cache_warmhalten') === 'ja') {
     ScriptApp.newTrigger('snapshotWarmhalten').timeBased().everyHours(5).create();
-    text += ' Trigger snapshotWarmhalten (alle 5 Stunden) eingerichtet.';
+    text += ' snapshotWarmhalten (alle 5 Stunden).';
   }
   console.log(text);
   return text;

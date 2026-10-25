@@ -17,7 +17,8 @@
  * Besonderheiten:
  *   - Massenschreiben (Sollstellungslauf ~850 Zeilen, SEPA-Vermerke, Sammelbuchungen) läuft NICHT zeilenweise über
  *     DB.einfuegen/DB.aktualisieren (das wären tausende Tabellenzugriffe), sondern über massenEinfuegen /
- *     massenAktualisieren unten: ein Lesezugriff, ein Schreibzugriff, IDs als Block aus _Konfig. Immer unter Sperre.
+ *     massenAktualisieren (Hüllen um DB.einfuegenViele/aktualisiereViele): feste Zahl an Tabellenzugriffen,
+ *     IDs als Block aus _Konfig. Immer unter Sperre.
  *   - Protokoll: Einzeländerungen feldgenau (bei IBAN/Mandat inkl. alt/neu – so verlangt es das Datenmodell),
  *     Massenvorgänge als EIN Sammeleintrag (Anzahl, Summe). Die SEPA-Datei selbst wird nicht gespeichert.
  *   - Vereinskonto für die SEPA-Datei: _Konfig verein_iban (Pflicht), verein_bic, verein_strasse, verein_hausnummer,
@@ -73,123 +74,25 @@ var Finanzen = (function () {
 
   function euro(n) { return Beitrag.euro(Number(n || 0)) + ' €'; }
 
-  // ================================================================== Massenschreiben (ein Lese-, ein Schreibzugriff)
-
-  function kopfVon(b) {
-    var spalten = b.getLastColumn();
-    var kopf = b.getRange(1, 1, 1, spalten).getValues()[0].map(function (k) { return String(k).trim(); });
-    DB.zaehle(2);
-    return kopf;
-  }
-
-  /** Reserviert n fortlaufende IDs aus _Konfig.next_id_<Tab>. Nur unter Sperre. */
-  function reserviereIds(tab, n) {
-    var t = Schema.TABELLEN[tab];
-    var k = DB.blatt('_Konfig');
-    var kopf = kopfVon(k);
-    var sS = kopf.indexOf('schluessel'), sW = kopf.indexOf('wert');
-    var letzte = k.getLastRow();
-    DB.zaehle(1);
-    var schluessel = 'next_id_' + tab;
-    if (letzte >= 2) {
-      var zeilen = k.getRange(2, 1, letzte - 1, kopf.length).getValues();
-      DB.zaehle(1);
-      for (var i = 0; i < zeilen.length; i++) {
-        if (String(zeilen[i][sS]).trim() === schluessel) {
-          var start = Number(zeilen[i][sW]);
-          if (!(start > 0)) throw new Error('Zähler ' + schluessel + ' ist ungültig');
-          k.getRange(i + 2, sW + 1).setValue(String(start + n));
-          DB.zaehle(1);
-          return start;
-        }
-      }
-    }
-    var max = 0;
-    DB.lese([tab])[tab].forEach(function (z) { var v = Number(z[t.idSpalte]); if (v > max) max = v; });
-    k.appendRow(kopf.map(function (h) {
-      return h === 'schluessel' ? schluessel : h === 'wert' ? String(max + 1 + n) : h === 'beschreibung' ? 'ID-Zähler — nur vom Skript erhöhen' : '';
-    }));
-    DB.zaehle(1);
-    return max + 1;
-  }
+  // ================================================================== Massenschreiben (Hüllen um DB)
 
   /**
-   * Legt viele Datensätze mit EINEM Schreibzugriff an. objekte ohne ID. Liefert die gespeicherten Objekte.
-   * Prüft Felder (Werte.pruefe); Eindeutigkeiten muss der Aufrufer vorher sicherstellen.
+   * Legt viele Datensätze mit EINEM Schreibzugriff an (DB.einfuegenViele: prüft Felder und Eindeutigkeiten).
+   * Liefert die gespeicherten Objekte.
    */
   function massenEinfuegen(tab, objekte, ktx) {
-    if (!objekte.length) return [];
-    var t = Schema.TABELLEN[tab];
-    var start = reserviereIds(tab, objekte.length);
-    var jetzt = DB.jetzt();
-    var b = DB.blatt(tab);
-    var kopf = kopfVon(b);
-    var neu = objekte.map(function (o, i) {
-      var x = {};
-      Object.keys(o).forEach(function (f) { x[f] = o[f]; });
-      var fehler = Werte.pruefe(tab, x);
-      if (fehler.length) throw Fehler.fachlich(fehler.map(function (f) { return f.meldung; }).join(' '));
-      x[t.idSpalte] = start + i;
-      x.version = 1; x.geaendert_am = jetzt; x.geaendert_von = (ktx && ktx.email) || null;
-      return x;
-    });
-    var zeilen = neu.map(function (x) { return Werte.objektZuZeile(kopf, x, tab); });
-    DB.anhaengen(b, zeilen);
-    return zeilen.map(function (z) { return Werte.zeileZuObjekt(kopf, z, tab); });
+    return DB.einfuegenViele(tab, objekte, ktx);
   }
 
   /**
-   * Ändert viele Datensätze: aenderungen = { id: { feld: wert } }. Ein Lese-, ein Schreibzugriff (zusammenhängender
-   * Block von der ersten bis zur letzten geänderten Zeile). versionen (optional) = { id: erwartete Version }.
-   * Liefert [{ alt, neu, diff }]. Unveränderte Zeilen im Block werden unverändert zurückgeschrieben (Texte mit
-   * Formelschutz, damit z. B. „=…“ nicht zur Formel wird).
+   * Ändert viele Datensätze: aenderungen = { id: { feld: wert } }, versionen (optional) = { id: erwartete Version }.
+   * DB.aktualisiereViele: ein Lesezugriff, wenige Schreibzugriffe, Formelschutz für mitgeschriebene Zeilen.
+   * Liefert [{ alt, neu, diff }].
    */
   function massenAktualisieren(tab, aenderungen, ktx, versionen) {
-    var ids = Object.keys(aenderungen);
-    if (!ids.length) return [];
-    var t = Schema.TABELLEN[tab];
-    var b = DB.blatt(tab);
-    var letzte = b.getLastRow();
-    var spalten = b.getLastColumn();
-    DB.zaehle(2);
-    if (letzte < 2) throw Fehler.fachlich('Die Datensätze wurden nicht gefunden. Bitte die Ansicht neu laden.');
-    var werte = b.getRange(1, 1, letzte, spalten).getValues();
-    DB.zaehle(1);
-    var kopf = werte[0].map(function (k) { return String(k).trim(); });
-    var sId = kopf.indexOf(t.idSpalte);
-    var jetzt = DB.jetzt();
-    var ergebnis = [], min = Infinity, max = -1, gefunden = {};
-    for (var r = 1; r < werte.length; r++) {
-      var id = String(werte[r][sId]);
-      if (id === '' || !Object.prototype.hasOwnProperty.call(aenderungen, id)) continue;
-      gefunden[id] = true;
-      var alt = Werte.zeileZuObjekt(kopf, werte[r], tab);
-      if (versionen && versionen[id] !== undefined && Number(alt.version || 0) !== Number(versionen[id])) throw Fehler.konflikt(alt);
-      var aend = aenderungen[id];
-      var fehler = Werte.pruefe(tab, aend, { teilweise: true });
-      if (fehler.length) throw Fehler.fachlich(fehler.map(function (f) { return f.meldung; }).join(' '));
-      var d = Werte.diff(tab, alt, aend);
-      if (!d.length) continue;
-      var neu = {};
-      Object.keys(alt).forEach(function (f) { neu[f] = alt[f]; });
-      Object.keys(aend).forEach(function (f) { neu[f] = aend[f]; });
-      neu.version = Number(alt.version || 0) + 1; neu.geaendert_am = jetzt; neu.geaendert_von = (ktx && ktx.email) || null;
-      werte[r] = Werte.objektZuZeile(kopf, neu, tab, werte[r]);
-      werte[r].__geaendert = true;
-      ergebnis.push({ alt: alt, neu: Werte.zeileZuObjekt(kopf, werte[r], tab), diff: d });
-      if (r < min) min = r;
-      if (r > max) max = r;
-    }
-    var fehlend = ids.filter(function (i) { return !gefunden[i]; });
-    if (fehlend.length) throw Fehler.fachlich('Einige Datensätze wurden nicht gefunden (' + fehlend.slice(0, 5).join(', ') + '). Bitte die Ansicht neu laden.');
-    if (max < 0) return [];
-    var block = werte.slice(min, max + 1).map(function (z) {
-      if (z.__geaendert) { var k = z.slice(); return k; }
-      return z.map(function (v) { return typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v; });
-    });
-    b.getRange(min + 1, 1, block.length, spalten).setValues(block);
-    DB.zaehle(1);
-    return ergebnis;
+    return DB.aktualisiereViele(tab, Object.keys(aenderungen).map(function (id) {
+      return { id: id, aenderungen: aenderungen[id], version: versionen && versionen[id] !== undefined ? versionen[id] : null };
+    }), ktx);
   }
 
   // ================================================================== Lesen: Übersicht und Konto

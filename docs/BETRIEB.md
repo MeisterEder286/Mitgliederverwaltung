@@ -21,7 +21,15 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
    `Aufbewahrungsfrist`, `_Konfig` alle mit BEISPIEL/PRÜFEN markierten Werte anpassen.
 8. **Benutzer:** Im Tab `Benutzer` je Rollenzuweisung eine Zeile (E-Mail, Rolle, bei Abteilungsleitern
    `abteilung_id`, `aktiv = ja`). Wer zwei Rollen hat, bekommt zwei Zeilen.
-9. **Trigger:** Im Editor `triggerEinrichten` ausführen (stündliches Wegschreiben der Messwerte).
+9. **Trigger:** Im Editor `triggerEinrichten` ausführen. Es entfernt vorhandene Trigger derselben Funktionen und legt an:
+   - `messungSchreiben` – stündlich: gepufferte Messwerte nach `_Messung`
+   - `wartungNachts` – täglich gegen 02:00 (Europe/Berlin): Status-Cache nachziehen, FZ-Fristen, Löschbarkeit
+     ausgetretener Mitglieder, am Monatsersten Protokoll-Bereinigung, Messwerte älter als 3 Monate entfernen,
+     Snapshot neu bauen. Bricht ein Lauf an der Laufzeitgrenze ab, setzt ein einmaliger Trigger `wartungFortsetzen`
+     ihn nach einer Minute fort (legt sich selbst an und räumt sich selbst weg).
+   - `snapshotWarmhalten` – alle 5 Stunden, nur wenn `_Konfig.cache_warmhalten = ja`
+   Ergebnis jedes Wartungslaufs: ein Eintrag im `_Protokoll` (Tabelle „Wartung“), Details im Ausführungsprotokoll.
+   Nach Änderung von `cache_warmhalten` `triggerEinrichten` erneut ausführen.
 10. **Deployment:** Bereitstellen → Neue Bereitstellung → Web-App, „Ausführen als: **Ich**“, „Zugriff:
     **Jeder in [Domain]**“. Die Deployment-ID und die exec-URL im zentralen Register (`docs/REGISTER.md`)
     eintragen.
@@ -53,5 +61,5 @@ Rohdaten im Tab `_Messung` (keine Personendaten).
 | Laufzeit je Ausführung | 6 min | Setup und Migration bleiben deutlich darunter |
 | CacheService | 100 KB je Wert, max. 6 h | Snapshot wird in Teilstücke zerlegt (Phase 3) |
 | Script Properties | ca. 9 KB je Wert | nur `DB_ID` |
-| Trigger-Laufzeit gesamt | je nach Kontotyp, für Nonprofits prüfen | stündlicher Messwert-Trigger: Sekunden pro Lauf |
+| Trigger-Laufzeit gesamt | je nach Kontotyp, für Nonprofits prüfen | stündlicher Messwert-Trigger: Sekunden pro Lauf; nächtliche Wartung: Sekunden bis wenige Minuten, Abbruch nach 4,5 min mit Fortsetzung |
 | Gleichzeitige Ausführungen | weiß ich nicht genau | wenige Nutzer, unkritisch |

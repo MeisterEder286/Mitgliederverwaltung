@@ -61,19 +61,8 @@ var Mitglieder = (function () {
     return l.sort(function (a, b) { return String(a.eintrittsdatum).localeCompare(String(b.eintrittsdatum)); });
   }
 
-  /** Zahlen, die als Text aus Formularen kommen (FK, Ganzzahl, Dezimal), in Zahlen umwandeln; '' → null. */
-  function typisiere(tab, obj) {
-    var t = Schema.TABELLEN[tab];
-    Object.keys(obj).forEach(function (k) {
-      var sp = t.spalten.filter(function (x) { return x.name === k; })[0];
-      if (!sp) return;
-      if (obj[k] === '') obj[k] = null;
-      if ((sp.typ === 'FK' || sp.typ === 'Ganzzahl' || sp.typ === 'Dezimal') && typeof obj[k] === 'string' && obj[k].trim() !== '' && isFinite(Number(obj[k].replace(',', '.')))) {
-        obj[k] = Number(obj[k].replace(',', '.'));
-      }
-    });
-    return obj;
-  }
+  /** Formulareingaben typgerecht wandeln (gemeinsame Hilfe Werte.ausFormular). */
+  function typisiere(tab, obj) { return Werte.ausFormular(tab, obj); }
 
   /** Feldfehler gesammelt werfen (der Browser zeigt sie am Feld). */
   function feldfehler(liste) {

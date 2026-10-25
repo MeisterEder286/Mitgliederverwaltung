@@ -74,6 +74,8 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 - `zelleLesen(wert, spalte)` / `zelleSchreiben(wert, spalte)` – Konvertierung gemäß Tabelle oben
 - `zeileZuObjekt(kopf, zeile, tab)` / `objektZuZeile(kopf, obj, tab)` – über Spaltennamen; unbekannte Spalten im Sheet bleiben beim Schreiben unverändert
 - Texte, die mit `= + - @` beginnen, bekommen beim Schreiben ein `'` vorangestellt (Formel-Injektion), beim Lesen wird es entfernt
+- `ausFormular(tab, werte)` → neues Objekt: Formulartexte typgerecht (`'3'` → 3, `'1.234,50'` → 1234.5, `''` → null,
+  `'ja'`/`'nein'` → true/false, `'TT.MM.JJJJ'` → `'JJJJ-MM-TT'`); unpassende Werte bleiben stehen, `pruefe` meldet sie
 - `pruefe(tab, obj, {teilweise})` → `[ {feld, meldung} ]` (Pflicht, Typ, Auswahlliste; `auto`-Felder werden ignoriert)
 - `diff(tab, alt, neu)` → `[ {feld, alt, neu} ]` (ohne `version`/`geaendert_*`)
 
@@ -85,10 +87,22 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 - `neueId(tab)` – Zähler in `_Konfig` (nur in `mitSperre`)
 - `zaehler()` → `{ sheets: n }` Zahl der Tabellenzugriffe seit Ausführungsbeginn; `zaehlerZuruecksetzen()`; `zaehle(n)` für Module mit eigenem Blattzugriff
 - `blatt(tab)` → Sheet-Objekt; `anhaengen(blatt, zeilen, letzte?)` – ein `setValues` unter die letzte Zeile, vergrößert das Raster bei Bedarf (neue Tabs haben nur 1000 Zeilen)
+- **Massenschreiben** (nur in `mitSperre`, feste Zahl an Tabellenzugriffen – gemessen 16 für `einfuegenViele` und 6 für
+  `aktualisiereViele`, gleich bei 5 wie bei 500 Datensätzen, jeweils inkl. Öffnen/flush):
+  - `einfuegenViele(tab, objekte, ktx)` → gespeicherte Objekte; ein Lesen (Eindeutigkeit), ID-Block aus `_Konfig`,
+    ein Schreibzugriff; Feldfehler mit Feldliste und „Eintrag n:“
+  - `aktualisiereViele(tab, [{ id, aenderungen, version }], ktx)` → `[{ alt, neu, diff }]`; `version` null = keine
+    Versionsprüfung (nur Systemläufe); erster Konflikt → `Fehler.konflikt`, dann wird nichts geschrieben; geschrieben
+    werden zusammenhängende Läufe (bei > 10 verstreuten Läufen ein Block, unveränderte Zeilen darin mit Formelschutz)
+  - `entfernen(tab, id | [ids])` → Anzahl; nur Löschkonzept/technische Bereinigung; `zeilenEntfernen(blatt, [zeilennummern])`
+    (zusammenhängende Zeilen mit einem `deleteRows`)
+- Eindeutigkeit: Sind **alle** Schlüsselfelder eines Datensatzes leer (z. B. Überweisungskonto ohne Mandatsreferenz),
+  wird die Gruppe nicht geprüft; bei teilweise leeren Gruppen gilt leer = leer.
 - `jetzt()` → `"JJJJ-MM-TTThh:mm:ss"` in der Zeitzone des Skripts
 
 ### `Konfig` (`src/Konfig.js`)
-`wert(schluessel)`, `alle()` (aus CacheService, 10 min), `vergessen()` (Cache leeren nach Änderung).
+`wert(schluessel)`, `alle()` (aus CacheService, 10 min), `vergessen()` (Cache leeren nach Änderung),
+`setze(schluessel, wert, beschreibung?)` (nur in `DB.mitSperre`; legt fehlende Schlüssel an, liefert den alten Wert).
 
 ### `Rechte` (`src/lib/rechte.js`, rein)
 - `ROLLEN`, `AKTIONEN`, `MATRIX[rolle] = { sicht: [klassen], aktionen: [..], zeilen: 'alle'|'abteilung'|'jugend' }`
@@ -179,3 +193,12 @@ function apiMitgliedSpeichern(id, version, werte) {
 }
 ```
 Feldfehler: `throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld, meldung }])` – der Browser zeigt sie am Feld.
+
+### Wartung (`src/modul/Wartung.js`, Trigger in `src/api/Wartung.js`)
+`wartungNachts()` (täglich gegen 02:00, nur Funktionskonto) erledigt nacheinander, jeder Schritt für sich abgesichert:
+`status` (Mitglied.status an `Mitgliedschaft.status` angleichen), `fristen` (FZ-Fristen, `NachweiseModul.fristenAktualisieren`),
+`loeschbarkeit` (`loeschbar_ab`/`sperre_grund` ausgetretener Mitglieder nach `Aufbewahrungsfrist` – nichts wird gelöscht),
+`protokoll` (am Monatsersten Bereinigung nach Frist), `messung` (`_Messung` älter als 3 Monate entfernen), `snapshot`
+(verwerfen und neu bauen). Ergebnis als ein Sammeleintrag im `_Protokoll` (Tabelle „Wartung“). Laufzeitschutz: nach
+4,5 Minuten Abbruch, Fortschritt in der Script Property `wartung_fortschritt`, einmaliger Folge-Trigger
+`wartungFortsetzen` nach einer Minute; erledigte Schritte laufen am selben Tag nicht doppelt.

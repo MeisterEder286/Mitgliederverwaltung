@@ -242,7 +242,42 @@ var Werte = (function () {
     return ergebnis;
   }
 
+  /**
+   * Formulareingaben (meist Texte aus dem Browser) in Programmwerte gemäß Spaltentyp wandeln – vor
+   * Rechte.erlaubteSchreibfelder/DB. Liefert ein neues Objekt; unbekannte Felder bleiben unverändert.
+   *   ''/nur Leerzeichen → null · Ganzzahl/FK/Dezimal: "3" → 3, "1.234,50" → 1234.5, "5,00" → 5
+   *   ja/nein: 'ja'/'nein'/true/false → true/false · Datum: 'TT.MM.JJJJ' → 'JJJJ-MM-TT'
+   * Unpassende Werte bleiben stehen; die Typprüfung (pruefe) meldet sie dann am Feld.
+   */
+  function ausFormular(tab, werte) {
+    var spalten = {};
+    tabelle(tab).spalten.forEach(function (sp) { spalten[sp.name] = sp; });
+    var o = {};
+    Object.keys(werte || {}).forEach(function (k) {
+      var v = werte[k], sp = spalten[k];
+      if (typeof v === 'string' && v.trim() === '') { o[k] = null; return; }
+      if (!sp) { o[k] = v; return; }
+      var typ = sp.typ;
+      if ((typ === 'Ganzzahl' || typ === 'FK' || typ === 'Dezimal') && typeof v === 'string') {
+        var t = v.trim();
+        if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+        var n = Number(t);
+        o[k] = isFinite(n) ? n : v;
+      } else if (typ === 'ja/nein') {
+        var j = typeof v === 'string' ? v.trim().toLowerCase() : v;
+        o[k] = j === 'ja' || j === true ? true : j === 'nein' || j === false ? false : v;
+      } else if (typ === 'Datum' && typeof v === 'string' && /^\d{1,2}\.\d{1,2}\.\d{4}$/.test(v.trim())) {
+        var d = v.trim().split('.');
+        o[k] = d[2] + '-' + ('0' + d[1]).slice(-2) + '-' + ('0' + d[0]).slice(-2);
+      } else {
+        o[k] = v;
+      }
+    });
+    return o;
+  }
+
   return {
+    ausFormular: ausFormular,
     TECHNISCHE_FELDER: TECHNISCHE_FELDER,
     feldname: feldname,
     serialZuDatum: serialZuDatum,

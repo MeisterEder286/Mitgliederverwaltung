@@ -50,7 +50,18 @@ function lade(optionen) {
     ScriptApp: {
       getProjectTriggers() { return [{ getHandlerFunction: () => 'messungSchreiben', id: 'alt' }, { getHandlerFunction: () => 'anderes' }]; },
       deleteTrigger(t) { protokoll.trigger.push(['geloescht', t.id]); },
-      newTrigger(f) { return { timeBased() { return { everyHours(h) { return { create() { protokoll.trigger.push(['neu', f, h]); } }; } }; } }; }
+      newTrigger(f) {
+        const t = { f, takt: null };
+        const b = {
+          timeBased() { return b; },
+          everyHours(h) { t.takt = h + 'h'; return b; },
+          everyDays(d) { t.takt = d + 'd'; return b; },
+          atHour(h) { t.takt += '@' + h; return b; },
+          inTimezone() { return b; },
+          create() { protokoll.trigger.push(['neu', t.f, t.takt]); }
+        };
+        return b;
+      }
     }
   });
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'src', 'Einstieg.js'), 'utf8')).runInContext(ctx);
@@ -112,7 +123,7 @@ test('setup und triggerEinrichten nur für das Funktionskonto', () => {
   const eigen = lade();
   assert.strictEqual(eigen.g.setup(), 'Bericht');
   eigen.g.triggerEinrichten();
-  assert.deepStrictEqual(rein(eigen.protokoll.trigger), [['geloescht', 'alt'], ['neu', 'messungSchreiben', 1]]);
+  assert.deepStrictEqual(rein(eigen.protokoll.trigger), [['geloescht', 'alt'], ['neu', 'messungSchreiben', '1h'], ['neu', 'wartungNachts', '1d@2']]);
 });
 
 test('messungSchreiben wirft nie (Trigger), auch ohne Berechtigung', () => {

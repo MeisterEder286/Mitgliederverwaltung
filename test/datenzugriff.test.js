@@ -154,3 +154,111 @@ test('jetzt: Format JJJJ-MM-TTThh:mm:ss', () => {
   const { g } = aufbau();
   assert.match(g.DB.jetzt(), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
 });
+
+// ------------------------------------------------------------------ Massenschreiben (W3-K)
+
+function einwilligungen(n, start) {
+  return Array.from({ length: n }, (_, i) => ({ mitglied_id: (i % 13) + 1, art: 'Fotos und Videos', erteilt_am: '2026-01-' + String((i % 28) + 1).padStart(2, '0'), umfang: start ? '=SUMME(A1)' : 'nur Vereinsmedien' }));
+}
+
+function massenAufbau() {
+  return aufbau({ tabs: beispielTabs(['Einwilligung', 'Beitragskonto', 'Mitglied', '_Konfig']) });
+}
+
+test('einfuegenViele: feste Zahl an Tabellenzugriffen (5 vs. 500), IDs fortlaufend, Zähler erhöht', () => {
+  const messe = (n) => {
+    const { f, g } = massenAufbau();
+    g.DB.zaehlerZuruecksetzen();
+    const vorherFake = f.zaehler.sheets;
+    const neu = rein(g.DB.mitSperre(() => g.DB.einfuegenViele('Einwilligung', einwilligungen(n), KTX)));
+    // DB-Zähler = Tabellenzugriffe laut Messung; Fake-Zähler zählt zusätzlich jede Range-Methode einzeln
+    return { zugriffe: g.DB.zaehler().sheets, fake: f.zaehler.sheets - vorherFake, neu, f, g };
+  };
+  const klein = messe(5), gross = messe(500);
+  assert.strictEqual(klein.zugriffe, gross.zugriffe, 'Zugriffe hängen von der Anzahl ab');
+  assert.strictEqual(klein.fake, gross.fake, 'Fake-Aufrufe hängen von der Anzahl ab');
+  assert.ok(gross.zugriffe <= 16, 'Zugriffe: ' + gross.zugriffe);   // inkl. Öffnen, Sperr-Konfig, flush
+  const ids = gross.neu.map(x => x.einwilligung_id);
+  assert.deepStrictEqual(ids, ids.map((_, i) => ids[0] + i));
+  assert.ok(gross.neu.every(x => x.version === 1 && x.geaendert_von === KTX.email));
+  const zaehler = gross.f.daten('_Konfig').find(z => z[0] === 'next_id_Einwilligung');
+  assert.strictEqual(Number(zaehler[1]), ids[ids.length - 1] + 1);
+  assert.strictEqual(gross.f.daten('Einwilligung').length - 1, 8 + 500);
+});
+
+test('einfuegenViele: Feldfehler mit Feldliste und Eintragsnummer, nichts geschrieben', () => {
+  const { f, g } = massenAufbau();
+  const vorher = f.daten('Einwilligung').length;
+  const liste = einwilligungen(3);
+  liste[1].art = 'gibt es nicht';
+  const e = wirft(() => g.DB.mitSperre(() => g.DB.einfuegenViele('Einwilligung', liste, KTX)), 'fachlich');
+  assert.ok(e.felder && e.felder[0].feld === 'art');
+  assert.match(e.felder[0].meldung, /Eintrag 2/);
+  assert.strictEqual(f.daten('Einwilligung').length, vorher);
+});
+
+test('einfuegenViele: Eindeutigkeit gegen Bestand und innerhalb der neuen Datensätze', () => {
+  const { g } = massenAufbau();
+  const k = { kontoinhaber_name: 'Test', zahlweg: 'Lastschrift', iban: 'DE89370400440532013000', mandatsreferenz: 'TSV-X-1', mandatsdatum: '2026-01-01' };
+  wirft(() => g.DB.mitSperre(() => g.DB.einfuegenViele('Beitragskonto', [k, Object.assign({}, k)], KTX)), 'fachlich');
+  wirft(() => g.DB.mitSperre(() => g.DB.einfuegenViele('Beitragskonto', [Object.assign({}, k, { mandatsreferenz: 'TSV-2001-1042' })], KTX)), 'fachlich');
+});
+
+test('Eindeutigkeit: leere Schlüssel kollidieren nicht (zwei Überweisungskonten ohne Mandatsreferenz)', () => {
+  const { g } = massenAufbau();
+  const ueberweisung = n => ({ kontoinhaber_name: 'Überweiser ' + n, zahlweg: 'Überweisung', aktiv: true });
+  // Einzeln (DB.einfuegen) – im Bestand gibt es bereits Konto 3 ohne Mandatsreferenz
+  g.DB.mitSperre(() => g.DB.einfuegen('Beitragskonto', ueberweisung(1), KTX));
+  g.DB.mitSperre(() => g.DB.einfuegen('Beitragskonto', ueberweisung(2), KTX));
+  // Sammelweise
+  const neu = rein(g.DB.mitSperre(() => g.DB.einfuegenViele('Beitragskonto', [ueberweisung(3), ueberweisung(4)], KTX)));
+  assert.strictEqual(neu.length, 2);
+});
+
+test('aktualisiereViele: feste Zugriffe, Versionen, Formelschutz für mitgeschriebene Zeilen, Konflikt schreibt nichts', () => {
+  const { f, g } = massenAufbau();
+  const neu = rein(g.DB.mitSperre(() => g.DB.einfuegenViele('Einwilligung', einwilligungen(500, true), KTX)));
+  // jede zweite Zeile ändern → viele verstreute Läufe → ein Block
+  const liste = neu.filter((_, i) => i % 2 === 0).map(x => ({ id: x.einwilligung_id, version: 1, aenderungen: { widerrufen_am: '2026-10-01' } }));
+  g.DB.zaehlerZuruecksetzen();
+  const erg = rein(g.DB.mitSperre(() => g.DB.aktualisiereViele('Einwilligung', liste, KTX)));
+  const zugriffe = g.DB.zaehler().sheets;
+  assert.strictEqual(erg.length, 250);
+  assert.ok(zugriffe <= 8, 'Zugriffe: ' + zugriffe);
+  assert.ok(erg.every(e => e.neu.version === 2 && e.diff[0].feld === 'widerrufen_am'));
+  // unveränderte, aber mitgeschriebene Zeile: Formeltext bleibt Text (mit Schutz-Apostroph im Sheet)
+  const roh = f.daten('Einwilligung');
+  const iUmfang = roh[0].indexOf('umfang'), iId = roh[0].indexOf('einwilligung_id');
+  const unveraendert = roh.find(z => z[iId] === neu[1].einwilligung_id);
+  assert.strictEqual(unveraendert[iUmfang], "'=SUMME(A1)");
+  // Konflikt: zweiter Datensatz mit veralteter Version → nichts geschrieben
+  const stand = JSON.stringify(f.daten('Einwilligung'));
+  const e = wirft(() => g.DB.mitSperre(() => g.DB.aktualisiereViele('Einwilligung', [
+    { id: neu[1].einwilligung_id, version: 1, aenderungen: { umfang: 'neu' } },
+    { id: neu[0].einwilligung_id, version: 1, aenderungen: { umfang: 'neu' } }]), KTX), 'konflikt');
+  assert.strictEqual(e.aktuell.einwilligung_id, neu[0].einwilligung_id);
+  assert.strictEqual(JSON.stringify(f.daten('Einwilligung')), stand);
+  // ohne Version (Systemlauf) und ohne inhaltliche Änderung → leeres Ergebnis
+  assert.deepStrictEqual(rein(g.DB.mitSperre(() => g.DB.aktualisiereViele('Einwilligung', [{ id: neu[1].einwilligung_id, aenderungen: { umfang: '=SUMME(A1)' } }], KTX))), []);
+  wirft(() => g.DB.mitSperre(() => g.DB.aktualisiereViele('Einwilligung', [{ id: 999999, aenderungen: { umfang: 'x' } }], KTX)), 'fachlich');
+});
+
+test('Massenschreiben und entfernen nur unter Sperre', () => {
+  const { g } = massenAufbau();
+  assert.throws(() => g.DB.einfuegenViele('Einwilligung', einwilligungen(1), KTX), /mitSperre/);
+  assert.throws(() => g.DB.aktualisiereViele('Einwilligung', [{ id: 1, aenderungen: {} }], KTX), /mitSperre/);
+  assert.throws(() => g.DB.entfernen('Einwilligung', 1), /mitSperre/);
+});
+
+test('entfernen: Zeilen über ID löschen, zusammenhängende in einem Schritt; alle Zeilen löschbar', () => {
+  const { f, g } = massenAufbau();
+  const vorher = f.daten('Einwilligung').length - 1;
+  const n = g.DB.mitSperre(() => g.DB.entfernen('Einwilligung', [2, 3, 4, 7]));
+  assert.strictEqual(n, 4);
+  const ids = f.daten('Einwilligung').slice(1).map(z => z[0]);
+  assert.strictEqual(ids.length, vorher - 4);
+  assert.ok(!ids.includes(3) && ids.includes(5));
+  assert.strictEqual(f.zaehler.deleteRows, 1);
+  assert.strictEqual(g.DB.mitSperre(() => g.DB.entfernen('Einwilligung', ids)), ids.length);
+  assert.strictEqual(f.daten('Einwilligung').length, 1, 'nur die Kopfzeile bleibt');
+});

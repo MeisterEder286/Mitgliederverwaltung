@@ -42,19 +42,12 @@ var Verwaltung = (function () {
   function hat(liste, x) { return (liste || []).indexOf(x) >= 0; }
 
   /**
-   * Zahlfelder (Ganzzahl, FK, Dezimal) aus Formularen kommen oft als Text ("3", "5,00"). Hier in Zahlen wandeln,
-   * damit die Typprüfung in DB/Werte greift; leere Texte werden zu null. Andere Felder bleiben unverändert.
+   * Formulareingaben typgerecht wandeln (gemeinsame Hilfe Werte.ausFormular): Zahlen aus Text, '' → null.
+   * Schreibt das Ergebnis in `felder` zurück (Aufrufer nutzen teils das übergebene Objekt weiter).
    */
   function zahlenNormalisieren(tab, felder) {
-    var spalten = {};
-    Schema.TABELLEN[tab].spalten.forEach(function (s) { spalten[s.name] = s.typ; });
-    Object.keys(felder).forEach(function (k) {
-      var typ = spalten[k], v = felder[k];
-      if ((typ === 'Ganzzahl' || typ === 'FK' || typ === 'Dezimal') && typeof v === 'string') {
-        var t = v.trim().replace(',', '.');
-        felder[k] = t === '' ? null : (isFinite(Number(t)) ? Number(t) : v);
-      }
-    });
+    var t = Werte.ausFormular(tab, felder);
+    Object.keys(t).forEach(function (k) { felder[k] = t[k]; });
     return felder;
   }
   function norm(e) { return String(e || '').trim().toLowerCase(); }

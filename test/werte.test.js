@@ -92,3 +92,13 @@ test('Formelschutz: Texte mit = + - @ am Anfang werden beim Schreiben entschärf
   assert.strictEqual(g.Werte.zelleLesen('+49 170', sp), '+49 170');
   assert.strictEqual(g.Werte.zelleLesen("'Apostroph", sp), "'Apostroph");
 });
+
+test('ausFormular: Texte aus Formularen typgerecht wandeln', () => {
+  const g = ladeProjekt({});
+  const o = rein(g.Werte.ausFormular('Beitragsgemeinschaft', { festbetrag: '1.234,50', bezeichnung: '  ', aktiv: 'ja', unbekannt: '' }));
+  assert.deepStrictEqual(o, { festbetrag: 1234.5, bezeichnung: null, aktiv: true, unbekannt: null });
+  const m = rein(g.Werte.ausFormular('Mitglied', { beitragskonto_id: '7', geburtsdatum: '3.5.2004', plz: '084061', ehrenmitglied: false, version: 'x' }));
+  assert.deepStrictEqual(m, { beitragskonto_id: 7, geburtsdatum: '2004-05-03', plz: '084061', ehrenmitglied: false, version: 'x' });
+  assert.strictEqual(g.Werte.ausFormular('Beitragsart', { betrag: '5,00' }).betrag, 5);
+  assert.strictEqual(g.Werte.ausFormular('Beitragsart', { betrag: 'abc' }).betrag, 'abc');
+});

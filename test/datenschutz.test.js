@@ -17,19 +17,8 @@ const VEREIN = erzeugeVerein({ mitglieder: 300 });
 
 function kopie(tabs) { const o = {}; Object.keys(tabs).forEach(t => { o[t] = tabs[t].map(z => z.slice()); }); return o; }
 
-/** Fakes um deleteRow ergänzen (die gemeinsamen Fakes kennen es nicht – nur hier im Test). */
-function mitDeleteRow(f) {
-  const orig = f.datei.getSheetByName.bind(f.datei);
-  f.datei.getSheetByName = (n) => {
-    const b = orig(n);
-    if (b && !b.deleteRow) b.deleteRow = (nr) => { f.daten(n).splice(nr - 1, 1); };
-    return b;
-  };
-  return f;
-}
-
 function aufbau(email, tabs) {
-  const f = mitDeleteRow(erzeugeFakes({ tabs: tabs || kopie(VEREIN.tabs), email: email || MV, eigentuemer: MV }));
+  const f = erzeugeFakes({ tabs: tabs || kopie(VEREIN.tabs), email: email || MV, eigentuemer: MV });
   return { f, g: ladeProjekt(f.globale) };
 }
 function objekte(f, tab) { const d = f.daten(tab); return d.slice(1).map(z => Object.fromEntries(d[0].map((k, i) => [k, z[i]]))); }

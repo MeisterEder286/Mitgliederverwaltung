@@ -16,6 +16,8 @@
  *    den neuen Stand sieht.
  *  - Optimistische Sperre: Jede bearbeitbare Zeile hat eine Spalte "version". Wer ändert, schickt die
  *    Version mit, die er gesehen hat. Passt sie nicht mehr, gibt es Fehler.konflikt mit dem aktuellen Stand.
+ *  - Massenschreiben (einfuegenViele, aktualisiereViele) mit fester Zahl an Tabellenzugriffen, unabhängig von
+ *    der Zahl der Datensätze; entfernen nur für Löschkonzept und technische Bereinigung.
  *  - Der Zähler sheets zählt jeden Aufruf an SpreadsheetApp bzw. die Sheets-API (Messung, Auftragspunkt 8).
  */
 var DB = (function () {
@@ -138,6 +140,9 @@ var DB = (function () {
     if (!gruppen.length) return;
     var bestand = lese([tab])[tab];
     gruppen.forEach(function (g) {
+      // Sind ALLE Schlüsselfelder des neuen Datensatzes leer (z. B. Überweisungskonto ohne Mandatsreferenz),
+      // gibt es nichts zu vergleichen. Bei teilweise leeren Gruppen (Benutzer ohne abteilung_id) gilt leer = leer.
+      if (g.every(function (f) { return istLeer(obj[f]); })) return;
       var doppelt = bestand.some(function (z) {
         if (t.idSpalte && obj[t.idSpalte] !== undefined && String(z[t.idSpalte]) === String(obj[t.idSpalte])) return false;
         return g.every(function (f) {
@@ -153,6 +158,8 @@ var DB = (function () {
       }
     });
   }
+
+  function istLeer(v) { return v === null || v === undefined || v === ''; }
 
   function fachlichAusPruefung(fehler) {
     // Feldliste mitgeben: der Browser zeigt die Meldungen direkt am jeweiligen Eingabefeld (App.formular).
@@ -319,6 +326,239 @@ var DB = (function () {
     sheetsAufrufe++;
   }
 
+
+  // ================================================================== Massenschreiben
+  // Für Sammelvorgänge (Sollstellungslauf, Ehrungen übernehmen, nächtliche Wartung). DB.einfuegen/aktualisieren
+  // brauchen je Datensatz rund zehn Tabellenzugriffe; die folgenden Funktionen eine feste Zahl – unabhängig davon,
+  // ob 5 oder 500 Datensätze geschrieben werden. Nur innerhalb von DB.mitSperre.
+
+  /** Liest den Wert-Block eines Tabs: { kopf, werte (ohne Kopfzeile, Rohwerte), spalten }. */
+  function leseBlock(b) {
+    var letzte = b.getLastRow(), spalten = b.getLastColumn();
+    sheetsAufrufe += 2;
+    if (spalten < 1) throw intern('Kopfzeile fehlt in ' + b.getName());
+    var alle = b.getRange(1, 1, Math.max(letzte, 1), spalten).getValues();
+    sheetsAufrufe++;
+    return { kopf: alle[0].map(function (k) { return String(k).trim(); }), werte: alle.slice(1), spalten: spalten, letzte: letzte };
+  }
+
+  /** Reserviert `anzahl` fortlaufende IDs aus _Konfig.next_id_<Tab> (nie kleiner als größte vorhandene ID + 1). */
+  function reserviereIds(tab, anzahl, bestand) {
+    var idSpalte = tabSchema(tab).idSpalte;
+    var maxBestand = 0;
+    (bestand || []).forEach(function (z) { var v = Number(z[idSpalte]); if (v > maxBestand) maxBestand = v; });
+    var k = blatt('_Konfig');
+    var blk = leseBlock(k);
+    var sS = blk.kopf.indexOf('schluessel'), sW = blk.kopf.indexOf('wert');
+    var name = 'next_id_' + tab;
+    for (var i = 0; i < blk.werte.length; i++) {
+      if (String(blk.werte[i][sS]).trim() !== name) continue;
+      var start = Math.max(Number(blk.werte[i][sW]) || 1, maxBestand + 1);
+      k.getRange(i + 2, sW + 1).setValue(String(start + anzahl));
+      sheetsAufrufe++;
+      return start;
+    }
+    var erste = maxBestand + 1;
+    anhaengen(k, [blk.kopf.map(function (h) {
+      return h === 'schluessel' ? name : h === 'wert' ? String(erste + anzahl) : h === 'beschreibung' ? 'ID-Zähler — nur vom Skript erhöhen' : '';
+    })], blk.letzte);
+    return erste;
+  }
+
+  /** Schlüssel einer Eindeutigkeitsgruppe; null, wenn alle Felder leer sind (dann keine Prüfung). */
+  function gruppenSchluessel(gruppe, z) {
+    var w = gruppe.map(function (f) { return istLeer(z[f]) ? '' : String(z[f]); });
+    return w.every(function (x) { return x === ''; }) ? null : w.join('\u0001');
+  }
+
+  /**
+   * Legt viele Datensätze an: ein Lesen (Eindeutigkeit), ein ID-Block aus _Konfig, EIN Schreibzugriff.
+   * Feldfehler kommen als Fehler.fachlich mit Feldliste; die Meldung nennt die Nummer des Eintrags (1-basiert).
+   * Liefert die gespeicherten Objekte (mit ID, version = 1).
+   */
+  function einfuegenViele(tab, objekte, ktx) {
+    nurInSperre('einfuegenViele');
+    if (!objekte || !objekte.length) return [];
+    vorratLeeren();
+    var t = tabSchema(tab);
+    var sauber = objekte.map(function (o) { return bereinigt(tab, o); });
+    var fehler = [];
+    sauber.forEach(function (o, i) {
+      Werte.pruefe(tab, o).forEach(function (f) {
+        fehler.push({ feld: f.feld, meldung: (sauber.length > 1 ? 'Eintrag ' + (i + 1) + ': ' : '') + f.meldung });
+      });
+    });
+    fachlichAusPruefung(fehler);
+    var bestand = lese([tab])[tab] || [];
+    (t.eindeutig || []).forEach(function (gruppe) {
+      var gesehen = {};
+      bestand.forEach(function (z) { var k = gruppenSchluessel(gruppe, z); if (k) gesehen[k] = true; });
+      sauber.forEach(function (o) {
+        var k = gruppenSchluessel(gruppe, o);
+        if (!k) return;
+        if (gesehen[k]) {
+          throw Fehler.fachlich('Diesen Eintrag gibt es bereits (gleiche Angaben bei: ' + gruppe.map(Werte.feldname).join(', ') + ').',
+            gruppe.map(function (f) { return { feld: f, meldung: 'Bereits vergeben.' }; }));
+        }
+        gesehen[k] = true;
+      });
+    });
+    var start = t.idSpalte ? reserviereIds(tab, sauber.length, bestand) : null;
+    var zeit = jetzt();
+    var b = blatt(tab);
+    var kopf = kopfLesen(b);
+    var zeilen = sauber.map(function (o, i) {
+      var neu = {};
+      Object.keys(o).forEach(function (k) { neu[k] = o[k]; });
+      if (t.idSpalte) neu[t.idSpalte] = start + i;
+      if (hatSpalte(tab, 'version')) neu.version = 1;
+      if (hatSpalte(tab, 'geaendert_am')) neu.geaendert_am = zeit;
+      if (hatSpalte(tab, 'geaendert_von')) neu.geaendert_von = (ktx && ktx.email) || null;
+      return Werte.objektZuZeile(kopf, neu, tab);
+    });
+    anhaengen(b, zeilen);
+    return zeilen.map(function (z) { return Werte.zeileZuObjekt(kopf, z, tab); });
+  }
+
+  /** Texte in unveränderten, aber mitgeschriebenen Zeilen gegen Formel-Ausführung schützen. */
+  function formelschutzRoh(zeile) {
+    return zeile.map(function (v) { return typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v; });
+  }
+
+  /**
+   * Ändert viele Datensätze eines Tabs: liste = [{ id, aenderungen, version }].
+   *   version null/undefined → keine Versionsprüfung (nur für Läufe des Systems, z. B. nächtliche Wartung).
+   * Ein Lesezugriff auf den Tab; geschrieben werden zusammenhängende Läufe geänderter Zeilen (bei sehr vielen
+   * verstreuten Zeilen ein einziger Block von der ersten bis zur letzten, unveränderte Zeilen darin unverändert).
+   * Erster Versionskonflikt → Fehler.konflikt(aktuell); nichts wird geschrieben.
+   * Liefert [{ alt, neu, diff }] nur für tatsächlich geänderte Datensätze.
+   */
+  function aktualisiereViele(tab, liste, ktx) {
+    nurInSperre('aktualisiereViele');
+    if (!liste || !liste.length) return [];
+    vorratLeeren();
+    var t = tabSchema(tab);
+    if (!t.idSpalte) throw intern('Tab ' + tab + ' hat keine ID-Spalte');
+    var b = blatt(tab);
+    var blk = leseBlock(b);
+    var kopf = blk.kopf, werte = blk.werte;
+    var sId = kopf.indexOf(t.idSpalte);
+    if (sId < 0) throw intern('ID-Spalte ' + t.idSpalte + ' fehlt in ' + tab);
+    var nachId = {};
+    werte.forEach(function (z, i) { if (z[sId] !== '') nachId[String(z[sId])] = i; });
+    var fehlend = liste.filter(function (a) { return nachId[String(a.id)] === undefined; }).map(function (a) { return a.id; });
+    if (fehlend.length) {
+      throw Fehler.fachlich('Einige Datensätze wurden nicht gefunden (' + fehlend.slice(0, 5).join(', ') + '). Bitte die Ansicht neu laden.');
+    }
+    var zeit = jetzt();
+    var ergebnis = [], geaendert = {}, neueZeilen = {};
+    liste.forEach(function (a) {
+      var i = nachId[String(a.id)];
+      var basisZeile = neueZeilen[i] || werte[i];
+      var alt = Werte.zeileZuObjekt(kopf, basisZeile, tab);
+      if (a.version !== null && a.version !== undefined && hatSpalte(tab, 'version') && Number(alt.version || 0) !== Number(a.version)) {
+        throw Fehler.konflikt(alt);
+      }
+      var sauber = bereinigt(tab, a.aenderungen);
+      fachlichAusPruefung(Werte.pruefe(tab, sauber, { teilweise: true }));
+      var d = Werte.diff(tab, alt, sauber);
+      if (!d.length) return;
+      var neu = {};
+      Object.keys(alt).forEach(function (k) { neu[k] = alt[k]; });
+      Object.keys(sauber).forEach(function (k) { neu[k] = sauber[k]; });
+      if (hatSpalte(tab, 'version')) neu.version = Number(alt.version || 0) + 1;
+      if (hatSpalte(tab, 'geaendert_am')) neu.geaendert_am = zeit;
+      if (hatSpalte(tab, 'geaendert_von')) neu.geaendert_von = (ktx && ktx.email) || null;
+      neueZeilen[i] = Werte.objektZuZeile(kopf, neu, tab, basisZeile);
+      geaendert[i] = true;
+      ergebnis.push({ alt: alt, neu: Werte.zeileZuObjekt(kopf, neueZeilen[i], tab), diff: d });
+    });
+    // Eindeutigkeit der geänderten Datensätze gegen den Bestand (im Speicher)
+    (t.eindeutig || []).forEach(function (gruppe) {
+      if (!ergebnis.some(function (e) { return e.diff.some(function (d) { return gruppe.indexOf(d.feld) >= 0; }); })) return;
+      var gesehen = {};
+      werte.forEach(function (z, i) {
+        var o = Werte.zeileZuObjekt(kopf, neueZeilen[i] || z, tab);
+        var k = gruppenSchluessel(gruppe, o);
+        if (!k) return;
+        if (gesehen[k]) {
+          throw Fehler.fachlich('Diesen Eintrag gibt es bereits (gleiche Angaben bei: ' + gruppe.map(Werte.feldname).join(', ') + ').',
+            gruppe.map(function (f) { return { feld: f, meldung: 'Bereits vergeben.' }; }));
+        }
+        gesehen[k] = true;
+      });
+    });
+    var idx = Object.keys(geaendert).map(Number).sort(function (x, y) { return x - y; });
+    if (!idx.length) return ergebnis;
+    var laeufe = [];
+    idx.forEach(function (i) {
+      var l = laeufe[laeufe.length - 1];
+      if (l && l.bis === i - 1) l.bis = i; else laeufe.push({ von: i, bis: i });
+    });
+    function zeileFuer(i) { return geaendert[i] ? neueZeilen[i] : formelschutzRoh(werte[i]); }
+    if (laeufe.length > 10) {
+      var von = idx[0], bis = idx[idx.length - 1], block = [];
+      for (var r = von; r <= bis; r++) block.push(zeileFuer(r));
+      b.getRange(von + 2, 1, block.length, blk.spalten).setValues(block);
+      sheetsAufrufe++;
+    } else {
+      laeufe.forEach(function (l) {
+        var blockL = [];
+        for (var r2 = l.von; r2 <= l.bis; r2++) blockL.push(zeileFuer(r2));
+        b.getRange(l.von + 2, 1, blockL.length, blk.spalten).setValues(blockL);
+        sheetsAufrufe++;
+      });
+    }
+    return ergebnis;
+  }
+
+  /**
+   * Entfernt Datensätze (Zeilen) über ihre ID – nur für das Löschkonzept (Stufe 3) und technische Bereinigung.
+   * ids: eine ID oder eine Liste. Nur innerhalb von DB.mitSperre. Liefert die Anzahl entfernter Zeilen.
+   * Zusammenhängende Zeilen werden mit einem deleteRows-Aufruf entfernt, von unten nach oben.
+   */
+  function entfernen(tab, ids) {
+    nurInSperre('entfernen');
+    var liste = Array.isArray(ids) ? ids : [ids];
+    if (!liste.length) return 0;
+    vorratLeeren();
+    var t = tabSchema(tab);
+    if (!t.idSpalte) throw intern('Tab ' + tab + ' hat keine ID-Spalte');
+    var b = blatt(tab);
+    var kopf = kopfLesen(b);
+    var sp = kopf.indexOf(t.idSpalte);
+    var letzte = b.getLastRow();
+    sheetsAufrufe++;
+    if (sp < 0 || letzte < 2) return 0;
+    var werte = b.getRange(2, sp + 1, letzte - 1, 1).getValues();
+    sheetsAufrufe++;
+    var gesucht = {};
+    liste.forEach(function (i) { gesucht[String(i)] = true; });
+    var zeilen = [];
+    werte.forEach(function (w, i) { if (w[0] !== '' && gesucht[String(w[0])]) zeilen.push(i + 2); });
+    return zeilenEntfernen(b, zeilen);
+  }
+
+  /** Entfernt Zeilen (1-basierte Nummern) – zusammenhängende Läufe je mit einem deleteRows, von unten nach oben. */
+  function zeilenEntfernen(b, zeilen) {
+    if (!zeilen.length) return 0;
+    zeilen = zeilen.slice().sort(function (x, y) { return y - x; });
+    // Sheets erlaubt nicht, alle nicht fixierten Zeilen zu löschen [A]: dann vorher eine leere Zeile anhängen.
+    var max = b.getMaxRows();
+    sheetsAufrufe++;
+    if (zeilen.length >= max - 1) { b.insertRowsAfter(max, 1); sheetsAufrufe++; }
+    var i = 0;
+    while (i < zeilen.length) {
+      var unten = zeilen[i], oben = unten;
+      while (i + 1 < zeilen.length && zeilen[i + 1] === oben - 1) { i++; oben = zeilen[i]; }
+      if (unten === oben) b.deleteRow(oben); else b.deleteRows(oben, unten - oben + 1);
+      sheetsAufrufe++;
+      i++;
+    }
+    vorratLeeren();
+    return zeilen.length;
+  }
+
   /** Für andere Module (Protokoll, Messung), die selbst auf ein Blatt zugreifen. */
   function zaehle(n) { sheetsAufrufe += (n || 1); }
 
@@ -330,6 +570,10 @@ var DB = (function () {
     einfuegen: function (tab, obj, ktx) { try { return einfuegen(tab, obj, ktx); } finally { vorratLeeren(); } },
     aktualisieren: function (tab, id, a, v, ktx) { try { return aktualisieren(tab, id, a, v, ktx); } finally { vorratLeeren(); } },
     neueId: function (tab) { try { return neueId(tab); } finally { vorratLeeren(); } },
+    einfuegenViele: function (tab, o, ktx) { try { return einfuegenViele(tab, o, ktx); } finally { vorratLeeren(); } },
+    aktualisiereViele: function (tab, l, ktx) { try { return aktualisiereViele(tab, l, ktx); } finally { vorratLeeren(); } },
+    entfernen: function (tab, ids) { try { return entfernen(tab, ids); } finally { vorratLeeren(); } },
+    zeilenEntfernen: function (b, zeilen) { nurInSperre('zeilenEntfernen'); try { return zeilenEntfernen(b, zeilen); } finally { vorratLeeren(); } },
     zaehler: zaehler,
     zaehlerZuruecksetzen: zaehlerZuruecksetzen,
     zaehle: zaehle,

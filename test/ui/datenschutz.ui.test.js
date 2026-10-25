@@ -7,12 +7,6 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { starteOberflaeche } = require('./harness');
 
-/** deleteRow für die Fakes (nur in diesem Test, die gemeinsamen Fakes kennen es nicht). */
-function mitDeleteRow(ui) {
-  const orig = ui.f.datei.getSheetByName.bind(ui.f.datei);
-  ui.f.datei.getSheetByName = (n) => { const b = orig(n); if (b && !b.deleteRow) b.deleteRow = (nr) => { ui.f.daten(n).splice(nr - 1, 1); }; return b; };
-}
-
 test('Einwilligung erfassen und Anfrage mit Auskunft', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   try {
@@ -50,7 +44,6 @@ test('Einwilligung erfassen und Anfrage mit Auskunft', async () => {
 
 test('Löschliste: anonymisieren nur mit Bestätigungswort; Protokoll zeigt den Vorgang', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
-  mitDeleteRow(ui);
   try {
     const p = ui.page;
     await p.evaluate(() => App.zeige('datenschutz', { reiter: 'loeschliste' }));

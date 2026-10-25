@@ -22,6 +22,8 @@
  *   zeitzone     Standard 'Europe/Berlin'
  *   jetzt        Date für Utilities.formatDate(new Date()) ist NICHT steuerbar; Tests prüfen das Format.
  *
+ * Zeilen: deleteRow(nr) / deleteRows(nr, anzahl) entfernen Zeilen (Raster schrumpft wie in Sheets).
+ *
  * Rückgabe: { globale, datei, daten(tab), zaehler, cache, properties, trigger }
  *   zaehler.sheets  alle Aufrufe an SpreadsheetApp/Sheet/Range/Sheets-API (Builder ausgenommen)
  *   zaehler.<methode>  Aufrufe je Methode, z. B. batchGet, getValues, setValues, appendRow, openById
@@ -131,6 +133,15 @@ function erzeugeFakes(opt) {
       getMaxColumns() { zaehle('getMaxColumns'); return groesse[name].spalten; },
       insertRowsAfter(nach, anzahl) { zaehle('insertRowsAfter'); groesse[name].zeilen += anzahl; return this; },
       insertColumnsAfter(nach, anzahl) { zaehle('insertColumnsAfter'); groesse[name].spalten += anzahl; return this; },
+      // Zeilen löschen wie in Sheets: nachfolgende Zeilen rücken nach oben, das Raster schrumpft entsprechend.
+      deleteRow(nr) { zaehle('deleteRow'); return this.__entferne(nr, 1); },
+      deleteRows(nr, anzahl) { zaehle('deleteRows'); return this.__entferne(nr, anzahl); },
+      __entferne(nr, anzahl) {
+        if (nr < 1 || nr + anzahl - 1 > groesse[name].zeilen) throw new Error('Fake: Zeilen außerhalb der Tabelle');
+        tabs[name].splice(nr - 1, anzahl);
+        groesse[name].zeilen -= anzahl;
+        return this;
+      },
       getRange(r, c, nr, nc) { zaehle('getRange'); return bereich(name, r, c, nr, nc); },
       getDataRange() {
         zaehle('getDataRange');
@@ -344,6 +355,11 @@ function erzeugeFakes(opt) {
         timeBased() { t.art = 'zeit'; return b; },
         everyHours(n) { t.stunden = n; return b; },
         everyMinutes(n) { t.minuten = n; return b; },
+        everyDays(n) { t.tage = n; return b; },
+        atHour(h) { t.stunde = h; return b; },
+        nearMinute(m) { t.minute = m; return b; },
+        inTimezone(z) { t.zeitzone = z; return b; },
+        after(ms) { t.nachMs = ms; return b; },
         create() { trigger.push(t); return t; }
       };
       return b;

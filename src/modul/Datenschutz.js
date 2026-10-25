@@ -42,19 +42,12 @@ var Datenschutz = (function () {
   function hat(liste, x) { return (liste || []).indexOf(x) >= 0; }
 
   /**
-   * Zahlfelder (Ganzzahl, FK, Dezimal) aus Formularen kommen oft als Text ("3", "5,00"). Hier in Zahlen wandeln,
-   * damit die Typprüfung in DB/Werte greift; leere Texte werden zu null. Andere Felder bleiben unverändert.
+   * Formulareingaben typgerecht wandeln (gemeinsame Hilfe Werte.ausFormular): Zahlen aus Text, '' → null.
+   * Schreibt das Ergebnis in `felder` zurück (Aufrufer nutzen teils das übergebene Objekt weiter).
    */
   function zahlenNormalisieren(tab, felder) {
-    var spalten = {};
-    Schema.TABELLEN[tab].spalten.forEach(function (s) { spalten[s.name] = s.typ; });
-    Object.keys(felder).forEach(function (k) {
-      var typ = spalten[k], v = felder[k];
-      if ((typ === 'Ganzzahl' || typ === 'FK' || typ === 'Dezimal') && typeof v === 'string') {
-        var t = v.trim().replace(',', '.');
-        felder[k] = t === '' ? null : (isFinite(Number(t)) ? Number(t) : v);
-      }
-    });
+    var t = Werte.ausFormular(tab, felder);
+    Object.keys(t).forEach(function (k) { felder[k] = t[k]; });
     return felder;
   }
 
@@ -80,32 +73,10 @@ var Datenschutz = (function () {
 
   // ------------------------------------------------------------------ Zeilen löschen (nur Löschkonzept)
 
-  function kopfVon(b) {
-    var spalten = b.getLastColumn();
-    var kopf = b.getRange(1, 1, 1, spalten).getValues()[0].map(function (k) { return String(k).trim(); });
-    DB.zaehle(2);
-    return kopf;
-  }
-
-  /** Löscht die Zeilen mit diesen IDs aus einem Tab. Nur innerhalb DB.mitSperre. Liefert die Anzahl. */
+  /** Löscht die Zeilen mit diesen IDs aus einem Tab (DB.entfernen). Nur innerhalb DB.mitSperre. Liefert die Anzahl. */
   function zeilenLoeschen_(tab, ids) {
     if (!ids || !ids.length) return 0;
-    var idSpalte = Schema.TABELLEN[tab].idSpalte;
-    var b = DB.blatt(tab);
-    var kopf = kopfVon(b);
-    var sp = kopf.indexOf(idSpalte);
-    var letzte = b.getLastRow();
-    DB.zaehle(1);
-    if (sp < 0 || letzte < 2) return 0;
-    var werte = b.getRange(2, sp + 1, letzte - 1, 1).getValues();
-    DB.zaehle(1);
-    var gesucht = {};
-    ids.forEach(function (i) { gesucht[String(i)] = true; });
-    var zeilen = [];
-    werte.forEach(function (w, i) { if (w[0] !== '' && gesucht[String(w[0])]) zeilen.push(i + 2); });
-    zeilen.sort(function (a, c) { return c - a; }).forEach(function (nr) { b.deleteRow(nr); DB.zaehle(1); });
-    DB.vorratLeeren();
-    return zeilen.length;
+    return DB.entfernen(tab, ids);
   }
 
   // ------------------------------------------------------------------ Übersicht (Startseite)
@@ -331,6 +302,16 @@ var Datenschutz = (function () {
     };
   }
 
+  function kopfVon(b) {
+    var spalten = b.getLastColumn();
+    var kopf = b.getRange(1, 1, 1, spalten).getValues()[0].map(function (k) { return String(k).trim(); });
+    DB.zaehle(2);
+    return kopf;
+  }
+
+  /** Unverändert zurückgeschriebene Texte gegen Formel-Ausführung schützen (Werte beginnend mit = + - @). */
+  function schutz(v) { return typeof v === 'string' && /^[=+\-@]/.test(v) ? "'" + v : v; }
+
   /** Protokollzeilen: alt_wert/neu_wert leeren, bereinigt_am setzen. Liefert die Anzahl. Nur in mitSperre. */
   function protokollLeeren_(ids) {
     if (!ids || !ids.length) return 0;
@@ -352,8 +333,8 @@ var Datenschutz = (function () {
     });
     if (n) {
       // nur die drei betroffenen Spalten zurückschreiben (Zeitstempel und Rest bleiben unangetastet)
-      b.getRange(2, iAlt + 1, werte.length, 1).setValues(werte.map(function (z) { return [z[iAlt]]; }));
-      b.getRange(2, iNeu + 1, werte.length, 1).setValues(werte.map(function (z) { return [z[iNeu]]; }));
+      b.getRange(2, iAlt + 1, werte.length, 1).setValues(werte.map(function (z) { return [schutz(z[iAlt])]; }));
+      b.getRange(2, iNeu + 1, werte.length, 1).setValues(werte.map(function (z) { return [schutz(z[iNeu])]; }));
       b.getRange(2, iBer + 1, werte.length, 1).setValues(werte.map(function (z) { return [z[iBer]]; }));
       DB.zaehle(3);
     }
