@@ -12,6 +12,8 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 | 10/2026 | Ehrungen | Mitgliedsjubiläum ab **letztem Eintritt**; ein Austritt setzt zurück. Umschaltung auf „gesamt“ bleibt als `_Konfig.ehrung_zaehlweise` erhalten | Johann |
 | 10/2026 | Führungszeugnis | Abteilungsleiter **dürfen FZ-Einsicht erfassen** (`qualifikation_erfassen`) | Johann |
 | 10/2026 | `Daten16` | `Zahlung` enthält nur `NG` (= beim Einzug nicht gezahlt) → `Sollstellung.status = ruecklastschrift`; `Personalien` ist nur ein Access-Formular; Funktionen gibt es im Altbestand nicht | Johann |
+| 10/2026 | `Daten16.Zahler` | enthält die **MitglNr** des Zahlers → Grundlage der Konto-Cluster in der Migration | Johann |
+| 10/2026 | Reihenfolge | erst das komplette System (Phasen 3–5), **Migration ganz am Schluss** | Johann |
 
 ## Vorläufig gesetzt (noch zu bestätigen, im Code als `// OFFEN:` markiert)
 
