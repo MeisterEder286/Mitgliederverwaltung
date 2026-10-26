@@ -6,6 +6,8 @@ Access-XML läuft parallel weiter (Rückfall-Mail, Datei-Import).
 
 Fertig: WebApp-Teil, Eingangs-Skript (`eingang/`), WordPress-Module zum Vorbauen (`wordpress/`, Schalter
 `TSV_EINGANG_AKTIV`, Standard aus).
+Stand WordPress: Commit `0d5f72e` auf `develop` (erste Fassung, sendet noch XML), nicht ausgerollt; Umstellung auf
+`tsv-antrag-2` per `wordpress/PROMPT_WORDPRESS_NACHTRAG.md`.
 
 ## Ablauf
 
