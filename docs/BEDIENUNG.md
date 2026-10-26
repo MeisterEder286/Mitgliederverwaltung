@@ -23,12 +23,17 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   Eintrag“ – **niemals Inhalte**, kein Upload (§ 72a SGB VIII).
 
 ## Jugendleitung
-- Sicht auf Minderjährige und auf alle Funktionsträger mit Nachweispflicht; Nachweise erfassen wie oben.
+- Sicht auf Jugendmitglieder und auf alle Funktionsträger mit Nachweispflicht; Nachweise erfassen wie oben.
+  Bis zu welchem Alter jemand als Jugendmitglied gilt, stellt die Verwaltung unter Einstellungen ein (`jugend_bis_alter`, Standard 17).
 
 ## Kasse
 - **Finanzen → Einzugsstand:** Soll, eingezogen, offen, Rücklastschriften; Mahnliste drucken oder „Mahnungen erstellen“.
 - **Nachzügler:** Neue Mitglieder nach dem Jahreslauf → Sollstellungen „Nachzügler anlegen“ → SEPA-Lauf (nimmt nur, was noch nie eingezogen wurde).
 - **Rechnungen** für Überweiser: Finanzen → Rechnungen → auswählen → Schreiben.
+- **Beitragserhöhung** (nach JHV-Beschluss, vor dem Jahreslauf): Finanzen → Beitragsänderung → Jahr wählen, neue Beträge
+  je Beitragsart und je Familien-Pauschale eintragen → „Vorschau berechnen“ (alt/neu je Konto) → „Übernehmen“ →
+  „Vorabinformation erstellen“ (Vorlage „Beitragsänderung“ mit `{{beitrag_bisher}}`/`{{beitrag_neu}}`). Frühere Jahre
+  rechnen weiter mit dem alten Betrag. Nur möglich, solange es für das Jahr noch keine Sollstellungen gibt.
 - **Sollstellungen:** einmal im Jahr „Probelauf“ → „Anlegen“.
 - **SEPA-Lauf:** Probelauf prüfen (Ausschlüsse mit Grund) → „XML erzeugen“ → Datei im Online-Banking hochladen.
   Danach „alle als bezahlt buchen“; Rücklastschriften einzeln mit Grund erfassen (Gebühr automatisch).
@@ -48,7 +53,9 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   importiert wurde. Danach „Aufnahmebestätigungen erstellen“. Mandatsdatum = Eintrittsdatum – mit dem unterschriebenen
   Mandat abgleichen.
 - **Austritt:** im Mitglied → „Austritt“. Ist die Person Zahler für andere, fragt das System, wie es mit dem Konto weitergeht.
-- **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!).
+- **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!). Neue IBAN bei
+  gleichem Inhaber: Das Mandat gilt weiter, der nächste SEPA-Lauf meldet der Bank die Mandatsänderung automatisch
+  (Probelauf und Kontrollliste zeigen „Änderung“).
 - **Familien:** einmal im Herbst „Fallen heraus“ für das nächste Jahr prüfen. Wer Schule/Studium/Ausbildung nachweist,
   bekommt das voraussichtliche Ende eingetragen und bleibt bis dahin im Familienbeitrag. Die anderen auswählen →
   „Auf Einzelbeitrag umstellen“ → „Anschreiben erstellen“.

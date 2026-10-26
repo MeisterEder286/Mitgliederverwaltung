@@ -49,7 +49,7 @@ next_id_Aufbewahrungsfrist,8,ID-Zähler
 next_id_Betroffenenanfrage,2,ID-Zähler
 next_id_Statistik_Jahr,8,ID-Zähler
 next_id_Protokoll,4,ID-Zähler
-jugend_bis_alter,17,Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). OFFEN: bestätigen
+jugend_bis_alter,17,"Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). Einstellbar 10–27, Standard 17."
 snapshot_einbetten,ja,"ja = Startdaten direkt in die Seite einbetten (spart einen Aufruf), nein = nachladen. Für Messvergleich."
 cache_warmhalten,nein,"Zeit-Trigger, der den Snapshot-Cache vor Ablauf neu baut. Standard aus."
 messung_puffer_max,500,"Wie viele Messwerte maximal im Cache gepuffert werden, bevor sie nach _Messung geschrieben werden."

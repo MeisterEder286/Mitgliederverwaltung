@@ -436,7 +436,7 @@ var Datenschutz = (function () {
         return k.stufe === 'konto_leeren' && String(k.id) === String(kontoId);
       })[0];
       if (!kandidat) throw Fehler.fachlich('Für dieses Konto ist die Frist noch nicht abgelaufen oder es wird noch genutzt.');
-      var r = DB.aktualisieren('Beitragskonto', kontoId, { iban: null, bic: null, mandatsreferenz: mandatPlatzhalter(kontoId), mandatsdatum: null, aktiv: false }, version, ktx);
+      var r = DB.aktualisieren('Beitragskonto', kontoId, { iban: null, bic: null, iban_vorher: null, iban_geaendert_am: null, mandatsreferenz: mandatPlatzhalter(kontoId), mandatsdatum: null, aktiv: false }, version, ktx);
       Protokoll.schreibe(ktx, [{ aktion: 'gelöscht', tabelle: 'Beitragskonto', datensatz_id: kontoId, feld: 'iban',
         kommentar: 'IBAN, BIC und Mandat nach Frist geleert – Klartextwerte bewusst nicht protokolliert' }]);
       return Snapshot.schreibe(ktx, [{ tab: 'Beitragskonto', neu: r.neu }]);

@@ -21,6 +21,9 @@
  *   - Ehrenmitglieder zahlen normal (beim TSV geklärt: keine Befreiung).
  *   - Beitragsart: Gibt es mehrere Zeilen gleicher Bezeichnung (Preisänderung mit gueltig_ab), gilt die zum
  *     Stichtag gültige aktive Zeile – so bleibt die Historie stimmig, ohne Mitglieder umzuhängen.
+ *   - Beitragsänderung (beitragsaenderung): bleibt EINE Zeile je Tarif bzw. Gemeinschaft. Der neue Betrag steht in
+ *     betrag/festbetrag, der alte in betrag_vorher/festbetrag_vorher; er gilt vor gueltig_ab/festbetrag_ab. So
+ *     rechnen frühere Jahre (Nachlauf, Rechnungen) weiter mit dem alten Betrag, ohne doppelte Tarife in Auswahllisten.
  *   - Kein Wert wird gespeichert: Der errechnete Betrag wird erst in der Sollstellung als Schnappschuss abgelegt.
  */
 var Beitrag = (function () {
@@ -146,13 +149,34 @@ var Beitrag = (function () {
     return 1;
   }
 
+  function leer(x) { return x === null || x === undefined || x === ''; }
+
+  /** Betrag einer Beitragsart zum Stichtag: vor gueltig_ab gilt betrag_vorher (falls gesetzt). */
+  function betragAm(art, stichtag) {
+    if (!art) return 0;
+    if (art.gueltig_ab && stichtag < art.gueltig_ab && !leer(art.betrag_vorher)) return Number(art.betrag_vorher);
+    return Number(art.betrag || 0);
+  }
+
+  /** Festbetrag einer Gemeinschaft zum Stichtag (null = keine Pauschale): vor festbetrag_ab gilt festbetrag_vorher. */
+  function festbetragAm(g, stichtag) {
+    if (!g) return null;
+    var wert = g.festbetrag_ab && stichtag < g.festbetrag_ab ? g.festbetrag_vorher : g.festbetrag;
+    return leer(wert) ? null : Number(wert);
+  }
+
+  /** Beitragsart am Tag wählbar: aktiv und schon gültig – oder mit betrag_vorher (gilt dann mit dem alten Betrag). */
+  function artVerfuegbar(a, tag) {
+    return a.aktiv !== false && (!a.gueltig_ab || a.gueltig_ab <= tag || !leer(a.betrag_vorher));
+  }
+
   /** Die zum Stichtag gültige Beitragsart zur referenzierten Art (gleiche Bezeichnung, jüngstes gueltig_ab). */
   function artFuerJahr(artId, daten, stichtag) {
     var ix = index(daten);
     var ref = ix.art[artId];
     if (!ref) return null;
     var kandidaten = (daten.Beitragsart || []).filter(function (a) {
-      return a.bezeichnung === ref.bezeichnung && a.aktiv !== false && (!a.gueltig_ab || a.gueltig_ab <= stichtag);
+      return a.bezeichnung === ref.bezeichnung && artVerfuegbar(a, stichtag);
     }).sort(function (a, b) { return String(b.gueltig_ab || '').localeCompare(String(a.gueltig_ab || '')); });
     return kandidaten[0] || ref;
   }
@@ -172,12 +196,13 @@ var Beitrag = (function () {
       var p = pflicht(m, daten, jahr, optionen);
       if (!p.pflichtig) return;
       var g = m.beitragsgemeinschaft_id ? ix.gemeinschaft[m.beitragsgemeinschaft_id] : null;
-      if (g && g.festbetrag !== null && g.festbetrag !== undefined && g.festbetrag !== '' && g.aktiv !== false) {
+      var fest = festbetragAm(g, stichtag);
+      if (g && fest !== null && g.aktiv !== false) {
         var eintrag = gemeinschaften[g.beitragsgemeinschaft_id] = gemeinschaften[g.beitragsgemeinschaft_id] ||
           { art: 'gemeinschaft', bezeichnung: g.bezeichnung, mitglied_ids: [], betrag: 0, anteil: 0 };
         eintrag.mitglied_ids.push(m.mitglied_id);
         eintrag.anteil = Math.max(eintrag.anteil, p.anteil);
-        eintrag.betrag = runde(Number(g.festbetrag) * eintrag.anteil);
+        eintrag.betrag = runde(fest * eintrag.anteil);
         return;
       }
       if (!m.beitragsart_id) {
@@ -188,7 +213,7 @@ var Beitrag = (function () {
       if (!art) { hinweise.push(name(m) + ': Beitragsart ' + m.beitragsart_id + ' unbekannt'); return; }
       positionen.push({
         art: 'einzel', bezeichnung: name(m) + ' (' + art.bezeichnung + ')', mitglied_ids: [m.mitglied_id],
-        betrag: runde(Number(art.betrag || 0) * p.anteil)
+        betrag: runde(betragAm(art, stichtag) * p.anteil)
       });
     });
     var gem = Object.keys(gemeinschaften).map(function (k) {
@@ -264,7 +289,7 @@ var Beitrag = (function () {
     var stichtag = tagImJahr(konfig(daten, optionen, 'tarifwechsel_stichtag'), jahr);
     var ix = index(daten);
     var aktive = (daten.Beitragsart || []).filter(function (a) {
-      return a.aktiv !== false && (!a.gueltig_ab || a.gueltig_ab <= stichtag) &&
+      return artVerfuegbar(a, stichtag) &&
         ((a.alter_von !== null && a.alter_von !== undefined && a.alter_von !== '') || (a.alter_bis !== null && a.alter_bis !== undefined && a.alter_bis !== ''));
     });
     var vorschlaege = [];
@@ -289,6 +314,73 @@ var Beitrag = (function () {
       });
     });
     return vorschlaege;
+  }
+
+  // ------------------------------------------------------------------ Beitragsänderung
+
+  /**
+   * Beitragsänderung ab 01.01. eines Jahres (z. B. nach JHV-Beschluss): Vorschau und zu schreibende Felder.
+   * eingabe: { arten: [{ beitragsart_id, betrag }], festbetraege: [{ alt, neu }] } – Pauschalen werden über ihren
+   *          bisherigen Betrag zugeordnet (alle aktiven Gemeinschaften mit 180 € → 200 €).
+   * Liefert { jahr, ab, fehler: [Text], arten: [{ beitragsart_id, bezeichnung, alt, neu }],
+   *           gemeinschaften: [{ beitragsgemeinschaft_id, bezeichnung, alt, neu }],
+   *           konten: [{ beitragskonto_id, inhaber, zahlweg, alt, neu, differenz }] (nur mit Differenz),
+   *           summe_alt, summe_neu, aenderungen: { Beitragsart: { id: felder }, Beitragsgemeinschaft: { id: felder } } }.
+   * Gesperrt, sobald für das Jahr Sollstellungen bestehen (deren Beträge sind Schnappschüsse und blieben sonst alt).
+   */
+  function beitragsaenderung(daten, jahr, eingabe, optionen) {
+    eingabe = eingabe || {};
+    var ab = jahr + '-01-01', vortag = (jahr - 1) + '-12-31';
+    var fehler = [];
+    var r = { jahr: jahr, ab: ab, fehler: fehler, arten: [], gemeinschaften: [], konten: [], summe_alt: 0, summe_neu: 0,
+      aenderungen: { Beitragsart: {}, Beitragsgemeinschaft: {} } };
+    function betragOk(x) { return !leer(x) && isFinite(Number(x)) && Number(x) >= 0 && Number(x) < 100000; }
+
+    var vorhanden = (daten.Sollstellung || []).filter(function (s) { return s.jahr === jahr; }).length;
+    if (vorhanden) fehler.push('Für ' + jahr + ' gibt es bereits ' + vorhanden + ' Sollstellung(en). Eine Beitragsänderung ist nur für ein Jahr ohne Sollstellungen möglich.');
+
+    var arten = nachId(daten.Beitragsart, 'beitragsart_id');
+    (eingabe.arten || []).forEach(function (e) {
+      var a = arten[Number(e.beitragsart_id)];
+      if (!a || a.aktiv === false) { fehler.push('Beitragsart ' + e.beitragsart_id + ' gibt es nicht (mehr).'); return; }
+      if (!betragOk(e.betrag)) { fehler.push(a.bezeichnung + ': bitte einen Betrag ≥ 0 angeben.'); return; }
+      var alt = betragAm(a, ab), neu = runde(Number(e.betrag));
+      if (neu === alt) return;
+      r.arten.push({ beitragsart_id: a.beitragsart_id, bezeichnung: a.bezeichnung, alt: alt, neu: neu });
+      r.aenderungen.Beitragsart[a.beitragsart_id] = { betrag: neu, betrag_vorher: betragAm(a, vortag), gueltig_ab: ab };
+    });
+    var zuordnung = {};
+    (eingabe.festbetraege || []).forEach(function (e) {
+      if (!betragOk(e.alt) || !betragOk(e.neu)) { fehler.push('Pauschale: bitte bisherigen und neuen Betrag ≥ 0 angeben.'); return; }
+      if (runde(Number(e.alt)) !== runde(Number(e.neu))) zuordnung[runde(Number(e.alt))] = runde(Number(e.neu));
+    });
+    (daten.Beitragsgemeinschaft || []).forEach(function (g) {
+      var alt = festbetragAm(g, ab);
+      if (g.aktiv === false || alt === null || zuordnung[alt] === undefined) return;
+      r.gemeinschaften.push({ beitragsgemeinschaft_id: g.beitragsgemeinschaft_id, bezeichnung: g.bezeichnung, alt: alt, neu: zuordnung[alt] });
+      r.aenderungen.Beitragsgemeinschaft[g.beitragsgemeinschaft_id] = { festbetrag: zuordnung[alt], festbetrag_vorher: festbetragAm(g, vortag), festbetrag_ab: ab };
+    });
+
+    // Wirkung je Konto: Soll des Jahres mit bisherigen gegen neue Beträge
+    function mit(tab, feld) {
+      var aend = r.aenderungen[tab];
+      return (daten[tab] || []).map(function (z) { return aend[z[feld]] ? Object.assign({}, z, aend[z[feld]]) : z; });
+    }
+    var neuDaten = Object.assign({}, daten, { Beitragsart: mit('Beitragsart', 'beitragsart_id'), Beitragsgemeinschaft: mit('Beitragsgemeinschaft', 'beitragsgemeinschaft_id') });
+    var altSoll = {};
+    mitIndex(daten, function () {
+      (daten.Beitragskonto || []).forEach(function (k) { if (k.aktiv !== false) altSoll[k.beitragskonto_id] = sollJeKonto(k.beitragskonto_id, daten, jahr, optionen).betrag; });
+    });
+    mitIndex(neuDaten, function () {
+      (daten.Beitragskonto || []).forEach(function (k) {
+        if (k.aktiv === false) return;
+        var alt = altSoll[k.beitragskonto_id], neu = sollJeKonto(k.beitragskonto_id, neuDaten, jahr, optionen).betrag;
+        r.summe_alt += alt; r.summe_neu += neu;
+        if (neu !== alt) r.konten.push({ beitragskonto_id: k.beitragskonto_id, inhaber: k.kontoinhaber_name, zahlweg: k.zahlweg, alt: alt, neu: neu, differenz: runde(neu - alt) });
+      });
+    });
+    r.summe_alt = runde(r.summe_alt); r.summe_neu = runde(r.summe_neu);
+    return r;
   }
 
   // ------------------------------------------------------------------ Klärliste
@@ -445,7 +537,8 @@ var Beitrag = (function () {
   return {
     mitIndex: mitIndex,
     konfig: konfig, tagImJahr: tagImJahr, faelligkeit: faelligkeit, index: index, pflicht: pflicht,
-    artFuerJahr: artFuerJahr, anteil: anteil, altersbereichPasst: altersbereichPasst, sollJeKonto: sollJeKonto, zusammensetzung: zusammensetzung,
+    artFuerJahr: artFuerJahr, betragAm: betragAm, festbetragAm: festbetragAm, artVerfuegbar: artVerfuegbar,
+    beitragsaenderung: beitragsaenderung, anteil: anteil, altersbereichPasst: altersbereichPasst, sollJeKonto: sollJeKonto, zusammensetzung: zusammensetzung,
     letzteMandatsnutzung: letzteMandatsnutzung, mandatStatus: mandatStatus, zahleradresse: zahleradresse,
     tarifwechsel: tarifwechsel, klaerliste: klaerliste, pruefeKonto: pruefeKonto, waisenBeiAustritt: waisenBeiAustritt,
     name: name, runde: runde, euro: euro

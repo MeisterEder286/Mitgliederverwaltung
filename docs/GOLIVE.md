@@ -9,9 +9,9 @@ Legende: ✅ im Code/Repo erledigt und geprüft · 🔧 manuell in Google zu pr�
 | Zugriff eingeschränkt | ✅/🔧 | `access: DOMAIN`; Deployment-Dialog prüfen |
 | Rollenprüfung in jeder Server-Funktion | ✅ | jede öffentliche Funktion läuft über `Api.ausfuehren` → `Zugriff.pruefe`; Zeilenschutz `Snapshot.pruefeMitglied`; Sicherheitsprüfung `docs/SICHERHEITSPRUEFUNG.md` mit Regressionstests `test/sicherheit.test.js` |
 | Keine dynamischen IDs vom Client | ✅ | `DB_ID` nur aus Script Properties |
-| OAuth-Scopes minimal | ✅ | 3 Scopes, `check.js` lehnt andere ab |
+| OAuth-Scopes minimal | ✅ | 4 Scopes (`spreadsheets`, `userinfo.email`, `script.scriptapp`, `script.send_mail` – nur Senden, kein Postfachzugriff), `check.js` lehnt andere ab |
 | Datei-/Ordnerfreigaben | 🔧 | Ordner nur Funktionskonto |
-| Öffentliche Schreibziele isoliert | — | Aufnahmeanträge sind eigenes Projekt (später) |
+| Öffentliche Schreibziele isoliert | — | Der Online-Aufnahmeantrag läuft auf der Vereins-Homepage (eigenes System) und erzeugt XML-Dateien; die WebApp hat kein öffentliches Formular. Import über „Beitritte aus XML importieren“ |
 | LockService | ✅ | `DB.mitSperre` |
 | Tokens | — | kein Token-Zugang |
 | Secrets in PropertiesService | ✅ | `DB_ID` |
@@ -34,7 +34,7 @@ Legende: ✅ im Code/Repo erledigt und geprüft · 🔧 manuell in Google zu pr�
 | Testumgebung, keine Echtdaten | ✅/🔧 nur synthetische Daten im Repo; Test-Deployment anlegen |
 | Backup + Wiederherstellungstest | ✅/🔧 eigenes Projekt `backup/` (Wiederherstellungstest-Funktion), einrichten und einmal testen |
 | Kontingente geprüft | 🔧 `docs/BETRIEB.md` §5 |
-| E-Mail-Absender | — WebApp versendet keine Mails; Backup-Fehlermails an das Funktionskonto |
+| E-Mail-Absender | ✅/🔧 WebApp versendet Mails als Funktionskonto (`script.send_mail`), `replyTo` fachlich; Hauptschalter `mail_aktiv` (Standard aus), Testmodus `mail_test_an`, Kontingentprüfung. Vor Go-Live: Testmodus an eine eigene Adresse, dann einschalten. Backup-Fehlermails an das Funktionskonto |
 | Register-Eintrag | ✅ Entwurf `docs/REGISTER.md`, IDs eintragen 🔧 |
 | Kopfkommentare | ✅ `check.js` erzwingt sie |
 

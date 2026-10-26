@@ -133,3 +133,27 @@ test('Startseite und Finanzen zeigen dieselbe Summe offen/strittig', async () =>
     assert.ok(fin.replace(/\s/g, ' ').includes(start.replace(/\s/g, ' ')), start + ' ≠ ' + fin);
   } finally { await ui.schliessen(); }
 });
+
+test('Beitragsänderung: neuer Betrag, Vorschau je Konto, übernehmen, Vorabinformation öffnet „Schreiben“', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  const { page } = ui;
+  try {
+    await page.getByRole('button', { name: 'Finanzen' }).click();
+    await reiter(page, 'Beitragsänderung');
+    await page.getByLabel('Neuer Betrag Erwachsene').fill('110');
+    await page.getByRole('button', { name: 'Vorschau berechnen' }).click();
+    await page.getByText(/Erwachsene: 100,00\s€ → 110,00\s€/).waitFor();
+    await page.getByText('Konten mit neuem Beitrag').waitFor();
+    await page.getByRole('button', { name: 'Beitragsänderung übernehmen' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Übernehmen' }).click();
+    await page.getByText(/Beitragsänderung ab 01\.01\.\d{4} ist übernommen/).waitFor();
+    const art = ui.objekte('Beitragsart').find(a => a.bezeichnung === 'Erwachsene');
+    assert.strictEqual(art.betrag, 110);
+    assert.strictEqual(art.betrag_vorher, 100);
+    await page.getByRole('button', { name: /^Vorabinformation/ }).first().click();
+    await page.getByRole('heading', { level: 1, name: 'Schreiben' }).waitFor();
+    const breite = await page.evaluate(() => document.documentElement.scrollWidth);
+    assert.ok(breite <= 360, 'waagrechtes Scrollen: ' + breite);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});

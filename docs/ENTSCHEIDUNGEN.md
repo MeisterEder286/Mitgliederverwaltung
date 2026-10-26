@@ -17,6 +17,11 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 | 10/2026 | Erweiterung | Bezahlhistorie, Umstellung auf Einzelbeitrag beim Ausscheiden aus der Familie, Verlängerung bei Schule/Studium/Ausbildung mit prognostiziertem Ende, Links zu Antrag/Mandat, alle Anschreiben je Person, Auswertungen und Funktionen aus dem Access-VBA | Johann |
 | 10/2026 | Datenmodell | neue Felder `Mitglied.ausbildung_art/ausbildung_bis/ausbildung_nachweis_am`; neue Tabs `Dokument`, `Vorlage`, `Anschreiben`; `_Konfig` familie_*, brief_*; CSV ist ab jetzt allein maßgeblich (xlsx-Export nur mit `--ueberschreiben`) | Umsetzung |
 | 10/2026 | E-Mail-Versand | WebApp versendet E-Mails direkt (Briefkopf, Austritts-/Aufnahmebestätigung, Vorabinformation, Rückfrage Zahler …). **Neuer Scope `script.send_mail`** (engster Scope für Versand, kein Postfachzugriff; A5). Absender Funktionskonto, `replyTo` fachlich (C5), Hauptschalter `mail_aktiv` (Standard aus), Testmodus `mail_test_an`, Kontingentprüfung (C4) | Johann |
+| 10/2026 | Mandatsänderung | Neue IBAN bei gleichem Inhaber und Mandat: Das Konto merkt sich die zuletzt eingezogene IBAN (`iban_vorher`, `iban_geaendert_am`, nie im Snapshot). Der nächste SEPA-Lauf meldet `AmdmntInd` – gleiche Bank (DE-BLZ): alte IBAN (`OrgnlDbtrAcct`), andere Bank: `SMNDA`. Erledigt nach dem nächsten bezahlten Einzug. Sequenz bleibt wie abgeleitet (FRST bei SMNDA seit Rulebook 2016 nicht mehr Pflicht – mit Hausbank beim Banktest bestätigen) | Johann |
+| 10/2026 | Beitragsänderung | Geführter Ablauf in Finanzen: neue Beträge je Beitragsart und je Pauschale ab 01.01. eines künftigen Jahres, Vorschau alt/neu je Konto, Übernahme (`stammdaten_bearbeiten`), Vorabinformation über „Schreiben“. EINE Zeile je Tarif: neuer Betrag in `betrag`/`festbetrag`, alter in `betrag_vorher`/`festbetrag_vorher` bis `gueltig_ab`/`festbetrag_ab` – frühere Jahre rechnen weiter richtig. Nur für Jahre ohne Sollstellungen | Johann |
+| 10/2026 | Jugendalter | einstellbar über `_Konfig.jugend_bis_alter` (Verwaltung → Einstellungen, 10–27), Standard 17 | Johann |
+| 10/2026 | Anonymisierung (X9) | Die Mitgliedsnummer bleibt bei anonymisierten Datensätzen erhalten (Anker für Buchungen und Papierablage) und wird nie neu vergeben | Johann |
+| 10/2026 | Online-Aufnahmeantrag | läuft auf der Vereins-Homepage (eigenes System) und liefert XML; Übernahme über „Beitritte aus XML importieren“. Kein öffentliches Formular in der WebApp | Johann |
 | 10/2026 | Interne Notizen | Notizen/Rückfragen/Wiedervorlagen je Person oder Konto mit Leserkreis (Verwaltung, Finanzen, Abteilung, Jugendleitung); Teil von Auskunft, Anonymisierung und Löschfrist | Johann |
 
 ## Gemeldete Widersprüche aus dem Access-VBA (nicht stillschweigend aufgelöst)
@@ -33,7 +38,6 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 | Thema | vorläufig | Wo |
 |---|---|---|
 | Rollenmatrix | Vorstand + Mitgliederverwalter: alles; Kassier: Kontakt + Finanzen, **keine** Konto-Änderung; Jugendleiter: Minderjährige + FZ; Abteilungsleiter: eigene Abteilung, Kontakt, FZ erfassen/sehen für Funktionsträger seiner Abteilung, kein Vereinsaustritt | `src/lib/rechte.js` |
-| Jugend-Definition | bis einschließlich 17 Jahre | `_Konfig.jugend_bis_alter` |
 | FZ-Fristen | `Qualifikationsart` gewinnt vor `_Konfig.fz_wiedervorlage_monate` und `Aufbewahrungsfrist` | Phase 5 |
 | Backup | eigenes, nicht deploytes Skriptprojekt mit Drive-Scope | `backup/` |
 | Exaktsuche Abteilungsleiter | **immer zwei Merkmale** (Nachname + Mitgliedsnummer oder Geburtsdatum) statt „Nummer oder Name+Geburtsdatum“ wie im Mockup – Sicherheitsprüfung H1/M3 (Durchzählen der Nummern). Zuordnen nur mit Einmal-Token aus der Suche. | `src/modul/Mitglieder.js` |
@@ -44,4 +48,4 @@ Nachvollziehbar festgehalten, **was** wann entschieden wurde und **warum**. Für
 | Adressen in der SEPA-Datei | unvollständige Zahleradressen werden weggelassen (Warnung) – mit Hausbank klären | `src/lib/sepa.js` |
 | Vier-Augen-Prinzip SEPA | schaltbar `_Konfig.sepa_vier_augen` (Standard aus) | `src/modul/Finanzen.js` |
 | Snapshot | Start nur Kern; Finanzen/Historie werden je Sitzung einmal nachgeladen | `src/lib/snapshot.js` |
-| Anonymisierung | Zeiträume, Zugehörigkeiten, Einwilligungen, Qualifikationen werden entfernt; Mitgliedsnummer bleibt (X9 offen); Funktionen/Ehrungen je `_Konfig.chronik_bei_anonymisierung` | `src/lib/loeschung.js` |
+| Anonymisierung | Zeiträume, Zugehörigkeiten, Einwilligungen, Qualifikationen werden entfernt; Mitgliedsnummer bleibt (X9 entschieden); Funktionen/Ehrungen je `_Konfig.chronik_bei_anonymisierung` | `src/lib/loeschung.js` |

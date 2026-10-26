@@ -16,7 +16,7 @@
  * Besonderheiten:
  *   - Mitglied.status ist ein Cache (Datenmodell). Er wird hier nach jeder Änderung an Zeiträumen/Sterbedatum
  *     aus Mitgliedschaft.status neu gesetzt. Austritte mit Datum in der Zukunft bleiben bis dahin „aktiv“ –
- *     der Status springt erst um, wenn danach wieder etwas gespeichert wird (OFFEN: nächtlicher Abgleich).
+ *     den Umschwung am Stichtag zieht die nächtliche Wartung nach (Wartung.statusNachziehen).
  *   - Mitgliedsnummer: aus _Konfig.mitgliedsnummer_naechste, belegte Nummern werden übersprungen, Nummern
  *     Ausgetretener werden nie neu vergeben (mitgliedsnummer_wiederverwendung = nein).
  *   - Austritt: „Guard statt Cascade“ (Übergabe §4). Ist die Person Inhaber eines Kontos, über das noch andere

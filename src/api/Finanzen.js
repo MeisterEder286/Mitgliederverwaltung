@@ -5,7 +5,8 @@
  * Zweck:      Einzige Einstiegspunkte für google.script.run aus client/ansicht_finanzen.
  * Datenquelle: über Finanzen (Snapshot-Basis, gezielte DB-Lesungen für Klartext-IBAN).
  * Wer darf was: jede Funktion prüft über Api.ausfuehren die Aktion (src/lib/rechte.js):
- *   konto_lesen · iban_aufdecken · konto_bearbeiten · sollstellung_bearbeiten · sepa_lauf · mitglied_bearbeiten · export
+ *   konto_lesen · iban_aufdecken · konto_bearbeiten · sollstellung_bearbeiten · sepa_lauf · mitglied_bearbeiten · export ·
+ *   stammdaten_bearbeiten (Beitragsänderung, zusätzlich konto_lesen)
  * Besonderheiten: Argumente kommen aus dem Browser und sind nicht vertrauenswürdig – IDs werden als Zahl
  *             gelesen, alles Weitere prüft das Modul. Keine Datei-/Tab-IDs vom Client (A3).
  */
@@ -125,6 +126,21 @@ function apiFinanzenTarifwechsel(jahr) {
 function apiFinanzenTarifwechselUebernehmen(jahr, mitgliedIds) {
   return Api.ausfuehren('apiFinanzenTarifwechselUebernehmen', 'mitglied_bearbeiten', function (ktx) {
     return Finanzen.tarifwechselUebernehmen(ktx, finanzenZahl_(jahr), Array.isArray(mitgliedIds) ? mitgliedIds.map(finanzenZahl_) : []);
+  });
+}
+
+/** Vorschau einer Beitragsänderung ab 01.01. des Jahres (Tarife, Pauschalen, Wirkung je Konto). */
+function apiFinanzenBeitragsaenderungVorschau(jahr, eingabe) {
+  return Api.ausfuehren('apiFinanzenBeitragsaenderungVorschau', 'konto_lesen', function (ktx) {
+    return Finanzen.beitragsaenderungVorschau(ktx, finanzenZahl_(jahr), eingabe || {});
+  });
+}
+
+/** Beitragsänderung übernehmen (ändert Beitragsarten und Pauschalen mit Stichtag; braucht zusätzlich die Finanzsicht). */
+function apiFinanzenBeitragsaenderungUebernehmen(jahr, eingabe) {
+  return Api.ausfuehren('apiFinanzenBeitragsaenderungUebernehmen', 'stammdaten_bearbeiten', function (ktx) {
+    if (!Rechte.darf(ktx, 'konto_lesen')) throw Fehler.keinZugriff();
+    return Finanzen.beitragsaenderungUebernehmen(ktx, finanzenZahl_(jahr), eingabe || {});
   });
 }
 

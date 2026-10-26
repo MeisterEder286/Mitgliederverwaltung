@@ -209,6 +209,7 @@ var Verwaltung = (function () {
       case 'zahl':
         if (!/^\d+$/.test(w)) nein('Bitte eine ganze Zahl angeben.');
         if (s === 'beitragsjahr' && !/^20\d\d$/.test(w)) nein('Bitte ein Jahr wie 2027 angeben.');
+        if (s === 'jugend_bis_alter' && (Number(w) < 10 || Number(w) > 27)) nein('Bitte ein Alter zwischen 10 und 27 angeben.');
         return w;
       case 'janein':
         if (w !== 'ja' && w !== 'nein') nein('Bitte „ja“ oder „nein“.');

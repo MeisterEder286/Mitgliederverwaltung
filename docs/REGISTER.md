@@ -11,5 +11,5 @@
 | WordPress-Slug / Einbindung | `/verwaltung` · Redirect (kein iFrame) |
 | Fachlich verantwortlich | Mitgliederverwaltung (Funktion), Vertretung: Vorstand |
 | Zugriffsberechtigung | Domain-beschränkt (Google-Konto des Vereins), Rollen über Tab `Benutzer` |
-| Getrennte Dateien | Eingangstabelle Aufnahmeanträge (eigenes Projekt, später), Backup-Skript (eigenes Projekt) |
+| Getrennte Dateien | Online-Aufnahmeantrag auf der Vereins-Homepage (eigenes System, liefert XML-Dateien), Backup-Skript (eigenes Projekt) |
 | Doku | `docs/BETRIEB.md`, `docs/ENTWICKLUNG.md`, `docs/VERARBEITUNGSVERZEICHNIS.md` |

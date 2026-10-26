@@ -215,7 +215,8 @@ Deployment; in `docs/BETRIEB.md` aufnehmen.
    in Finanzen/Bereichsdaten), für `Protokoll` und `Konfig.setze`. Ausnahme ist M1. `App.csv` schützt im Browser.
 10. **A3:** Keine Datei- oder Tab-IDs vom Client. `DB_ID` steht in den Script Properties; `apiVerwaltungStammdaten(tab)`
     prüft gegen eine feste Liste (`pruefeStammTab`).
-11. **A5:** Drei Scopes (`spreadsheets`, `userinfo.email`, `script.scriptapp`), `check.js` erzwingt das.
+11. **A5:** Vier Scopes (`spreadsheets`, `userinfo.email`, `script.scriptapp`, seit dem E-Mail-Versand `script.send_mail` –
+    nur Senden, kein Lesen des Postfachs), `check.js` erzwingt das.
 12. **A9:** Interne Fehler gehen generisch mit Fehler-Nr. an den Client, Details nur über `console.error`. Fachliche
     Meldungen nennen keine Tab-Namen.
 13. **Rechteausweitung:** `benutzer_verwalten` und `konfig_aendern` haben nur Vorstand und Mitgliederverwalter.

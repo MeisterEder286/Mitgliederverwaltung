@@ -97,11 +97,11 @@ var Familie = (function () {
 
   /** Passende Einzel-Beitragsart nach Alter (aktive Arten mit Altersgrenze bevorzugt). */
   function vorschlagArt(daten, alter, tag) {
-    var aktive = (daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false && (!a.gueltig_ab || a.gueltig_ab <= tag); });
+    var aktive = (daten.Beitragsart || []).filter(function (a) { return Beitrag.artVerfuegbar(a, tag); });
     var mitGrenze = function (a) { return hat(a.alter_von) || hat(a.alter_bis); };
     var passt = aktive.filter(function (a) { return Beitrag.altersbereichPasst(a, alter); });
     var art = passt.filter(mitGrenze)[0] || passt[0] || null;
-    return art ? { beitragsart_id: art.beitragsart_id, bezeichnung: art.bezeichnung, betrag: Number(art.betrag || 0) } : null;
+    return art ? { beitragsart_id: art.beitragsart_id, bezeichnung: art.bezeichnung, betrag: Beitrag.betragAm(art, tag) } : null;
   }
 
   /** Bewertung eines Kindes zum Stichtag. */

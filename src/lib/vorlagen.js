@@ -37,6 +37,8 @@ var Vorlagen = (function () {
     ['mahnstufe', 'Mahnstufe (Zahl)', 'Beitrag'], ['faellig_am', 'Zahlungsziel (Standard: Briefdatum + 14 Tage)', 'Beitrag'],
     ['einzugsdatum', 'Einzugsdatum der Lastschrift', 'Beitrag'],
     ['neuer_beitrag', 'Einzelbeitrag der Person (eigene Beitragsart, ohne Gemeinschaft)', 'Beitrag'],
+    ['beitrag_bisher', 'Jahresbeitrag des Kontos im Vorjahr (Schreiben „Beitragsänderung“)', 'Beitrag'],
+    ['beitrag_neu', 'Jahresbeitrag des Kontos im Briefjahr (Schreiben „Beitragsänderung“)', 'Beitrag'],
     ['wirksam', 'Wirksam ab (z. B. Umstellung auf Einzelbeitrag; Angabe beim Erstellen)', 'Beitrag'],
     ['antwort_bis', 'Antwort erbeten bis (Briefdatum + rueckfrage_wiedervorlage_tage)', 'Verein'],
     ['abteilung_ansprechpartner', 'Abteilungsleitung der ersten Abteilung (Name)', 'Mitgliedschaft'],
@@ -157,7 +159,8 @@ var Vorlagen = (function () {
    * Platzhalterwerte aus (bereits nach Rolle geschnittenen) Daten. Fehlende Felder bleiben leer.
    * d: { mitglied, konto, inhaber, sollstellung, zeitraum (laufend/letzter), abteilungen: [Text], funktionen: [Text],
    *      beitragsart: { bezeichnung, betrag }, gemeinschaft: { bezeichnung, festbetrag }, alter, alter_im_jahr, jahr, heute,
-   *      konfig, ehrung, ansprechpartner (Name), zusatz: { faellig_am, wirksam, antwort_bis, … } }
+   *      konfig, ehrung, ansprechpartner (Name), zusatz: { faellig_am, wirksam, antwort_bis, … },
+   *      beitragsaenderung: { bisher, neu } (Jahressoll des Kontos) }
    */
   function werte(d) {
     var m = d.mitglied || {}, k = d.konto || {}, s = d.sollstellung || null, z = d.zeitraum || {};
@@ -191,6 +194,8 @@ var Vorlagen = (function () {
       verein_anschrift: [[c.verein_strasse, c.verein_hausnummer].filter(Boolean).join(' '), [c.verein_plz, c.verein_ort].filter(Boolean).join(' ')].filter(Boolean).join(', '),
       datum: datum(heute), ehrung: d.ehrung || zusatz.ehrung || '',
       neuer_beitrag: betrag(d.beitragsart ? d.beitragsart.betrag : null),
+      beitrag_bisher: betrag(d.beitragsaenderung ? d.beitragsaenderung.bisher : null),
+      beitrag_neu: betrag(d.beitragsaenderung ? d.beitragsaenderung.neu : null),
       wirksam: datum(zusatz.wirksam),
       antwort_bis: datum(zusatz.antwort_bis || (heute ? plusTage(heute, Number(c.rueckfrage_wiedervorlage_tage) || 21) : null)),
       abteilung_ansprechpartner: d.ansprechpartner || ''

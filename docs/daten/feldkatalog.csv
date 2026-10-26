@@ -146,19 +146,22 @@ Funktion,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (
 Funktion,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Beitragsart,beitragsart_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
 Beitragsart,bezeichnung,Text,ja,,intern,"z. B. Erwachsene, Jugendliche, Fördermitglied."
-Beitragsart,betrag,Dezimal,ja,,intern,Betrag je Intervall.
+Beitragsart,betrag,Dezimal,ja,,intern,Betrag je Intervall (gilt ab gueltig_ab).
+Beitragsart,betrag_vorher,Dezimal,nein,,intern,"Betrag vor gueltig_ab. Gesetzt von „Beitragsänderung“ in Finanzen, damit frühere Jahre (Nachlauf, Rechnungen) weiter mit dem alten Betrag rechnen. Leer = betrag galt schon immer."
 Beitragsart,alter_von,Ganzzahl,nein,,intern,Untere Altersgrenze. Steuert den automatischen Tarifwechsel.
 Beitragsart,alter_bis,Ganzzahl,nein,,intern,"Obere Altersgrenze, leer = nach oben offen."
 Beitragsart,intervall,Auswahl,ja,intervall,intern,—
 Beitragsart,aktiv,ja/nein,ja,ja_nein,intern,"Alte Tarife auf „nein“, damit die Historie stimmt."
-Beitragsart,gueltig_ab,Datum,nein,,intern,Ab wann der Betrag gilt.
+Beitragsart,gueltig_ab,Datum,nein,,intern,"Ab wann der Betrag gilt; davor gilt betrag_vorher (falls gesetzt)."
 Beitragsart,bemerkung,Langtext,nein,,intern,—
 Beitragsart,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
 Beitragsart,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
 Beitragsart,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Beitragsgemeinschaft,beitragsgemeinschaft_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
 Beitragsgemeinschaft,bezeichnung,Text,ja,,finanz,z. B. „Familie Wagner“.
-Beitragsgemeinschaft,festbetrag,Dezimal,nein,,finanz,"Pauschale, EINMAL je Gemeinschaft gezogen. Leer = Mitglieder zahlen Einzeltarife."
+Beitragsgemeinschaft,festbetrag,Dezimal,nein,,finanz,"Pauschale, EINMAL je Gemeinschaft gezogen. Leer = Mitglieder zahlen Einzeltarife. Gilt ab festbetrag_ab."
+Beitragsgemeinschaft,festbetrag_vorher,Dezimal,nein,,finanz,"Pauschale vor festbetrag_ab. Gesetzt von „Beitragsänderung“ in Finanzen."
+Beitragsgemeinschaft,festbetrag_ab,Datum,nein,,finanz,"Ab wann festbetrag gilt; davor festbetrag_vorher. Leer = festbetrag galt schon immer."
 Beitragsgemeinschaft,aktiv,ja/nein,ja,ja_nein,finanz,—
 Beitragsgemeinschaft,bemerkung,Langtext,nein,,finanz,—
 Beitragsgemeinschaft,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
@@ -170,6 +173,8 @@ Beitragskonto,kontoinhaber_mitglied_id,FK,nein,,finanz,"→ Mitglied, falls der 
 Beitragskonto,zahlweg,Auswahl,ja,zahlweg,finanz,—
 Beitragskonto,iban,Text,bedingt,,finanz,SENSIBEL. Pflicht bei Lastschrift. Immer als Text formatieren.
 Beitragskonto,bic,Text,nein,,finanz,SENSIBEL. Bei DE-IBAN meist entbehrlich.
+Beitragskonto,iban_vorher,Text,nein,,finanz,"SENSIBEL. Zuletzt eingezogene IBAN vor einem Kontowechsel unter demselben Mandat. Nur vom Skript; wird für die Mandatsänderung (AmdmntInd) in der nächsten SEPA-Datei gebraucht und gilt als erledigt, sobald danach ein Einzug bezahlt ist."
+Beitragskonto,iban_geaendert_am,Datum,nein,,finanz,"Tag des Kontowechsels zu iban_vorher. Nur vom Skript."
 Beitragskonto,mandatsreferenz,Text,bedingt,,finanz,"SENSIBEL. Eindeutig, wird nie wiederverwendet."
 Beitragskonto,mandatsdatum,Datum,bedingt,,finanz,SENSIBEL. Unterschriftsdatum des Mandats.
 Beitragskonto,abw_strasse,Text,nein,,finanz,"Abweichende Rechnungsanschrift, getrennte Felder wegen pain.008.001.08."

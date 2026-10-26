@@ -20,7 +20,7 @@
  *   - Finanzlisten (konten, gemeinschaften, sollstellungen) nur mit Sichtklasse „finanz“,
  *     qualifikationen nur mit „hochsensibel“, Ampel fz_ampel nur mit „hochsensibel“.
  * Besonderheiten:
- *   - IBAN/BIC stehen NIE in der Basis und damit nie im Cache oder beim Client. Ersatz: iban_maskiert, iban_ok.
+ *   - IBAN/BIC (auch iban_vorher) stehen NIE in der Basis und damit nie im Cache oder beim Client. Ersatz: iban_maskiert, iban_ok.
  *     Den Klartext lädt nur die Funktion „IBAN aufdecken“ einzeln und protokolliert (Phase 4).
  *   - Abgeleitete Felder an mitglieder: status_abgeleitet, mitglied_seit, alter, jugend, gekuendigt_zum,
  *     abteilungen (laufende, sichtbare abteilung_ids), funktionen_laufend (funktionsart_ids), fz_ampel.
@@ -150,7 +150,7 @@ var SnapshotKern = (function () {
 
   function kontoOhneIban(k) {
     var o = {};
-    Object.keys(k).forEach(function (f) { if (f !== 'iban' && f !== 'bic') o[f] = k[f]; });
+    Object.keys(k).forEach(function (f) { if (f !== 'iban' && f !== 'bic' && f !== 'iban_vorher') o[f] = k[f]; });
     o.iban_maskiert = k.iban ? ibanMaskiert(k.iban) : null;
     o.iban_ok = k.iban ? ibanOk(k.iban) : null;
     return o;

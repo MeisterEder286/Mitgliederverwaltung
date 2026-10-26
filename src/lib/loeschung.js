@@ -20,7 +20,8 @@
  *   - [A] chronik_bei_anonymisierung: 'namen_entfernen' (Standard) = Funktions-/Ehrungszeilen bleiben als anonyme
  *     Chronik, Freitexte werden geleert; 'vereinsaemter_behalten' = nur Vereinsämter bleiben, Abteilungsfunktionen
  *     und Ehrungen werden entfernt; 'entfernen' = alles entfernen. OFFEN laut Datenmodell.
- *   - OFFEN (X9): mitgliedsnummer bleibt als Anker erhalten.
+ *   - Entschieden 10/2026 (X9): mitgliedsnummer bleibt als Anker erhalten (Buchungen, Schreiben, Papierablage);
+ *     sie wird nie neu vergeben (mitgliedsnummer_wiederverwendung = nein).
  *   - Diese Datei plant nur. Ausgeführt wird im Servermodul (unter Sperre, mit Protokoll ohne Klartextwerte).
  */
 var Loeschung = (function () {
@@ -196,7 +197,7 @@ var Loeschung = (function () {
       mf.sperre_grund = fristInfo.sperre_grund || null;
     }
     aendere('Mitglied', id, mf);
-    plan.hinweise.push('OFFEN (X9): Die Mitgliedsnummer bleibt als Anker erhalten.');
+    plan.hinweise.push('Die Mitgliedsnummer bleibt als Anker erhalten und wird nicht neu vergeben.');
 
     liste(daten, 'Mitgliedschaftszeitraum').forEach(function (z) { if (z.mitglied_id === id) entferne('Mitgliedschaftszeitraum', z.zeitraum_id); });
     liste(daten, 'Abteilungszugehoerigkeit').forEach(function (z) { if (z.mitglied_id === id) entferne('Abteilungszugehoerigkeit', z.zugehoerigkeit_id); });

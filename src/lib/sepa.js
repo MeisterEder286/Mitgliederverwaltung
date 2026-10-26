@@ -16,6 +16,11 @@
  *     PLZ, Ort, Land. Unvollständige Adressen werden weggelassen [A: für Zahler im EWR ist die Adresse optional –
  *     mit der Hausbank bestätigen]; die Klärliste (Beitrag.klaerliste) meldet sie.
  *   - Gläubiger-ID wird geprüft; mit dem Platzhalter aus _Konfig entsteht KEINE Datei, sondern eine Fehlerliste.
+ *   - Mandatsänderung (AmdmntInd): Wechselt der Zahler unter demselben Mandat das Konto (Beitragskonto.iban_vorher/
+ *     iban_geaendert_am, gesetzt vom Servermodul), meldet der nächste Einzug die Änderung – gleiche Bank: alte IBAN
+ *     (OrgnlDbtrAcct), andere Bank: SMNDA (OrgnlDbtrAgt). Erledigt, sobald danach ein Einzug bezahlt ist. Kein
+ *     Änderungshinweis, wenn unter dem Mandat noch nie eingezogen wurde oder das Mandat jünger ist als der Wechsel.
+ *     Sequenz bleibt wie abgeleitet (seit Rulebook 2016 ist FRST bei SMNDA nicht mehr Pflicht) [A: mit Hausbank klären].
  *
  * UPDATE-PROZEDUR bei einem künftigen Formatwechsel (Bus-Faktor, Übergabe §7):
  *   1. Neues XSD (z. B. pain.008.001.1x) von der Hausbank bzw. aus der DK-Spezifikation (Anlage 3) besorgen und
@@ -69,6 +74,44 @@ var Sepa = (function () {
         ERFOLGREICH.indexOf(s.status) >= 0 && (!seit || !s.einzugsdatum || s.einzugsdatum >= seit);
     });
     return frueher ? 'RCUR' : 'FRST';
+  }
+
+  // ------------------------------------------------------------------ Mandatsänderung
+
+  /** Gleiche Bank? Nur für zwei DE-IBANs über die Bankleitzahl (Stellen 5–12) entscheidbar; sonst nein (→ SMNDA). */
+  function gleicheBank(a, b) {
+    a = Iban.normalisiere(a || ''); b = Iban.normalisiere(b || '');
+    return a.slice(0, 2) === 'DE' && b.slice(0, 2) === 'DE' && a.slice(4, 12) === b.slice(4, 12);
+  }
+
+  /**
+   * Offene Mandatsänderung eines Kontos für den nächsten Einzug oder null.
+   * konto: { beitragskonto_id, iban, iban_vorher, iban_geaendert_am, mandatsdatum }; sollstellungen: alle Sollstellungen;
+   * optionen: { ausser: sollstellung_id (die gerade einzuziehende) }.
+   * Liefert { art: 'konto', alteIban } (gleiche Bank) oder { art: 'bank' } (SMNDA).
+   */
+  function mandatsaenderung(konto, sollstellungen, optionen) {
+    optionen = optionen || {};
+    if (!konto || !konto.iban_vorher || !konto.iban_geaendert_am) return null;
+    var alt = Iban.normalisiere(konto.iban_vorher), neu = Iban.normalisiere(konto.iban || '');
+    if (!neu || alt === neu) return null;
+    var seit = konto.iban_geaendert_am;
+    if (konto.mandatsdatum && konto.mandatsdatum >= seit) return null;   // neues Mandat nach dem Wechsel
+    var eigene = (sollstellungen || []).filter(function (s) {
+      return s.beitragskonto_id === konto.beitragskonto_id && s.sollstellung_id !== optionen.ausser && s.sepa_sequenz &&
+        ERFOLGREICH.indexOf(s.status) >= 0 && s.einzugsdatum && (!konto.mandatsdatum || s.einzugsdatum >= konto.mandatsdatum);
+    });
+    if (!eigene.some(function (s) { return s.einzugsdatum < seit; })) return null;   // unter dem Mandat noch nie eingezogen
+    if (eigene.some(function (s) { return s.einzugsdatum >= seit; })) return null;   // Änderung schon übermittelt
+    return gleicheBank(alt, neu) ? { art: 'konto', alteIban: alt } : { art: 'bank' };
+  }
+
+  function aenderungXml(a) {
+    if (!a) return '';
+    return '<AmdmntInd>true</AmdmntInd><AmdmntInfDtls>' +
+      (a.art === 'konto' ? '<OrgnlDbtrAcct><Id><IBAN>' + escape(a.alteIban) + '</IBAN></Id></OrgnlDbtrAcct>'
+        : '<OrgnlDbtrAgt><FinInstnId><Othr><Id>SMNDA</Id></Othr></FinInstnId></OrgnlDbtrAgt>') +
+      '</AmdmntInfDtls>';
   }
 
   // ------------------------------------------------------------------ Lauf
@@ -125,6 +168,7 @@ var Sepa = (function () {
         sequenz: sequenz(k.beitragskonto_id, daten.Sollstellung, k, { ausser: s.sollstellung_id, immerRcur: optionen.immerRcur }),
         mandatsreferenz: k.mandatsreferenz,
         mandatsdatum: k.mandatsdatum,
+        aenderung: mandatsaenderung(k, daten.Sollstellung, { ausser: s.sollstellung_id }),
         name: k.kontoinhaber_name,
         iban: pr.iban,
         bic: bic.ok ? bic.bic : '',
@@ -219,7 +263,7 @@ var Sepa = (function () {
           '<PmtId><EndToEndId>' + escape(kennung(p.endToEndId)) + '</EndToEndId></PmtId>' +
           '<InstdAmt Ccy="EUR">' + betrag(p.betrag) + '</InstdAmt>' +
           '<DrctDbtTx><MndtRltdInf><MndtId>' + escape(kennung(p.mandatsreferenz)) + '</MndtId>' +
-          '<DtOfSgntr>' + escape(p.mandatsdatum) + '</DtOfSgntr></MndtRltdInf></DrctDbtTx>' +
+          '<DtOfSgntr>' + escape(p.mandatsdatum) + '</DtOfSgntr>' + aenderungXml(p.aenderung) + '</MndtRltdInf></DrctDbtTx>' +
           '<DbtrAgt>' + agentXml(p.bic) + '</DbtrAgt>' +
           '<Dbtr><Nm>' + escape(bereinige(p.name, 70)) + '</Nm>' + adresseXml(p.adresse) + '</Dbtr>' +
           '<DbtrAcct><Id><IBAN>' + escape(p.iban) + '</IBAN></Id></DbtrAcct>' +
@@ -266,12 +310,13 @@ var Sepa = (function () {
   function kontrollliste(lauf) {
     return lauf.posten.map(function (p) {
       return { konto: p.konto, name: p.name, iban: Iban.maskiere(p.iban), mandat: p.mandatsreferenz, sequenz: p.sequenz,
+        aenderung: !p.aenderung ? '' : p.aenderung.art === 'konto' ? 'Kontowechsel (alte IBAN ' + Iban.maskiere(p.aenderung.alteIban) + ')' : 'Bankwechsel (SMNDA)',
         einzug: p.einzugsdatum, betrag: p.betrag, zweck: p.verwendungszweck };
     });
   }
 
   return {
-    NAMESPACE: NAMESPACE, bereinige: bereinige, kennung: kennung, sequenz: sequenz, lauf: lauf,
+    NAMESPACE: NAMESPACE, bereinige: bereinige, kennung: kennung, sequenz: sequenz, mandatsaenderung: mandatsaenderung, lauf: lauf,
     pruefeFuerDatei: pruefeFuerDatei, xml: xml, kontrollliste: kontrollliste
   };
 })();

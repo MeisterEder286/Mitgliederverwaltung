@@ -1,5 +1,6 @@
 <!--
-  ansicht_finanzen – Beitragskonten, Gemeinschaften, Einzugsstand, Sollstellungen, SEPA-Lauf, Klärliste, Tarifwechsel.
+  ansicht_finanzen – Beitragskonten, Gemeinschaften, Einzugsstand, Sollstellungen, SEPA-Lauf, Klärliste, Tarifwechsel,
+                     Beitragsänderung.
 
   Zweck:      Arbeitsbereich für Kasse und Mitgliederverwaltung (MV-Mockup: Beitragskonten, Einzugsstand 2026, SEPA-Lauf).
               Zwei Ansichten: 'finanzen' (Reiter) und 'konto' ({ id }, Detail eines Beitragskontos).
@@ -8,7 +9,7 @@
               IBAN im Klartext nur über „aufdecken“ (apiFinanzenIbanAufdecken, wird protokolliert, nach 60 s verborgen).
   Wer darf:   Ansicht: konto_lesen (Vorstand, Mitgliederverwalter, Kassier). Bearbeiten von Konten/Gemeinschaften:
               konto_bearbeiten (nicht der Kassier). Buchen: sollstellung_bearbeiten. SEPA: sepa_lauf. Tarifwechsel
-              übernehmen: mitglied_bearbeiten. Export: export. Alles serverseitig erzwungen; App.darf blendet nur aus.
+              übernehmen: mitglied_bearbeiten. Beitragsänderung übernehmen: stammdaten_bearbeiten. Export: export. Alles serverseitig erzwungen; App.darf blendet nur aus.
   Besonderheiten:
     - Die SEPA-Datei entsteht auf dem Server (pain.008.001.08) und wird hier nur heruntergeladen – vor dem ersten
       echten Einsatz einmal bei der Hausbank als Testdatei einreichen.
@@ -126,7 +127,8 @@
     { k: 'rechnungen', t: 'Rechnungen' },
     { k: 'jahre', t: 'Jahresübersicht' },
     { k: 'klaerliste', t: 'Klärliste' },
-    { k: 'tarifwechsel', t: 'Tarifwechsel' }
+    { k: 'tarifwechsel', t: 'Tarifwechsel' },
+    { k: 'beitragsaenderung', t: 'Beitragsänderung' }
   ];
 
   A.registriere('finanzen', {
@@ -147,7 +149,7 @@
       A.daten.lade('finanzen').then(function () {
         A.leere(bereich);
         var f = { uebersicht: zeigeUebersicht, konten: zeigeKonten, gemeinschaften: zeigeGemeinschaften, sollstellungen: zeigeSollstellungen,
-          sepa: zeigeSepa, klaerliste: zeigeKlaerliste, tarifwechsel: zeigeTarifwechsel,
+          sepa: zeigeSepa, klaerliste: zeigeKlaerliste, tarifwechsel: zeigeTarifwechsel, beitragsaenderung: zeigeBeitragsaenderung,
           rechnungen: zeigeRechnungen, jahre: zeigeJahre }[zustand.reiter] || zeigeUebersicht;
         f(bereich);
       }).catch(function () { A.leere(bereich); bereich.appendChild(A.el('p', 'Die Finanzdaten konnten nicht geladen werden.', { className: 'leise' })); });
@@ -787,7 +789,7 @@
       if (p.anzahl && A.darf('export')) knoepfe.push(A.knopf('Kontrollliste CSV', function () {
         A.csv('SEPA-Kontrollliste_' + p.jahr + '.csv', [
           { titel: 'Konto', feld: 'konto' }, { titel: 'Name', feld: 'name' }, { titel: 'IBAN', feld: 'iban' }, { titel: 'Mandat', feld: 'mandat' },
-          { titel: 'Sequenz', feld: 'sequenz' }, { titel: 'Einzug', wert: function (z) { return A.datum(z.einzug); } },
+          { titel: 'Sequenz', feld: 'sequenz' }, { titel: 'Mandatsänderung', feld: 'aenderung' }, { titel: 'Einzug', wert: function (z) { return A.datum(z.einzug); } },
           { titel: 'Betrag', wert: function (z) { return String(z.betrag).replace('.', ','); } }, { titel: 'Verwendungszweck', feld: 'zweck' }
         ], p.posten);
         exportVermerken('SEPA-Kontrollliste ' + p.jahr, p.posten.length);
@@ -804,7 +806,8 @@
       ergebnis.appendChild(A.el('h2', 'Posten'));
       ergebnis.appendChild(A.tabelle([
         { feld: 'konto', titel: 'Konto', zahl: true }, { feld: 'name', titel: 'Name' }, { feld: 'iban', titel: 'IBAN', klasse: function () { return 'fin-iban'; } },
-        { feld: 'sequenz', titel: 'Seq.' }, { feld: 'einzug', titel: 'Einzug', wert: function (z) { return A.datum(z.einzug); } },
+        { feld: 'sequenz', titel: 'Seq.', wert: function (z) { return z.aenderung ? z.sequenz + ' · Änderung' : z.sequenz; } },
+        { feld: 'einzug', titel: 'Einzug', wert: function (z) { return A.datum(z.einzug); } },
         { feld: 'betrag', titel: 'Betrag', zahl: true, wert: function (z) { return A.betrag(z.betrag); } }
       ], p.posten, { block: 25, sortiere: 'konto' }));
     }
@@ -973,6 +976,132 @@
         }));
       }
     }).catch(function () { A.leere(huelle); });
+  }
+
+  // ------------------------------------------------------------------ Beitragsänderung (z. B. nach JHV-Beschluss)
+
+  /**
+   * Neue Beträge je Beitragsart und je Pauschale ab 01.01. eines künftigen Jahres: Vorschau je Konto, Übernahme
+   * (alte Beträge bleiben für frühere Jahre erhalten), danach Vorabinformation über „Schreiben“ (je 500 Konten).
+   */
+  function zeigeBeitragsaenderung(ziel) {
+    if (!zustand.baJahr) zustand.baJahr = jahrStandard() + 1;
+    var sel = A.el('select', null, { aria: { label: 'Gültig ab' } });
+    [jahrStandard() + 1, jahrStandard() + 2].forEach(function (j) { sel.appendChild(A.el('option', 'gültig ab 01.01.' + j, { value: String(j) })); });
+    sel.value = String(zustand.baJahr);
+    sel.addEventListener('change', function () { zustand.baJahr = Number(sel.value); zustand.baErgebnis = null; A.neuZeichnen(); });
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [sel]));
+
+    if (zustand.baErgebnis && zustand.baErgebnis.jahr === zustand.baJahr) { baUebernommen(ziel, zustand.baErgebnis); return; }
+
+    ziel.appendChild(A.el('p', 'Neue Beträge eintragen und die Vorschau berechnen. Die bisherigen Beträge bleiben für frühere Jahre (Nachlauf, Rechnungen) erhalten. Nur für ein Jahr ohne Sollstellungen möglich.', { className: 'leise' }));
+    // Eingabefelder einmal je Zeile – die Tabelle zeichnet beim Sortieren neu, die Werte bleiben erhalten
+    var felder = { arten: {}, festbetraege: {} };
+    function betragFeld(wert, label) {
+      var i = A.el('input', null, { type: 'number', min: '0', step: '0.01', value: String(wert), inputMode: 'decimal' });
+      i.setAttribute('aria-label', label);
+      i.style.width = '8em';
+      return i;
+    }
+    var arten = A.daten.liste('beitragsarten').filter(function (a) { return a.aktiv !== false; });
+    ziel.appendChild(A.el('h2', 'Beitragsarten'));
+    ziel.appendChild(A.tabelle([
+      { feld: 'bezeichnung', titel: 'Beitragsart' },
+      { feld: 'betrag', titel: 'bisher', zahl: true, wert: function (a) { return A.betrag(a.betrag); } },
+      { titel: 'neu', sortierbar: false, wert: function (a) {
+        return felder.arten[a.beitragsart_id] = felder.arten[a.beitragsart_id] || betragFeld(a.betrag, 'Neuer Betrag ' + a.bezeichnung);
+      } }
+    ], arten, { sortiere: 'bezeichnung', leer: 'Keine aktiven Beitragsarten.' }));
+
+    var pauschalen = {};
+    A.daten.liste('gemeinschaften').forEach(function (g) {
+      if (g.aktiv === false || g.festbetrag === null || g.festbetrag === undefined || g.festbetrag === '') return;
+      var b = Number(g.festbetrag);
+      pauschalen[b] = (pauschalen[b] || 0) + 1;
+    });
+    var pListe = Object.keys(pauschalen).map(function (b) { return { betrag: Number(b), anzahl: pauschalen[b] }; });
+    if (pListe.length) {
+      ziel.appendChild(A.el('h2', 'Pauschalen der Gemeinschaften'));
+      ziel.appendChild(A.tabelle([
+        { feld: 'betrag', titel: 'bisher', zahl: true, wert: function (p) { return A.betrag(p.betrag); } },
+        { feld: 'anzahl', titel: 'Gemeinschaften', zahl: true },
+        { titel: 'neu', sortierbar: false, wert: function (p) {
+          return felder.festbetraege[p.betrag] = felder.festbetraege[p.betrag] || betragFeld(p.betrag, 'Neue Pauschale statt ' + A.betrag(p.betrag));
+        } }
+      ], pListe, { sortiere: 'betrag' }));
+    }
+
+    var vorschau = A.el('div');
+    function eingabe() {
+      return {
+        arten: Object.keys(felder.arten).map(function (id) { var f = felder.arten[id]; return { beitragsart_id: Number(id), betrag: f.value === '' ? null : Number(f.value) }; }),
+        festbetraege: Object.keys(felder.festbetraege).map(function (b) { var f = felder.festbetraege[b]; return { alt: Number(b), neu: f.value === '' ? null : Number(f.value) }; })
+      };
+    }
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [A.knopf('Vorschau berechnen', function () {
+      var e = eingabe();
+      A.leere(vorschau); laedt(vorschau);
+      A.rufe('apiFinanzenBeitragsaenderungVorschau', zustand.baJahr, e).then(function (r) { baVorschau(vorschau, r, e); }, function () { A.leere(vorschau); });
+    })]));
+    ziel.appendChild(vorschau);
+  }
+
+  function baKonten(r) {
+    return A.tabelle([
+      { feld: 'beitragskonto_id', titel: 'Konto', zahl: true, wert: function (k) { return kontoLink(k.beitragskonto_id); }, sort: function (k) { return k.beitragskonto_id; } },
+      { feld: 'inhaber', titel: 'Zahler' }, { feld: 'zahlweg', titel: 'Zahlweg' },
+      { feld: 'alt', titel: 'bisher', zahl: true, wert: function (k) { return A.betrag(k.alt); } },
+      { feld: 'neu', titel: 'neu', zahl: true, wert: function (k) { return A.betrag(k.neu); } },
+      { feld: 'differenz', titel: 'Differenz', zahl: true, wert: function (k) { return A.betrag(k.differenz); } }
+    ], r.konten, { block: 25, sortiere: 'inhaber', leer: 'Kein Konto ändert sich.' });
+  }
+
+  function baKacheln(r) {
+    return A.el('div', null, { className: 'kacheln' }, [
+      A.kachel(A.zahl(r.konten.length), 'Konten mit neuem Beitrag'),
+      A.kachel(A.betrag(r.summe_alt), 'Jahressoll bisher'),
+      A.kachel(A.betrag(r.summe_neu), 'Jahressoll neu')
+    ]);
+  }
+
+  function baVorschau(ziel, r, e) {
+    A.leere(ziel);
+    if (r.fehler.length) { ziel.appendChild(A.el('div', r.fehler.join(' '), { className: 'fin-fehlerbox', role: 'alert' })); return; }
+    if (!r.arten.length && !r.gemeinschaften.length) { ziel.appendChild(A.el('p', 'Es ändert sich kein Betrag.', { className: 'leise' })); return; }
+    ziel.appendChild(baKacheln(r));
+    var aenderung = r.arten.map(function (a) { return a.bezeichnung + ': ' + A.betrag(a.alt) + ' → ' + A.betrag(a.neu); });
+    if (r.gemeinschaften.length) aenderung.push(r.gemeinschaften.length + ' Pauschale(n) neu');
+    ziel.appendChild(A.el('p', aenderung.join(' · '), { className: 'fin-summe' }));
+    if (A.darf('stammdaten_bearbeiten')) ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [A.knopf('Beitragsänderung übernehmen', function () {
+      A.bestaetige('Beitragsänderung übernehmen', 'Die neuen Beträge gelten ab 01.01.' + r.jahr + ' für ' + r.konten.length + ' Konto/Konten. Die bisherigen Beträge bleiben für frühere Jahre erhalten.', 'Übernehmen').then(function (ja) {
+        if (!ja) return;
+        A.rufe('apiFinanzenBeitragsaenderungUebernehmen', r.jahr, e).then(function (a) {
+          A.daten.uebernehme(a); infoVerwerfen();
+          zustand.baErgebnis = a;
+          fertig('Beitragsänderung ab ' + r.jahr + ' übernommen.');
+        }, function () {});
+      });
+    })]));
+    ziel.appendChild(baKonten(r));
+  }
+
+  /** Nach der Übernahme: Kennzahlen und Vorabinformation an die betroffenen Konten (Schreiben, je 500). */
+  function baUebernommen(ziel, r) {
+    ziel.appendChild(A.el('p', 'Beitragsänderung ab 01.01.' + r.jahr + ' ist übernommen.', { className: 'fin-ok' }));
+    ziel.appendChild(baKacheln(r));
+    var ids = r.konten.map(function (k) { return k.beitragskonto_id; });
+    var knoepfe = [];
+    if (A.darf('anschreiben_erstellen') && ids.length) {
+      for (var i = 0; i < ids.length; i += 500) {
+        (function (teil, nr) {
+          var text = ids.length > 500 ? 'Vorabinformation Teil ' + nr + ' (' + teil.length + ')' : 'Vorabinformation erstellen';
+          knoepfe.push(A.knopf(text, function () { A.zeige('korrespondenz', { anlass: 'Beitragsänderung', jahr: r.jahr, beitragskonto_ids: teil }); }));
+        })(ids.slice(i, i + 500), i / 500 + 1);
+      }
+    }
+    knoepfe.push(A.knopf('Weitere Änderung', function () { zustand.baErgebnis = null; A.neuZeichnen(); }, 'zweit'));
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, knoepfe));
+    ziel.appendChild(baKonten(r));
   }
 })();
 </script>

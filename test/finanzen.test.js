@@ -120,11 +120,19 @@ test('Konto anlegen/ändern: Feldfehler, Mandatsreferenz eindeutig, IBAN-Änderu
   assert.strictEqual(geaendert.aktualisiert.konten[0].version, 2);
   const prot = objekte(f, '_Protokoll').filter(p => p.tabelle === 'Beitragskonto' && p.feld === 'iban' && String(p.datensatz_id) === String(neu.konto_id));
   assert.ok(prot.some(p => p.alt_wert === 'DE89370400440532013000' && p.neu_wert === 'DE02120300000000202051'), 'IBAN alt/neu protokolliert');
+  // Kontowechsel unter demselben Mandat: alte IBAN für die Mandatsänderung gemerkt, aber nie im Snapshot
+  const nachWechsel = objekte(f, 'Beitragskonto').find(k => k.beitragskonto_id === neu.konto_id);
+  assert.strictEqual(nachWechsel.iban_vorher, 'DE89370400440532013000');
+  assert.ok(nachWechsel.iban_geaendert_am);
+  assert.ok(!('iban_vorher' in geaendert.aktualisiert.konten[0]));
+  assert.ok(!JSON.stringify(rein(g.apiSnapshot(['kern', 'finanzen']))).includes('iban_vorher'));
+  assert.ok(geaendert.hinweise.some(h => /Mandatsänderung/.test(h)));
   // veraltete Version → Konflikt
   assert.strictEqual(fehlerArt(g.apiFinanzenKontoSpeichern(neu.konto_id, 1, { bemerkung: 'x' })).art, 'konflikt');
   // Neuer Inhaber → Hinweis neues Mandat
   const inh = ok(g.apiFinanzenKontoSpeichern(neu.konto_id, 2, { kontoinhaber_name: 'Test, Tom' }));
   assert.ok(inh.hinweise.some(h => /neues, unterschriebenes Mandat/.test(h)));
+  assert.ok(!objekte(f, 'Beitragskonto').find(k => k.beitragskonto_id === neu.konto_id).iban_vorher, 'neuer Inhaber: keine Mandatsänderung');
 
   const kassier = als(KASSIER, tabsVon(f));
   assert.strictEqual(fehlerArt(kassier.g.apiFinanzenKontoSpeichern(neu.konto_id, 3, { bemerkung: 'x' })).art, 'zugriff');
