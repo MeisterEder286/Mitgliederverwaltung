@@ -9,6 +9,15 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 - **Suchen:** oben auf der Startseite oder in „Mitglieder“ – Name, Mitgliedsnummer, Ort. Umlaute egal (Müller = Mueller).
 - **Listen drucken/exportieren:** jeweils über „Drucken“ (auch „Als PDF speichern“) oder „CSV“ (öffnet in Excel).
   Jeder Export wird mit Name, Zeit und Liste protokolliert. Kontaktlisten bitte nicht in Messenger-Gruppen weitergeben.
+- **E-Mail an alle / an meine Abteilung** (Mitglieder → ganz unten „E-Mail-Verteiler“): Schnellknöpfe „Alle aktiven
+  Mitglieder“, „Abteilung“ (Auswahlliste) bzw. für Abteilungsleiter „Meine Abteilung …“ sowie „Aktuelle Auswahl“ (die
+  oben gefilterte Liste). Das Programm sendet dabei **nichts**: Es zeigt die Adressen zum Kopieren („Kopieren“ oder
+  „Im Mailprogramm öffnen“) – im eigenen Mailprogramm **immer ins Feld „BCC“** einfügen. Trennzeichen Semikolon
+  (Outlook) oder Komma (Gmail, Thunderbird, Apple Mail); bei vielen Adressen in Blöcken zu 50, je Block eine Mail.
+  Minderjährige sind über die Adresse der gesetzlichen Vertretung enthalten, doppelte Adressen (Familien) nur einmal.
+  Wer keine Adresse hat, steht unter „Ohne E-Mail-Adresse“. Für Newsletter/Werbung den Haken „nur mit Einwilligung
+  Newsletter per E-Mail“ setzen. Das Abrufen wird wie ein Export protokolliert. Wer „Schreiben“ darf, kann von dort
+  mit „Stattdessen über „Schreiben“ senden“ eine Vorlage (Anlass „Allgemein“) an dieselben Personen schicken.
 - **„Der Datensatz wurde inzwischen geändert“:** Jemand anderes hat gleichzeitig gespeichert. Die aktuelle Fassung wird
   geladen; Änderung bitte noch einmal eintragen.
 - **Fehler-Nr.:** Bei unerwarteten Fehlern erscheint eine Nummer. Diese bitte an die Mitgliederverwaltung melden.

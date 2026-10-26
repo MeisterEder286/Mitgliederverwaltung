@@ -30,7 +30,7 @@ var Mitglieder = (function () {
   var EXAKTSUCHE_MAX = 30;          // Suchen je Benutzer und Stunde
   var EXAKTSUCHE_MAX_TAG = 60;      // Suchen je Benutzer und Tag (Befund M3: Durchzählen erschweren)
   var TOKEN_DAUER_S = 600;          // so lange gilt ein Treffer-Token für „Zuordnen“
-  var EXPORTARTEN = ['liste', 'kontaktliste', 'jahrgangsliste', 'geburtstage', 'passive'];
+  var EXPORTARTEN = ['liste', 'kontaktliste', 'jahrgangsliste', 'geburtstage', 'passive', 'mailverteiler'];
 
   // ================================================================== Hilfen
 

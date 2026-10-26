@@ -244,6 +244,7 @@
         { name: 'wirksam', titel: 'Wirksam ab', typ: 'datum', hilfe: 'Für {{wirksam}}, z. B. Umstellung auf Einzelbeitrag' }
       ], { vorlage_id: start ? start.vorlage_id : aktiv[0].vorlage_id, jahr: param.jahr || (A.startdaten.konfig || {}).beitragsjahr || A.startdaten.beitragsjahr,
         wirksam: zusatz0.wirksam || null });
+      if (param.anlass && !start) z.appendChild(A.el('p', 'Es gibt keine aktive Vorlage mit dem Anlass „' + param.anlass + '“ – bitte die passende Vorlage wählen (oder unter „Vorlagen“ anlegen).', { className: 'ko-warnung' }));
       z.appendChild(f.element);
       if (mailMoeglich(st) && st.testmodus) z.appendChild(A.el('p', 'Testmodus: Alle E-Mails gehen nur an die Testadresse ' + (st.test_an || '') + ' (Betreff mit [TEST]).', { className: 'ko-warnung' }));
       z.appendChild(A.el('h2', 'Empfänger'));

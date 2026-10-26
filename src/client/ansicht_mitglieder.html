@@ -5,7 +5,8 @@
               (Stammdaten, Mitgliedschaft, Abteilungen, Funktionen, Beitrag, Nachweise, Ehrungen, Einwilligungen),
               Bearbeiten, Anlegen (mit Dublettenprüfung), Austritt (mit Konto-Guard), Wiedereintritt, Sterbefall,
               Abteilungszugehörigkeiten, Exaktsuche „Mitglied der Abteilung zuordnen“ für Abteilungsleiter,
-              Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck.
+              Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck, E-Mail-Verteiler (Schnellknöpfe „Alle
+              aktiven“, „Abteilung …“/„Meine Abteilung“, „Aktuelle Auswahl“ → Adressliste zum Kopieren, BCC).
   Datenquelle: App.daten (Snapshot, Bereich kern; Mitgliedschaft/Einwilligungen → 'historie', Beitrag → 'finanzen')
               und die api…-Funktionen aus src/api/Mitglieder.js.
   Wer darf:   Lesen: mitglied_lesen. Bearbeiten/Anlegen/Austritt/Zugehörigkeit/Funktion: je eigene Aktion
@@ -16,6 +17,8 @@
       „Meine Abteilung“. Die Exaktsuche liefert höchstens einen Treffer und nie eine Trefferliste.
     - „Zuletzt angesehen“ liegt nur im sessionStorage dieses Browsers (keine Personendaten, nur IDs).
     - Exporte werden vor dem Herunterladen/Drucken auf dem Server protokolliert (ohne Personendaten).
+    - E-Mail-Verteiler sendet nichts: Adressen aus dem Snapshot der Rolle (Minderjährige über die Vertretung wie in
+      „Schreiben“), in Blöcken zu 50 zum Kopieren bzw. als mailto-Link; Abruf wird als Export „mailverteiler“ protokolliert.
 -->
 <style>
   .mv-kopf { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin: 0 0 8px; }
@@ -33,6 +36,12 @@
   .mv-listen h3 { margin: 0 0 4px; font-size: 1rem; }
   .mv-listen p { margin: 0 0 8px; }
   .mv-listen select { min-height: 44px; }
+  .mv-verteiler textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.85rem; padding: 6px; border: 1px solid var(--rand); border-radius: var(--radius); overflow-wrap: anywhere; }
+  .mv-verteiler .mv-block { margin: 0 0 10px; }
+  .mv-verteiler .mv-block h3 { margin: 0 0 4px; font-size: 0.95rem; }
+  .mv-verteiler .mv-trenner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 10px; }
+  .mv-verteiler select { min-height: 40px; font: inherit; max-width: 100%; min-width: 0; }
+  .mv-verteiler a.knopf { display: inline-flex; align-items: center; text-decoration: none; }
   .mv-filter { margin: 0 0 12px; }
   .mv-filter summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
 </style>
@@ -408,6 +417,150 @@
     });
     var tab = karten;
     ziel.appendChild(tab);
+    if (sichtbar('Mitglied', 'email')) zeichneVerteiler(ziel, aktive, aktuelleAuswahl);
+  }
+
+  // ------------------------------------------------------------------ E-Mail-Verteiler
+
+  var VERTEILER_BLOCK = 50;   // Adressen je Block – viele Mailprogramme begrenzen die Empfänger je Mail
+  var MAILTO_MAX = 1900;      // längere mailto-Links schneiden manche Mailprogramme (Outlook) ab
+
+  /** Genau eine E-Mail-Adresse (gleiches Muster wie der Server, src/lib/mail.js adresseOk). */
+  function adresseOk(a) {
+    var s = String(a === null || a === undefined ? '' : a).trim();
+    if (!s || s.length > 254 || /[\s,;<>()\[\]\\"]/.test(s) || /[\u0000-\u001f\u007f]/.test(s)) return false;
+    return /^[^@]+@[^@]+\.[A-Za-z]{2,}$/.test(s);
+  }
+
+  /** Adresse für eine Rundmail – Regel wie beim Versand aus „Schreiben“: Minderjährige über die gesetzliche Vertretung. */
+  function rundmailAdresse(m) {
+    if (m.alter !== undefined && m.alter !== null && m.alter < 18) {
+      if (adresseOk(m.vertreter_kontakt)) return { email: String(m.vertreter_kontakt).trim() };
+      var v = m.vertreter_mitglied_id ? mitglied(m.vertreter_mitglied_id) : null;
+      if (v && adresseOk(v.email)) return { email: String(v.email).trim() };
+      return { email: null, grund: 'minderjährig, keine E-Mail der Vertretung' };
+    }
+    if (adresseOk(m.email)) return { email: String(m.email).trim() };
+    return { email: null, grund: m.email ? 'E-Mail-Adresse ungültig' : 'keine E-Mail-Adresse' };
+  }
+
+  /** Adressen einer Personenliste: ohne Verstorbene, doppelte Adressen (Familien) nur einmal. */
+  function verteilerAus(personen) {
+    var gesehen = {}, adressen = [], ohne = [], doppelt = 0;
+    personen.filter(function (m) { return statusVon(m) !== 'verstorben'; }).forEach(function (m) {
+      var z = rundmailAdresse(m);
+      if (!z.email) { ohne.push({ name: A.name(m), grund: z.grund }); return; }
+      var k = z.email.toLowerCase();
+      if (gesehen[k]) { doppelt++; return; }
+      gesehen[k] = true;
+      adressen.push(z.email);
+    });
+    return { adressen: adressen, ohne: ohne, doppelt: doppelt, ids: personen.map(function (m) { return m.mitglied_id; }) };
+  }
+
+  /** Einwilligung „Newsletter per E-Mail“ heute gültig? (braucht den Bereich „historie“) */
+  function hatNewsletterEinwilligung(m) {
+    var h = heute();
+    return A.daten.liste('einwilligungen').some(function (e) {
+      return e.mitglied_id === m.mitglied_id && e.art === 'Newsletter per E-Mail' && e.erteilt_am && e.erteilt_am <= h && (!e.widerrufen_am || e.widerrufen_am > h);
+    });
+  }
+
+  /** In die Zwischenablage; ohne Clipboard-API (Apps-Script-Rahmen) über Markieren + execCommand. */
+  function kopiere(feld) {
+    function alt() {
+      feld.focus(); feld.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      A.meldung(ok ? 'Adressen kopiert – im Mailprogramm ins Feld „BCC“ einfügen.' : 'Text ist markiert – bitte mit Strg+C (Handy: „Kopieren“) übernehmen.', ok ? 'ok' : '');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(feld.value).then(function () { A.meldung('Adressen kopiert – im Mailprogramm ins Feld „BCC“ einfügen.', 'ok'); }, alt);
+    } else alt();
+  }
+
+  function zeigeVerteiler(titelText, personen, nurEinwilligung) {
+    function weiter() {
+      var liste = nurEinwilligung ? personen.filter(hatNewsletterEinwilligung) : personen;
+      var v = verteilerAus(liste);
+      if (!v.adressen.length) { A.meldung('Für diese Auswahl gibt es keine E-Mail-Adressen.', 'fehler'); return; }
+      A.rufe('apiMitgliederExport', 'mailverteiler', v.adressen.length).then(function () { verteilerDialog(titelText, v, nurEinwilligung); }).catch(function () {});
+    }
+    if (nurEinwilligung && !A.daten.geladen('historie')) A.daten.lade('historie').then(weiter).catch(function () { A.meldung('Einwilligungen konnten nicht geladen werden.', 'fehler'); });
+    else weiter();
+  }
+
+  function verteilerDialog(titelText, v, nurEinwilligung) {
+    var inhalt = A.el('div', null, { className: 'mv-verteiler' });
+    inhalt.appendChild(A.el('p', A.zahl(v.adressen.length) + ' Adressen' + (v.doppelt ? ' (' + v.doppelt + ' doppelte zusammengefasst, z. B. Familien)' : '') +
+      (nurEinwilligung ? ' – nur Personen mit Einwilligung „Newsletter per E-Mail“' : '') + '.'));
+    inhalt.appendChild(A.el('p', 'Adressen immer ins Feld „BCC“ (Blindkopie) einfügen, nie in „An“ oder „CC“ – sonst sieht jeder die Adressen der anderen. Minderjährige sind über die Adresse der gesetzlichen Vertretung enthalten.', { className: 'mv-warnung' }));
+    var trenner = A.el('select', null, { aria: { label: 'Trennzeichen' } });
+    [['; ', 'Semikolon (Outlook)'], [', ', 'Komma (Gmail, Thunderbird, Apple Mail)']].forEach(function (t) { trenner.appendChild(A.el('option', t[1], { value: t[0] })); });
+    inhalt.appendChild(A.el('label', 'Trennzeichen ', { className: 'mv-trenner' }, [trenner]));
+    var bloecke = A.el('div');
+    inhalt.appendChild(bloecke);
+    function zeichneBloecke() {
+      A.leere(bloecke);
+      var n = Math.ceil(v.adressen.length / VERTEILER_BLOCK);
+      for (var i = 0; i < n; i++) {
+        var teil = v.adressen.slice(i * VERTEILER_BLOCK, (i + 1) * VERTEILER_BLOCK);
+        var feld = A.el('textarea', null, { readOnly: true, rows: 3, value: teil.join(trenner.value) });
+        feld.setAttribute('aria-label', 'Adressen ' + (n > 1 ? 'Block ' + (i + 1) : ''));
+        var leiste = A.el('div', null, { className: 'knopfleiste' }, [A.knopf('Kopieren', (function (f) { return function () { kopiere(f); }; })(feld), 'zweit klein')]);
+        var mailto = 'mailto:?bcc=' + teil.map(encodeURIComponent).join(',');
+        if (mailto.length <= MAILTO_MAX) leiste.appendChild(A.el('a', 'Im Mailprogramm öffnen (BCC)', { href: mailto, target: '_blank', rel: 'noopener noreferrer', className: 'knopf zweit klein' }));
+        var kopf = n > 1 ? 'Block ' + (i + 1) + ' von ' + n + ' (Adressen ' + (i * VERTEILER_BLOCK + 1) + '–' + (i * VERTEILER_BLOCK + teil.length) + ')' : null;
+        bloecke.appendChild(A.el('div', null, { className: 'mv-block' }, [kopf ? A.el('h3', kopf) : null, feld, leiste]));
+      }
+      if (n > 1) bloecke.insertBefore(A.el('p', 'Je Block eine eigene Mail senden – viele Anbieter lassen nur begrenzt viele Empfänger je Mail zu.', { className: 'leise' }), bloecke.firstChild);
+    }
+    trenner.addEventListener('change', zeichneBloecke);
+    zeichneBloecke();
+    if (v.ohne.length) {
+      var ul = A.el('ul');
+      v.ohne.forEach(function (o) { ul.appendChild(A.el('li', o.name + ' – ' + o.grund)); });
+      inhalt.appendChild(A.el('details', null, null, [A.el('summary', 'Ohne E-Mail-Adresse: ' + v.ohne.length + ' Person(en) – bitte anders informieren'), ul]));
+    }
+    var knoepfe = [{ text: 'Schließen' }];
+    if (A.darf('anschreiben_erstellen') && v.ids.length <= 500) {
+      knoepfe.unshift({ text: 'Stattdessen über „Schreiben“ senden', aktion: function (s) { s(); A.zeige('korrespondenz', { mitglied_ids: v.ids, anlass: 'Allgemein' }); } });
+    }
+    A.dialog('E-Mail-Verteiler: ' + titelText, inhalt, knoepfe);
+  }
+
+  /**
+   * Schnellknöpfe „Mail an alle / an meine Abteilung“: liefern nur eine Adressliste zum Kopieren, gesendet wird nichts.
+   * Wer alle sieht: alle aktiven Mitglieder und jede Abteilung; Abteilungsleitung: die eigenen Abteilungen.
+   */
+  function zeichneVerteiler(ziel, aktive, aktuelleAuswahl) {
+    ziel.appendChild(A.abschnitt('E-Mail-Verteiler'));
+    ziel.appendChild(A.el('p', 'Adressliste zum Kopieren ins eigene Mailprogramm (Feld „BCC“). Es wird nichts gesendet; das Abrufen wird protokolliert.', { className: 'leise' }));
+    var einwilligung = A.el('input', null, { type: 'checkbox' });
+    var knoepfe = A.el('div', null, { className: 'knopfleiste' });
+    function knopf(text, personen) {
+      knoepfe.appendChild(A.knopf(text, function () { zeigeVerteiler(text, personen(), einwilligung.checked); }, 'zweit'));
+    }
+    function inAbteilung(id) { return function () { return aktive().filter(function (m) { return (m.abteilungen || []).indexOf(Number(id)) >= 0; }); }; }
+    var eigene = eigeneAbteilungen();
+    if (alleZeilen()) knopf('Alle aktiven Mitglieder', aktive);
+    else if (!eigene.length) knopf('Alle aktiven (meine Sicht)', aktive);
+    if (alleZeilen()) {
+      var wahl = A.el('select', null, { aria: { label: 'Abteilung für den Verteiler' } });
+      A.daten.liste('abteilungen').filter(function (a) { return a.aktiv !== false; }).forEach(function (a) { wahl.appendChild(A.el('option', a.bezeichnung, { value: String(a.abteilung_id) })); });
+      if (wahl.options.length) {
+        knoepfe.appendChild(wahl);
+        knoepfe.appendChild(A.knopf('Abteilung', function () {
+          zeigeVerteiler('Abteilung ' + abteilungsname(wahl.value), inAbteilung(wahl.value)(), einwilligung.checked);
+        }, 'zweit'));
+      }
+    } else {
+      eigene.forEach(function (id) { knopf((eigene.length === 1 ? 'Meine Abteilung' : 'Abteilung') + ' ' + abteilungsname(id), inAbteilung(id)); });
+    }
+    knopf('Aktuelle Auswahl', aktuelleAuswahl);
+    var karte = A.el('div', null, { className: 'karte' }, [knoepfe,
+      A.el('label', null, { className: 'mv-optionen' }, [einwilligung, A.el('span', 'nur Personen mit Einwilligung „Newsletter per E-Mail“ (für Newsletter/Werbung; Vereinsinformationen wie Einladungen brauchen sie nicht)')])]);
+    ziel.appendChild(karte);
   }
 
   // ================================================================== Detail

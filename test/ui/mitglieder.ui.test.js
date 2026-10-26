@@ -156,3 +156,57 @@ test('Kassier: Liste lesen ja, Bearbeiten nein (Knopf fehlt, Server weist ab)', 
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });
+
+test('E-Mail-Verteiler: alle aktiven / Abteilung als Adressliste (BCC), Minderjährige über die Vertretung, protokolliert', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  try {
+    await navigiere(ui, 'Mitglieder');
+    await ui.page.locator('button', { hasText: 'Alle aktiven Mitglieder' }).click();
+    await ui.page.waitForSelector('dialog textarea');
+    const text = (await ui.page.$$eval('dialog textarea', t => t.map(x => x.value))).join('; ');
+    const adressen = text.split(/;\s*/).filter(Boolean);
+    assert.ok(adressen.length > 0, 'Adressen vorhanden');
+    assert.ok(adressen.length <= 50 || (await ui.page.locator('dialog textarea').count()) > 1, 'Blöcke zu 50');
+    assert.strictEqual(new Set(adressen.map(a => a.toLowerCase())).size, adressen.length, 'keine doppelten Adressen');
+    // Erwartung aus dem Snapshot: Erwachsene mit eigener Adresse, Minderjährige nur über die Vertretung
+    const erwartet = await ui.page.evaluate(() => {
+      const ok = a => /^[^@\s,;<>()\[\]\\"]+@[^@\s,;<>()\[\]\\"]+\.[A-Za-z]{2,}$/.test(String(a || '').trim());
+      const ms = App.daten.liste('mitglieder').filter(m => m.status_abgeleitet === 'aktiv');
+      const minder = ms.filter(m => m.alter < 18 && ok(m.email) && !ok(m.vertreter_kontakt) && m.email !== (App.daten.hole('mitglieder', m.vertreter_mitglied_id) || {}).email);
+      return { minderEigene: minder.map(m => m.email.trim().toLowerCase()) };
+    });
+    const klein = new Set(adressen.map(a => a.toLowerCase()));
+    // eigene Adresse eines Minderjährigen taucht nur auf, wenn sie zugleich die eines anderen (erwachsenen) Empfängers ist
+    const erwachsene = await ui.page.evaluate(() => App.daten.liste('mitglieder').filter(m => !(m.alter < 18)).map(m => String(m.email || '').trim().toLowerCase()));
+    erwartet.minderEigene.filter(a => !erwachsene.includes(a)).forEach(a => assert.ok(!klein.has(a), 'Minderjährigen-Adresse nicht direkt: ' + a));
+    assert.ok(ui.objekte('_Protokoll').some(x => x.aktion === 'exportiert' && /^mailverteiler: \d+/.test(x.kommentar || '')), 'protokolliert');
+    // Trennzeichen umschalten
+    await ui.page.locator('dialog').getByLabel('Trennzeichen').selectOption(', ');
+    assert.match(await ui.page.locator('dialog textarea').first().inputValue(), /@[^,;]+, /);
+    // Weiter zu „Schreiben“ mit Vorauswahl
+    await ui.page.locator('dialog button', { hasText: 'Stattdessen über „Schreiben“ senden' }).click();
+    await ui.page.waitForSelector('.reiter button[aria-selected="true"]:has-text("Neues Schreiben")');
+    // Abteilung
+    await navigiere(ui, 'Mitglieder');
+    await ui.page.getByLabel('Abteilung für den Verteiler').selectOption({ label: 'Turnen' });
+    await ui.page.locator('.knopfleiste button', { hasText: /^Abteilung$/ }).click();
+    await ui.page.waitForSelector('dialog h2:has-text("Abteilung Turnen")');
+    await keinUeberlauf(ui);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
+test('E-Mail-Verteiler Abteilungsleiter: nur „Meine Abteilung“, nur Adressen aus der eigenen Sicht', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Abteilungsleiter' });   // erster AL = Fußball
+  try {
+    await navigiere(ui, 'Meine Abteilung');
+    assert.strictEqual(await ui.page.locator('button', { hasText: 'Alle aktiven Mitglieder' }).count(), 0);
+    await ui.page.locator('button', { hasText: 'Meine Abteilung Fußball' }).click();
+    await ui.page.waitForSelector('dialog textarea');
+    const adressen = (await ui.page.$$eval('dialog textarea', t => t.map(x => x.value))).join('; ').split(/;\s*/).filter(Boolean).map(a => a.toLowerCase());
+    const sichtbar = await ui.page.evaluate(() => App.daten.liste('mitglieder').flatMap(m => [m.email, m.vertreter_kontakt]).filter(Boolean).map(a => String(a).trim().toLowerCase()));
+    adressen.forEach(a => assert.ok(sichtbar.includes(a), 'nur sichtbare Adressen: ' + a));
+    assert.strictEqual(await ui.page.locator('dialog button', { hasText: 'Schreiben' }).count(), 0, 'AL hat kein „Schreiben“');
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
