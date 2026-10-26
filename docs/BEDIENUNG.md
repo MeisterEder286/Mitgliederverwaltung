@@ -45,8 +45,11 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 - **Online-Anträge von der Homepage:** Startseite-Kachel „neue Online-Aufnahmeanträge“ bzw. Mitglieder → „Beitritte aus XML
   importieren“ → oben „Online-Anträge von der Homepage“. Anträge ankreuzen (das PDF mit Unterschrift lässt sich daneben
   öffnen) → „Ausgewählte prüfen“ → wie unten. Beim Übernehmen wird das PDF automatisch als Dokument verknüpft
-  (Aufnahmeantrag bei jeder Person, SEPA-Mandat am Konto). Doppelt abgeschickte oder zurückgezogene Anträge mit „Nicht
+  (Aufnahmeantrag bei jeder Person, SEPA-Mandat am Konto), Einwilligungen aus dem Formular werden angelegt, der Tarif
+  kommt aus den Stammdaten (Familienpreis, Einzelbeitrag). Doppelt abgeschickte oder zurückgezogene Anträge mit „Nicht
   übernehmen“ und kurzem Grund abschließen.
+  Voraussetzung: In Verwaltung → Stammdaten haben Beitragsarten und Abteilungen ihren „Schlüssel im Online-Formular“
+  (z. B. `familienbeitrag`, `fussball`). Fehlt einer, zeigt die Vorschau eine Warnung.
 - **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
   bearbeiten). Eine oder mehrere Antrags-Dateien (XML wie bisher aus Access) auswählen – sie werden nur im Browser gelesen.
   Die Vorschau zeigt je Antrag die Personen mit vorläufiger Nummer, das Konto (IBAN nur maskiert), ggf. den

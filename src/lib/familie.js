@@ -97,7 +97,7 @@ var Familie = (function () {
 
   /** Passende Einzel-Beitragsart nach Alter (aktive Arten mit Altersgrenze bevorzugt). */
   function vorschlagArt(daten, alter, tag) {
-    var aktive = (daten.Beitragsart || []).filter(function (a) { return Beitrag.artVerfuegbar(a, tag); });
+    var aktive = (daten.Beitragsart || []).filter(function (a) { return Beitrag.artVerfuegbar(a, tag) && !a.als_gemeinschaft; });
     var mitGrenze = function (a) { return hat(a.alter_von) || hat(a.alter_bis); };
     var passt = aktive.filter(function (a) { return Beitrag.altersbereichPasst(a, alter); });
     var art = passt.filter(mitGrenze)[0] || passt[0] || null;

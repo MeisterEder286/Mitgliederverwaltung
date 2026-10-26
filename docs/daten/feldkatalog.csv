@@ -105,6 +105,7 @@ Abteilung,bezeichnung,Text,ja,,intern,Vereinsinterner Name.
 Abteilung,blsv_sportart,Text,nein,,intern,"Bezeichnung laut BLSV, kann abweichen (Stockschützen → Eisstocksport)."
 Abteilung,meldepflichtig,ja/nein,ja,ja_nein,intern,Geht in die Bestandserhebung ein.
 Abteilung,aktiv,ja/nein,ja,ja_nein,intern,"Ruhende Abteilungen auf „nein“ setzen, nicht löschen."
+Abteilung,online_schluessel,Text,nein,,intern,"Schlüssel der Abteilung im Online-Aufnahmeantrag (Homepage), z. B. „fussball“; mehrere durch Komma. Leer = nicht online wählbar."
 Abteilung,bemerkung,Langtext,nein,,intern,—
 Abteilung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
 Abteilung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
@@ -153,6 +154,8 @@ Beitragsart,alter_bis,Ganzzahl,nein,,intern,"Obere Altersgrenze, leer = nach obe
 Beitragsart,intervall,Auswahl,ja,intervall,intern,—
 Beitragsart,aktiv,ja/nein,ja,ja_nein,intern,"Alte Tarife auf „nein“, damit die Historie stimmt."
 Beitragsart,gueltig_ab,Datum,nein,,intern,"Ab wann der Betrag gilt; davor gilt betrag_vorher (falls gesetzt)."
+Beitragsart,online_schluessel,Text,nein,,intern,"Schlüssel des Tarifs im Online-Aufnahmeantrag (Homepage), z. B. „erwachsene“ oder „kind, jugendliche“ (mehrere durch Komma)."
+Beitragsart,als_gemeinschaft,Auswahl,nein,gemeinschaft_art,intern,"Leer = Einzelbeitrag je Person. Familie/Ehepaar: Der Betrag gilt EINMAL für alle Personen; Beitritte legen dafür eine Beitragsgemeinschaft mit diesem Betrag an. Nicht als Beitragsart einer einzelnen Person verwenden."
 Beitragsart,bemerkung,Langtext,nein,,intern,—
 Beitragsart,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
 Beitragsart,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)

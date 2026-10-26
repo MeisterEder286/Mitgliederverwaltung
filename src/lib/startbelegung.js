@@ -8,13 +8,13 @@
  */
 var Startbelegung = {
   "Abteilung": {
-    kopf: ["abteilung_id","bezeichnung","blsv_sportart","meldepflichtig","aktiv","bemerkung"],
+    kopf: ["abteilung_id","bezeichnung","blsv_sportart","meldepflichtig","aktiv","online_schluessel","bemerkung"],
     zeilen: [
-      ["1","Fußball","Fußball","ja","ja",""],
-      ["2","Turnen","Turnen","ja","ja",""],
-      ["3","Tennis","Tennis","ja","ja",""],
-      ["4","Stockschützen","Eisstocksport","ja","ja","BLSV-Bezeichnung weicht ab"],
-      ["5","Skiabteilung","Skisport","nein","nein","Ruht seit 2019 — nicht löschen, sonst reißt die Historie"]
+      ["1","Fußball","Fußball","ja","ja","fussball",""],
+      ["2","Turnen","Turnen","ja","ja","fitness-turnen","BEISPIEL-Schlüssel – mit dem Online-Formular abgleichen"],
+      ["3","Tennis","Tennis","ja","ja","",""],
+      ["4","Stockschützen","Eisstocksport","ja","ja","","BLSV-Bezeichnung weicht ab"],
+      ["5","Skiabteilung","Skisport","nein","nein","","Ruht seit 2019 — nicht löschen, sonst reißt die Historie"]
     ]
   },
   "Aufbewahrungsfrist": {
@@ -35,11 +35,13 @@ var Startbelegung = {
     ]
   },
   "Beitragsart": {
-    kopf: ["beitragsart_id","bezeichnung","betrag","alter_von","alter_bis","intervall","aktiv","gueltig_ab","bemerkung"],
+    kopf: ["beitragsart_id","bezeichnung","betrag","alter_von","alter_bis","intervall","aktiv","gueltig_ab","online_schluessel","als_gemeinschaft","bemerkung"],
     zeilen: [
-      ["1","Erwachsene","100","18","","jährlich","ja","2024-01-01","BEISPIELBETRAG — echten Satz eintragen"],
-      ["2","Jugendliche bis 18","45","0","17","jährlich","ja","2024-01-01","BEISPIELBETRAG"],
-      ["3","Fördermitglied","50","","","jährlich","ja","2024-01-01","BEISPIELBETRAG"]
+      ["1","Erwachsene","100","18","","jährlich","ja","2024-01-01","erwachsene, rentner","","BEISPIELBETRAG — echten Satz eintragen"],
+      ["2","Jugendliche bis 18","45","0","17","jährlich","ja","2024-01-01","kind, jugendliche","","BEISPIELBETRAG"],
+      ["3","Fördermitglied","50","","","jährlich","ja","2024-01-01","","","BEISPIELBETRAG"],
+      ["4","Familienbeitrag","180","","","jährlich","ja","2024-01-01","familienbeitrag","Familie","BEISPIELBETRAG – einmal je Familie"],
+      ["5","Ehegattenbeitrag","150","","","jährlich","ja","2024-01-01","ehegattenbeitrag","Ehepaar","BEISPIELBETRAG – einmal je Ehepaar"]
     ]
   },
   "Ehrungsregel": {

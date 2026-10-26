@@ -18,6 +18,10 @@
  *   - Eintritt in der Zukunft: geplant wird zum Eintrittsdatum (die Person gilt als aufgenommen) [A].
  *   - Mandatsdatum: beim Online-Antrag das Unterschriftsdatum (antrag.unterschrift_am), sonst vorläufig der Eintritt
  *     mit Warnung „bitte prüfen“.
+ *   - Online-Antrag „tsv-antrag-2“ (antrag.online, src/lib/antrag2.js): Tarif-Schlüssel → Beitragsart bzw.
+ *     Beitragsgemeinschaft (Beitragsart.als_gemeinschaft, Betrag aus den Stammdaten), Abteilungs-Schlüssel →
+ *     Abteilung (online_schluessel), Unterschrift durch Erziehungsberechtigte → Vertretung, Kontoinhaber ohne
+ *     Mitgliedschaft → Konto ohne Personenbezug, Einwilligungen → Zeilen in Einwilligung.
  */
 var Beitritt = (function () {
   var MAX_ANTRAEGE = 50;
@@ -25,6 +29,8 @@ var Beitritt = (function () {
   var MAX_LAENGE = 500;
   var TEMP_NR = 900000;
   /** Prüflisten-Arten der Migration, die beim Beitritt keine Rolle spielen. */
+  /** Beim Online-Antrag zusätzlich ohne Belang: Beitrags-Heuristik über Beträge (der Tarif kommt als Schlüssel). */
+  var ONLINE_UNWICHTIG = ['beitrag_unbekannt', 'beitragsart_mehrdeutig', 'cluster_mischfall', 'ohne_beitrag'];
   var UNWICHTIG = ['spalte_fehlt', 'spalte_unbekannt', 'status_abteilung', 'id_fehlt', 'id_doppelt', 'mitglnr_fehlt', 'mitglnr_doppelt',
     'dublette', 'zahlung_unbekannt', 'iban_ungueltig'];
 
@@ -50,6 +56,13 @@ var Beitritt = (function () {
     for (var i = 0; i < antraege.length; i++) {
       var a = antraege[i] || {};
       var datei = String(a.datei || 'Antrag ' + (i + 1)).replace(/[^\w .()\-äöüÄÖÜß]/g, '').slice(0, 120) || 'Antrag ' + (i + 1);
+      // Online-Antrag „tsv-antrag-2“: nur als JSON annehmen und selbst umwandeln (nie ein fertiges „online“ vom Browser)
+      if (a.json !== undefined && a.json !== null) {
+        var v2 = Antrag2.zuAntrag(typeof a.json === 'string' ? a.json.slice(0, Antrag2.MAX_JSON + 1) : a.json, datei);
+        if (v2.fehler) return { fehler: datei + ': ' + v2.fehler };
+        aus.push(v2);
+        continue;
+      }
       if (!Array.isArray(a.personen) || !a.personen.length) return { fehler: datei + ': keine Personen (<Daten16>) gefunden.' };
       if (a.personen.length > MAX_PERSONEN) return { fehler: datei + ': mehr als ' + MAX_PERSONEN + ' Personen in einem Antrag.' };
       var personen = [];
@@ -145,6 +158,54 @@ var Beitritt = (function () {
   }
 
   /**
+   * Tarif des Online-Antrags anwenden (verändert tabs): Gemeinschaftstarif → eine Beitragsgemeinschaft mit dem
+   * Betrag aus den Stammdaten für alle Personen; sonst die Beitragsart für jede Person. Liefert die Anzeige
+   * { schluessel, beitragsart, gemeinschaft } oder null (dann bleibt der Vorschlag nach Alter).
+   */
+  function tarifAnwenden(online, tabs, kontext, stichtag, warnungen) {
+    var arten = (kontext.beitragsarten || []).filter(function (a) {
+      return a.aktiv !== false && online.tarif && Antrag2.schluesselListe(a.online_schluessel).indexOf(online.tarif) >= 0;
+    });
+    // ohne zugeordneten Tarif: keine Gemeinschaft aus einer Betrags-Heuristik
+    tabs.Beitragsgemeinschaft = [];
+    tabs.Mitglied.forEach(function (mm) { mm.beitragsgemeinschaft_id = null; mm.beitragsart_id = null; });
+    if (!online.tarif) { warnungen.push('Kein Tarif im Online-Antrag – Beitragsart bitte wählen.'); return null; }
+    if (arten.length !== 1) {
+      warnungen.push(arten.length ? 'Tarif „' + online.tarif + '“ ist mehreren Beitragsarten zugeordnet (' + arten.map(function (a) { return a.bezeichnung; }).join(', ') + ') – bitte eindeutig machen.'
+        : 'Tarif „' + online.tarif + '“ ist keiner Beitragsart zugeordnet (Stammdaten → Beitragsart → Schlüssel im Online-Formular) – Beitragsart bitte wählen.');
+      return { schluessel: online.tarif, beitragsart: null, gemeinschaft: null };
+    }
+    var art = arten[0];
+    var betrag = typeof Beitrag !== 'undefined' ? Beitrag.betragAm(art, stichtag) : Number(art.betrag || 0);
+    if (art.als_gemeinschaft) {
+      var p1 = tabs.Mitglied[0];
+      tabs.Beitragsgemeinschaft = [{ beitragsgemeinschaft_id: 1, bezeichnung: art.als_gemeinschaft + ' ' + (p1.nachname || ''), festbetrag: betrag,
+        aktiv: true, bemerkung: null, version: 1, geaendert_am: null, geaendert_von: null }];
+      tabs.Mitglied.forEach(function (mm) { mm.beitragsgemeinschaft_id = 1; });
+      if (art.als_gemeinschaft === 'Ehepaar' && tabs.Mitglied.length !== 2) warnungen.push('Ehegattenbeitrag mit ' + tabs.Mitglied.length + ' Person(en) – bitte prüfen.');
+      if (tabs.Mitglied.length < 2) warnungen.push(art.bezeichnung + ' mit nur einer Person – bitte prüfen.');
+      return { schluessel: online.tarif, beitragsart: art.bezeichnung, gemeinschaft: tabs.Beitragsgemeinschaft[0].bezeichnung, betrag: betrag };
+    }
+    tabs.Mitglied.forEach(function (mm) {
+      mm.beitragsart_id = art.beitragsart_id;
+      var alter = typeof Mitgliedschaft !== 'undefined' && mm.geburtsdatum ? Mitgliedschaft.alter(mm.geburtsdatum, stichtag) : null;
+      if (alter !== null && typeof Beitrag !== 'undefined' && !Beitrag.altersbereichPasst(art, alter)) {
+        warnungen.push([mm.nachname, mm.vorname].filter(Boolean).join(', ') + ': Alter ' + alter + ' passt nicht zu „' + art.bezeichnung + '“ – bitte prüfen.');
+      }
+    });
+    return { schluessel: online.tarif, beitragsart: art.bezeichnung, gemeinschaft: null, betrag: betrag };
+  }
+
+  /** Ist der Kontoinhaber eine andere Person als die im Antrag? (Name in beiden Schreibweisen verglichen) */
+  function kontoinhaberExtern(inhaber, mitglieder) {
+    if (!inhaber) return false;
+    var i = falte(inhaber);
+    return !mitglieder.some(function (mm) {
+      return i === falte((mm.vorname || '') + (mm.nachname || '')) || i === falte((mm.nachname || '') + (mm.vorname || ''));
+    });
+  }
+
+  /**
    * Plant einen Antrag.
    * kontext: { heute, beitragsjahr, abteilungen, beitragsarten, pauschalbetraege, bestand: { Mitglied,
    *            Mitgliedschaftszeitraum, Abteilungszugehoerigkeit, Beitragskonto }, nummern (aus nummernkreis) }
@@ -173,6 +234,22 @@ var Beitritt = (function () {
       if (!feld(p, ['eindat', 'eintritt', 'eintrittsdatum'])) z.EinDat = heute;
       return z;
     });
+    var online = antrag.online || null;
+    var warnungen = [];
+    if (online) {
+      // Abteilungs-Schlüssel des Formulars → Abteilung (online_schluessel), für jede Person des Antrags
+      var namen = [];
+      online.abteilungen.forEach(function (k) {
+        var abt = (kontext.abteilungen || []).filter(function (x) { return x.aktiv !== false && Antrag2.schluesselListe(x.online_schluessel).indexOf(k) >= 0; })[0];
+        if (abt) { if (namen.indexOf(abt.bezeichnung) < 0) namen.push(abt.bezeichnung); }
+        else warnungen.push('Abteilung „' + k + '“ aus dem Online-Formular ist keiner Abteilung zugeordnet (Stammdaten → Abteilung → Schlüssel im Online-Formular).');
+      });
+      zeilen.forEach(function (z) {
+        namen.slice(0, 4).forEach(function (n, j) { z['Abteilung ' + (j + 1)] = n; });
+        if (namen.length) z['Status Abteilung 1'] = 'aktiv';
+      });
+      if (namen.length > 4) warnungen.push('Mehr als vier Abteilungen gewählt – nur die ersten vier übernommen.');
+    }
     // Erste Zeile bestimmt die Spalten der Migration → alle Feldnamen in jede Zeile übernehmen
     var alle = {};
     zeilen.forEach(function (z) { Object.keys(z).forEach(function (k) { alle[k] = true; }); });
@@ -195,10 +272,10 @@ var Beitritt = (function () {
       abteilungAlias: kontext.abteilungAlias || {}
     });
     var tabs = m.tabs;
-    var warnungen = [];
     var proPerson = {};
     m.bericht.pruefliste.forEach(function (x) {
       if (UNWICHTIG.indexOf(x.art) >= 0) return;
+      if (online && ONLINE_UNWICHTIG.indexOf(x.art) >= 0) return;   // Tarif kommt als Schlüssel, nicht als Betrag
       var meldung = String(x.meldung || '').replace(/\b9000(\d\d)\b/g, function (s, n) { return 'Person ' + Number(n); });
       if (x.id) (proPerson[x.id] = proPerson[x.id] || []).push(meldung);
       else warnungen.push(meldung);
@@ -218,8 +295,20 @@ var Beitritt = (function () {
         warnungen.push('Mandatsdatum vorläufig = Eintritt (' + konto.mandatsdatum + ') – Datum der Unterschrift auf dem Formular prüfen.');
       } else konto.mandatsdatum = null;
     }
+    var tarif = null, kontoExtern = false;
+    if (online) {
+      tarif = tarifAnwenden(online, tabs, kontext, stichtag, warnungen);
+      if (konto) {
+        konto.bemerkung = 'Online-Antrag: ' + antrag.datei;
+        kontoExtern = kontoinhaberExtern(online.kontoinhaber, tabs.Mitglied);
+        if (kontoExtern) warnungen.push('Kontoinhaber „' + online.kontoinhaber + '“ ist keine Person des Antrags – Konto ohne Verknüpfung zu einem Mitglied angelegt.');
+      }
+      if (!online.bestaetigt.datenschutz) warnungen.push('Datenschutzhinweise im Formular nicht bestätigt.');
+      if (konto && konto.zahlweg === 'Lastschrift' && !online.bestaetigt.sepa_mandat) warnungen.push('SEPA-Mandat im Formular nicht bestätigt – vor dem ersten Einzug klären.');
+      if (online.bemerkung) warnungen.push('Bemerkung im Antrag: ' + online.bemerkung);
+    }
     var gem = tabs.Beitragsgemeinschaft[0] || null;
-    if (gem) gem.bemerkung = 'Beitritt aus XML: ' + antrag.datei;
+    if (gem) gem.bemerkung = (online ? 'Online-Antrag: ' : 'Beitritt aus XML: ') + antrag.datei;
 
     // Personen nachbearbeiten: Beitragsart nach Alter (falls nichts erkannt), Vertretung für Minderjährige
     var ersterErwachsen = null;
@@ -231,7 +320,7 @@ var Beitritt = (function () {
       mm.geaendert_von = null; mm.geaendert_am = null;
       if (!mm.beitragsgemeinschaft_id && !mm.beitragsart_id) {
         var passend = (kontext.beitragsarten || []).filter(function (a) {
-          return a.aktiv !== false && alter !== null && (a.alter_von === null || a.alter_von === undefined || alter >= a.alter_von) &&
+          return a.aktiv !== false && !a.als_gemeinschaft && alter !== null && (a.alter_von === null || a.alter_von === undefined || alter >= a.alter_von) &&
             (a.alter_bis === null || a.alter_bis === undefined || alter <= a.alter_bis);
         });
         if (passend.length === 1) { mm.beitragsart_id = passend[0].beitragsart_id; w.push('Beitragsart nach Alter vorgeschlagen: ' + passend[0].bezeichnung + '.'); }
@@ -240,7 +329,11 @@ var Beitritt = (function () {
         if (ersterErwachsen) mm.vertreter_mitglied_id = tabs.Mitglied[0].mitglied_id;
         else w.push('Minderjährig, aber Person 1 ist nicht volljährig – gesetzliche Vertretung bitte eintragen.');
       }
-      if (i === 0 && alter !== null && alter < 18) w.push('Person 1 (Zahler) ist minderjährig – Kontoinhaber/Vertretung prüfen.');
+      if (online && alter !== null && alter < 18 && !mm.vertreter_mitglied_id && online.antrag_unterschrift.als === 'erziehungsberechtigt') {
+        if (online.antrag_unterschrift.name) mm.vertreter_name = online.antrag_unterschrift.name;
+        else w.push('Unterschrieben von Erziehungsberechtigten, Name fehlt – gesetzliche Vertretung bitte eintragen.');
+      }
+      if (i === 0 && alter !== null && alter < 18 && !mm.vertreter_name) w.push('Person 1 (Zahler) ist minderjährig – Kontoinhaber/Vertretung prüfen.');
       var dub = dubletten(mm, kontext.bestand || {}, heute);
       return {
         index: i, name: [mm.nachname, mm.vorname].filter(Boolean).join(', '), geburtsdatum: mm.geburtsdatum,
@@ -251,8 +344,22 @@ var Beitritt = (function () {
         dubletten: dub, warnungen: w
       };
     });
+    // Einwilligungen aus dem Online-Formular: je Person und Art eine Zeile (erteilt mit der Unterschrift)
+    tabs.Einwilligung = [];
+    if (online && online.einwilligungen.length) {
+      var erteilt = online.antrag_unterschrift.datum || antrag.unterschrift_am || heute;
+      tabs.Mitglied.forEach(function (mm) {
+        var minder = typeof Mitgliedschaft !== 'undefined' && mm.geburtsdatum && Mitgliedschaft.alter(mm.geburtsdatum, heute) < 18;
+        online.einwilligungen.forEach(function (art) {
+          tabs.Einwilligung.push({ mitglied_id: mm.mitglied_id, art: art, umfang: null, erteilt_am: erteilt, erteilt_form: 'Aufnahmeantrag',
+            erteilt_durch: minder ? (online.antrag_unterschrift.name || mm.vertreter_name || null) : null, widerrufen_am: null,
+            nachweis_ort: 'Online-Aufnahmeantrag (PDF mit Unterschrift, Dokumente)', bemerkung: null });
+        });
+      });
+    }
     return {
       datei: antrag.datei, erwartet: rohe.length,
+      tarif: tarif, einwilligungen: online ? online.einwilligungen : [], konto_extern: kontoExtern,
       personen: personen,
       konto: konto ? { inhaber: konto.kontoinhaber_name, zahlweg: konto.zahlweg, iban_maskiert: maskiere(konto.iban), bic: konto.bic || null,
         mandatsdatum: konto.mandatsdatum } : null,

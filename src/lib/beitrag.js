@@ -289,7 +289,7 @@ var Beitrag = (function () {
     var stichtag = tagImJahr(konfig(daten, optionen, 'tarifwechsel_stichtag'), jahr);
     var ix = index(daten);
     var aktive = (daten.Beitragsart || []).filter(function (a) {
-      return artVerfuegbar(a, stichtag) &&
+      return artVerfuegbar(a, stichtag) && !a.als_gemeinschaft &&
         ((a.alter_von !== null && a.alter_von !== undefined && a.alter_von !== '') || (a.alter_bis !== null && a.alter_bis !== undefined && a.alter_bis !== ''));
     });
     var vorschlaege = [];
@@ -353,6 +353,11 @@ var Beitrag = (function () {
     (eingabe.festbetraege || []).forEach(function (e) {
       if (!betragOk(e.alt) || !betragOk(e.neu)) { fehler.push('Pauschale: bitte bisherigen und neuen Betrag ≥ 0 angeben.'); return; }
       if (runde(Number(e.alt)) !== runde(Number(e.neu))) zuordnung[runde(Number(e.alt))] = runde(Number(e.neu));
+    });
+    // Neuer Gemeinschaftstarif (Familie/Ehepaar): bestehende Gemeinschaften mit dem bisherigen Tarifbetrag ziehen mit,
+    // sofern für diesen Betrag nichts anderes eingetragen ist
+    r.arten.forEach(function (x) {
+      if (arten[x.beitragsart_id].als_gemeinschaft && zuordnung[x.alt] === undefined) zuordnung[x.alt] = x.neu;
     });
     (daten.Beitragsgemeinschaft || []).forEach(function (g) {
       var alt = festbetragAm(g, ab);

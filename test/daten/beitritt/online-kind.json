@@ -1,0 +1,17 @@
+{
+  "format": "tsv-antrag-2",
+  "tarif": "kind",
+  "mitglied_ab": "2026-11-01",
+  "abteilungen": ["Fussball"],
+  "anschrift": { "strasse": "Am Bach 3a", "plz": "84061", "ort": "Ergoldsbach" },
+  "personen": [
+    { "anrede": "Frau", "vorname": "Mia", "nachname": "Onlinekind", "geburtsdatum": "2016-05-06", "email": "eltern@example.com" }
+  ],
+  "konto": { "iban": "DE89370400440532013000", "kontoinhaber": "Petra Onlinekind" },
+  "unterschriften": {
+    "antrag": { "datum": "2026-10-24", "name": "Petra Onlinekind", "als": "erziehungsberechtigt" },
+    "sepa": { "datum": "2026-10-24", "name": "Petra Onlinekind" }
+  },
+  "bestaetigt": { "datenschutz": true, "sepa_mandat": true },
+  "einwilligungen": { "fotos": true }
+}

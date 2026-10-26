@@ -1,20 +1,21 @@
 /**
  * Eingang – Beitrittsanträge von der Vereins-Homepage aus der getrennten Eingangstabelle (rein, ohne Dienste).
  *
- * Zweck:      Die Homepage (WordPress) schickt jeden Online-Aufnahmeantrag als XML (Access-Format /dataroot/Daten16)
- *             an ein eigenes, kleines Skriptprojekt. Das legt die Datei im Drive-Ordner ab und schreibt eine Zeile in
- *             den Tab „Eingang“ der Eingangstabelle. Diese Datei liest die WebApp: Spalten prüfen, XML zerlegen,
- *             Liste für den Browser (nur Namen, keine Bankdaten), Zeile nach Übernahme/Ablehnung abschließen.
+ * Zweck:      Die Homepage (WordPress) schickt jeden Online-Aufnahmeantrag an ein eigenes, kleines Skriptprojekt –
+ *             im Format „tsv-antrag-2“ (JSON, src/lib/antrag2.js) oder übergangsweise als Access-XML (/dataroot/Daten16).
+ *             Das Skript legt die Datei im Drive-Ordner ab und schreibt eine Zeile in den Tab „Eingang“ der
+ *             Eingangstabelle (Spalte inhalt, Spalte format). Diese Datei liest die WebApp: Spalten prüfen, Inhalt
+ *             zerlegen, Liste für den Browser (nur Namen, keine Bankdaten), Zeile nach Übernahme/Ablehnung abschließen.
  * Datenquelle: Zeilen des Tabs „Eingang“ (Kopfzeile = SPALTEN). Die Datei-ID steht in der Script Property EINGANG_ID
  *             (nie vom Client, A3); das Servermodul (src/modul/Beitritt.js) öffnet sie.
  * Wer darf was: – (Rechte prüft das Servermodul: mitglied_anlegen UND konto_bearbeiten).
  * Besonderheiten:
- *   - Die XML wird hier auf dem SERVER zerlegt – anders als beim Datei-Import im Browser, denn sie enthält die
+ *   - Der Inhalt wird hier auf dem SERVER zerlegt – anders als beim Datei-Import im Browser, denn sie enthält die
  *     Klartext-IBAN, die den Server nie verlässt. Das Ergebnis entspricht dem Browser-Zerleger
  *     (ansicht_beitritt.html: je <Daten16> ein Objekt Feldname → getrimmter Text).
  *   - Bewusst kleiner Zerleger für flache Access-XML: Kommentare, <?xml?>, CDATA, Entities. DOCTYPE wird
  *     abgelehnt. Kein allgemeiner XML-Parser.
- *   - Nach Übernahme oder Ablehnung wird die Spalte xml geleert (Datensparsamkeit); das Original liegt im
+ *   - Nach Übernahme oder Ablehnung wird die Spalte inhalt geleert (Datensparsamkeit); das Original liegt im
  *     eingeschränkten Drive-Ordner (drive_link).
  *   - pdf_link: das von der Homepage erzeugte PDF mit Unterschrift (Antrag und ggf. SEPA-Mandat) im selben Ordner.
  *     Bei der Übernahme entstehen daraus Dokument-Links (dokumente()). unterschrift_am: Datum auf dem PDF (bei
@@ -22,8 +23,8 @@
  */
 var Eingang = (function () {
   var TAB = 'Eingang';
-  var SPALTEN = ['eingang_id', 'eingang_am', 'dateiname', 'xml', 'drive_link', 'pdf_link', 'unterschrift_am', 'status', 'erledigt_am', 'erledigt_von', 'ergebnis'];
-  var PFLICHT = ['eingang_id', 'xml', 'status'];
+  var SPALTEN = ['eingang_id', 'eingang_am', 'format', 'dateiname', 'inhalt', 'drive_link', 'pdf_link', 'unterschrift_am', 'status', 'erledigt_am', 'erledigt_von', 'ergebnis'];
+  var PFLICHT = ['eingang_id', 'inhalt', 'status'];
   var STATUS = { neu: 'neu', uebernommen: 'uebernommen', abgelehnt: 'abgelehnt' };
   var MAX_XML = 500000;   // wie beim Datei-Import im Browser
 
@@ -62,7 +63,7 @@ var Eingang = (function () {
     if (!s.trim()) return { fehler: 'Leere Datei.' };
     if (s.length > MAX_XML) return { fehler: 'Datei zu groß.' };
     if (/<!DOCTYPE/i.test(s)) return { fehler: 'XML mit DOCTYPE wird nicht angenommen.' };
-    s = s.replace(/^﻿/, '').replace(/<\?[\s\S]*?\?>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+    s = s.replace(/^\uFEFF/, '').replace(/<\?[\s\S]*?\?>/g, '').replace(/<!--[\s\S]*?-->/g, '');
     if (!/^\s*</.test(s)) return { fehler: 'Keine gültige XML-Datei.' };
     var personen = [];
     var eintrag = /<((?:[\w.\-]+:)?Daten16)(?:\s[^>]*)?(?:\/>|>([\s\S]*?)<\/\1\s*>)/g;
@@ -94,7 +95,7 @@ var Eingang = (function () {
       o.eingang_id = String(o.eingang_id || '').trim();
       o.status = String(o.status || '').trim() || STATUS.neu;
       return o;
-    }).filter(function (o) { return o.eingang_id || String(o.xml || '').trim(); });
+    }).filter(function (o) { return o.eingang_id || String(o.inhalt || '').trim(); });
   }
 
   function offen(z) { return z.status === STATUS.neu; }
@@ -119,11 +120,23 @@ var Eingang = (function () {
     return [f(['nachname', 'name']), f(['vorname'])].filter(Boolean).join(', ') || '(ohne Namen)';
   }
 
-  /** Antrag für BeitrittModul aus einer Zeile: { datei, personen } oder { datei, fehler }. */
+  /** JSON-Antrag (tsv-antrag-2)? Spalte format oder Inhalt beginnt mit „{“. */
+  function istJson(z) {
+    return String(z.format || '').trim() === Antrag2.FORMAT || /^\s*\{/.test(String(z.inhalt || ''));
+  }
+
+  /**
+   * Antrag für BeitrittModul aus einer Zeile: { datei, json } (tsv-antrag-2, wandelt Beitritt.bereinige um),
+   * { datei, personen, unterschrift_am } (XML) oder { datei, fehler }.
+   */
   function antrag(z) {
     var d = dateiname(z);
     if (!z.eingang_id) return { datei: d, fehler: 'Zeile ohne eingang_id.' };
-    var r = zerlege(z.xml);
+    if (istJson(z)) {
+      var v2 = Antrag2.zuAntrag(String(z.inhalt || ''), d);
+      return v2.fehler ? { datei: d, fehler: v2.fehler } : { datei: d, json: String(z.inhalt), personen: v2.personen };
+    }
+    var r = zerlege(z.inhalt);
     if (r.fehler) return { datei: d, fehler: r.fehler };
     var u = String(z.unterschrift_am || z.eingang_am || '').slice(0, 10);
     return { datei: d, personen: r.personen, unterschrift_am: /^\d{4}-\d{2}-\d{2}$/.test(u) ? u : null };
@@ -161,9 +174,9 @@ var Eingang = (function () {
     return liste;
   }
 
-  /** Werte zum Abschließen einer Zeile (xml wird geleert). ergebnis: kurzer Text ohne Bankdaten. */
+  /** Werte zum Abschließen einer Zeile (inhalt wird geleert). ergebnis: kurzer Text ohne Bankdaten. */
   function abschluss(status, jetzt, email, ergebnis) {
-    return { status: status, erledigt_am: jetzt, erledigt_von: email || '', ergebnis: String(ergebnis || '').slice(0, 200), xml: '' };
+    return { status: status, erledigt_am: jetzt, erledigt_von: email || '', ergebnis: String(ergebnis || '').slice(0, 200), inhalt: '' };
   }
 
   return {

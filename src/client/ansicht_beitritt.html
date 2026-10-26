@@ -35,8 +35,12 @@
   /** Access-XML-Elementnamen entschlüsseln: „Abteilung_x0020_1“ → „Abteilung 1“. */
   function xmlName(n) { return String(n).replace(/_x([0-9A-Fa-f]{4})_/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); }); }
 
-  /** Eine Datei zerlegen → { datei, personen: [{ Feld: 'Text' }] } oder { datei, fehler }. */
+  /**
+   * Eine Datei zerlegen → { datei, personen: [{ Feld: 'Text' }] } (Access-XML), { datei, json } (Online-Antrag
+   * „tsv-antrag-2“, wandelt der Server um) oder { datei, fehler }.
+   */
   function zerlege(name, text) {
+    if (/\.json$/i.test(name) || /^\s*\{/.test(String(text || ''))) return { datei: name, json: String(text || '') };
     var doc;
     try { doc = new DOMParser().parseFromString(String(text || ''), 'application/xml'); } catch (e) { return { datei: name, fehler: 'Datei nicht lesbar.' }; }
     if (!doc || doc.getElementsByTagName('parsererror').length) return { datei: name, fehler: 'Keine gültige XML-Datei.' };
@@ -70,8 +74,8 @@
       'selbst, alle weiteren über Person 1. Die Mitgliedsnummern werden neu vergeben. Die Dateien werden nur in diesem Browser gelesen.', { className: 'leise' }));
     var bereich = A.el('div');
     if (A.darf('konto_bearbeiten')) zeigeEingang(ziel, bereich);
-    ziel.appendChild(A.el('h2', 'XML-Dateien'));
-    var eingabe = A.el('input', null, { type: 'file', accept: '.xml,application/xml,text/xml', multiple: true, className: 'bt-datei' });
+    ziel.appendChild(A.el('h2', 'Dateien (XML aus Access, JSON aus dem Online-Antrag)'));
+    var eingabe = A.el('input', null, { type: 'file', accept: '.xml,.json,application/xml,text/xml,application/json', multiple: true, className: 'bt-datei' });
     eingabe.setAttribute('aria-label', 'Beitritts-XML-Dateien auswählen');
     ziel.appendChild(eingabe);
     ziel.appendChild(bereich);
@@ -175,12 +179,16 @@
       var mit = A.el('input', null, { type: 'checkbox', checked: true });
       mit.addEventListener('change', function () { e.ueberspringen = !mit.checked; });
       karte.appendChild(A.el('div', null, { className: 'bt-zeile' }, [A.el('label', null, null, [mit, A.el('span', 'Diesen Antrag importieren')])]));
+      var angaben = [];
+      if (a.tarif) angaben.push(['Tarif (Online-Formular)', a.tarif.beitragsart
+        ? a.tarif.beitragsart + (a.tarif.gemeinschaft ? ' – ' + a.tarif.gemeinschaft : '') + (a.tarif.betrag !== undefined ? ' (' + A.betrag(a.tarif.betrag) + ')' : '')
+        : '„' + a.tarif.schluessel + '“ – nicht zugeordnet']);
       if (a.konto) {
-        karte.appendChild(A.details([
-          ['Konto (Person 1)', [a.konto.inhaber, a.konto.zahlweg, a.konto.iban_maskiert].filter(Boolean).join(' · ')],
-          ['Mandatsdatum', a.konto.mandatsdatum ? A.datum(a.konto.mandatsdatum) : '–']
-        ]));
+        angaben.push(['Konto' + (a.konto_extern ? ' (Inhaber ist kein Mitglied)' : ' (Person 1)'), [a.konto.inhaber, a.konto.zahlweg, a.konto.iban_maskiert].filter(Boolean).join(' · ')]);
+        angaben.push(['Mandatsdatum', a.konto.mandatsdatum ? A.datum(a.konto.mandatsdatum) : '–']);
       }
+      if (a.einwilligungen && a.einwilligungen.length) angaben.push(['Einwilligungen', a.einwilligungen.join(', ')]);
+      if (angaben.length) karte.appendChild(A.details(angaben));
       if (a.gemeinschaft) {
         var gm = A.el('input', null, { type: 'checkbox', checked: true });
         gm.addEventListener('change', function () { e.gemeinschaft = gm.checked; });

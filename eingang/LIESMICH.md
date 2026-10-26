@@ -1,7 +1,8 @@
 # Eingangs-Skript (eigenes Apps-Script-Projekt)
 
-Nimmt Online-Aufnahmeanträge der Homepage entgegen (XML + PDF mit Unterschrift), legt sie im Drive-Ordner ab und
-hängt eine Zeile an die Eingangstabelle. Gesamtablauf und Spaltenvertrag: `docs/EINGANG.md`.
+Nimmt Online-Aufnahmeanträge der Homepage entgegen (Antrag `tsv-antrag-2` als JSON – übergangsweise auch Access-XML –
+plus PDF mit Unterschrift), legt sie im Drive-Ordner ab und hängt eine Zeile an die Eingangstabelle.
+Gesamtablauf, Format und Spaltenvertrag: `docs/EINGANG.md`.
 
 ## Warum ein eigenes Projekt
 

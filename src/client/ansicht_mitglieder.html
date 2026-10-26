@@ -118,7 +118,8 @@
     return f;
   }
   function fkOptionen(name) {
-    if (name === 'beitragsart_id') return A.daten.liste('beitragsarten').filter(function (b) { return b.aktiv !== false; })
+    // Gemeinschaftstarife (Familie/Ehepaar) gelten nur über eine Beitragsgemeinschaft, nie je Person
+    if (name === 'beitragsart_id') return A.daten.liste('beitragsarten').filter(function (b) { return b.aktiv !== false && !b.als_gemeinschaft; })
       .map(function (b) { return { wert: b.beitragsart_id, text: b.bezeichnung + ' (' + A.betrag(b.betrag) + ')' }; });
     if (name === 'beitragskonto_id') return A.daten.liste('konten').filter(function (k) { return k.aktiv !== false; })
       .map(function (k) { return { wert: k.beitragskonto_id, text: k.beitragskonto_id + ' – ' + (k.kontoinhaber_name || '') + ' (' + (k.zahlweg || '') + ')' }; })
@@ -157,7 +158,7 @@
     var alter = geburtsdatum ? jahreSeit(geburtsdatum) : null;
     if (alter === null) return null;
     var passend = A.daten.liste('beitragsarten').filter(function (b) {
-      return b.aktiv !== false && (b.alter_von === undefined || b.alter_von === null || alter >= b.alter_von) &&
+      return b.aktiv !== false && !b.als_gemeinschaft && (b.alter_von === undefined || b.alter_von === null || alter >= b.alter_von) &&
         (b.alter_bis === undefined || b.alter_bis === null || alter <= b.alter_bis) && (b.alter_von !== undefined || b.alter_bis !== undefined);
     });
     return passend.length ? passend[0].beitragsart_id : null;

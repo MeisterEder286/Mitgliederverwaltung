@@ -1,9 +1,10 @@
 /**
  * Eingang – öffentlicher Empfänger für Online-Aufnahmeanträge der Vereins-Homepage (eigenes Apps-Script-Projekt).
  *
- * Zweck:      WordPress (Child-Theme, inc/eingang-sender.php) schickt nach dem Absenden des Aufnahmeformulars die
- *             XML (Access-Format) und das PDF mit Unterschrift per HTTPS POST hierher. Dieses Skript legt beide Dateien
- *             im Drive-Ordner „Beitritte Eingang“ ab und hängt eine Zeile an den Tab „Eingang“ der Eingangstabelle.
+ * Zweck:      WordPress (Child-Theme, inc/eingang-sender.php) schickt nach dem Absenden des Aufnahmeformulars den
+ *             Antrag im Format „tsv-antrag-2“ (JSON; übergangsweise auch die Access-XML) und das PDF mit Unterschrift
+ *             per HTTPS POST hierher. Dieses Skript legt beide Dateien im Drive-Ordner „Beitritte Eingang“ ab und hängt
+ *             eine Zeile an den Tab „Eingang“ der Eingangstabelle (Spalten inhalt und format).
  *             Die Mitgliederverwaltung (WebApp) liest diese Tabelle und übernimmt die Anträge (docs/EINGANG.md).
  * Datenquelle: Script Properties dieses (eigenen!) Projekts:
  *               SCHLUESSEL   gemeinsames Geheimnis mit WordPress (mind. 32 Zeichen; einrichten() erzeugt eines)
@@ -21,8 +22,8 @@
  *   - Doppelt gesendet (WordPress wiederholt nach Zeitüberschreitung mit derselben antrag_id): keine zweite Zeile,
  *     Antwort { ok: true, doppelt: true }.
  *   - Höchstens MAX_JE_STUNDE angenommene Anträge je Stunde (Schutz gegen massenhaft abgeschickte Formulare).
- *   - Zellen: Text mit = + - @ am Anfang bekommt ein ' vorangestellt (Formelschutz). XML höchstens MAX_XML Zeichen
- *     (Google-Sheets-Grenze 50 000 Zeichen je Zelle).
+ *   - Zellen: Text mit = + - @ am Anfang bekommt ein ' vorangestellt (Formelschutz). Inhalt höchstens MAX_INHALT
+ *     Zeichen (Google-Sheets-Grenze 50 000 Zeichen je Zelle).
  *   - Die reinen Prüfungen stehen im Namensraum EingangPruefung und sind in Node getestet (test/eingang-skript.test.js).
  */
 
@@ -30,10 +31,11 @@
 var EingangPruefung = (function () {
   var TAB = 'Eingang';
   // Gleiche Spalten wie src/lib/eingang.js (Eingang.SPALTEN) – der Test prüft, dass beide übereinstimmen.
-  var SPALTEN = ['eingang_id', 'eingang_am', 'dateiname', 'xml', 'drive_link', 'pdf_link', 'unterschrift_am', 'status', 'erledigt_am', 'erledigt_von', 'ergebnis'];
-  var MAX_XML = 45000;
+  var SPALTEN = ['eingang_id', 'eingang_am', 'format', 'dateiname', 'inhalt', 'drive_link', 'pdf_link', 'unterschrift_am', 'status', 'erledigt_am', 'erledigt_von', 'ergebnis'];
+  var FORMAT = 'tsv-antrag-2';
+  var MAX_INHALT = 45000;
   var MAX_PDF_BYTES = 8 * 1024 * 1024;
-  var MAX_ANFRAGE = Math.ceil(MAX_PDF_BYTES * 4 / 3) + MAX_XML * 2 + 10000;
+  var MAX_ANFRAGE = Math.ceil(MAX_PDF_BYTES * 4 / 3) + MAX_INHALT * 2 + 10000;
   var MAX_JE_STUNDE = 30;
   var MIN_SCHLUESSEL = 32;
 
@@ -48,8 +50,10 @@ var EingangPruefung = (function () {
   function nein(code) { return { ok: false, fehler: code }; }
 
   /**
-   * Anfrage prüfen. anfrage: geparstes JSON { schluessel, antrag_id, xml, pdf_base64, dateiname?, unterschrift_am? }.
-   * Liefert { ok: true, antrag } oder { ok: false, fehler: code } (nicht_eingerichtet, nicht_berechtigt, ungueltig).
+   * Anfrage prüfen. anfrage: geparstes JSON { schluessel, antrag_id, antrag (Objekt „tsv-antrag-2“) ODER xml (Text),
+   * pdf_base64, dateiname?, unterschrift_am? }.
+   * Liefert { ok: true, antrag: { antrag_id, format, inhalt, endung, typ, pdf_base64, unterschrift_am, dateiname } }
+   * oder { ok: false, fehler: code } (nicht_eingerichtet, nicht_berechtigt, ungueltig).
    */
   function pruefeAnfrage(anfrage, schluessel) {
     if (!schluessel || String(schluessel).length < MIN_SCHLUESSEL) return nein('nicht_eingerichtet');
@@ -57,18 +61,31 @@ var EingangPruefung = (function () {
     if (!gleich(anfrage.schluessel, schluessel)) return nein('nicht_berechtigt');
     var id = String(anfrage.antrag_id || '');
     if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) return nein('ungueltig');
-    var xml = typeof anfrage.xml === 'string' ? anfrage.xml.replace(/^﻿/, '') : '';
-    if (!xml || xml.length > MAX_XML || !/^\s*</.test(xml) || /<!DOCTYPE/i.test(xml) || !/<(?:[\w.\-]+:)?Daten16[\s>\/]/.test(xml)) return nein('ungueltig');
+    var inhalt, format, endung, typ, datumAusAntrag = '';
+    if (anfrage.antrag && typeof anfrage.antrag === 'object') {
+      var a = anfrage.antrag;
+      if (a.format !== FORMAT || !Array.isArray(a.personen) || !a.personen.length) return nein('ungueltig');
+      inhalt = JSON.stringify(a);
+      format = FORMAT; endung = '.json'; typ = 'application/json';
+      var us = a.unterschriften && a.unterschriften.sepa, ua = a.unterschriften && a.unterschriften.antrag;
+      datumAusAntrag = String((us && us.datum) || (ua && ua.datum) || '');
+    } else {
+      inhalt = typeof anfrage.xml === 'string' ? anfrage.xml.replace(/^\uFEFF/, '') : '';
+      if (!inhalt || !/^\s*</.test(inhalt) || /<!DOCTYPE/i.test(inhalt) || !/<(?:[\w.\-]+:)?Daten16[\s>\/]/.test(inhalt)) return nein('ungueltig');
+      format = 'access-xml'; endung = '.xml'; typ = 'text/xml';
+    }
+    if (inhalt.length > MAX_INHALT) return nein('ungueltig');
     var pdf = typeof anfrage.pdf_base64 === 'string' ? anfrage.pdf_base64.replace(/\s+/g, '') : '';
     if (pdf && (!/^[A-Za-z0-9+\/]+={0,2}$/.test(pdf) || pdf.length > Math.ceil(MAX_PDF_BYTES * 4 / 3))) return nein('ungueltig');
-    var u = String(anfrage.unterschrift_am || '');
+    var u = String(anfrage.unterschrift_am || datumAusAntrag || '');
     if (u && !/^\d{4}-\d{2}-\d{2}$/.test(u)) return nein('ungueltig');
-    return { ok: true, antrag: { antrag_id: id, xml: xml, pdf_base64: pdf, unterschrift_am: u || '', dateiname: basisname(anfrage.dateiname, id) } };
+    return { ok: true, antrag: { antrag_id: id, format: format, inhalt: inhalt, endung: endung, typ: typ, pdf_base64: pdf,
+      unterschrift_am: u || '', dateiname: basisname(anfrage.dateiname, id) } };
   }
 
   /** Dateiname ohne Endung, nur sichere Zeichen; Fallback „tsv-beitritt-<id>“. */
   function basisname(name, id) {
-    var n = String(name || '').replace(/\.(xml|pdf)$/i, '').replace(/[^\w.\-äöüÄÖÜß]/g, '-').replace(/-{2,}/g, '-').slice(0, 100);
+    var n = String(name || '').replace(/\.(xml|json|pdf)$/i, '').replace(/[^\w.\-äöüÄÖÜß]/g, '-').replace(/-{2,}/g, '-').slice(0, 100);
     return n.replace(/^[-.]+|[-.]+$/g, '') || ('tsv-beitritt-' + id);
   }
 
@@ -93,7 +110,7 @@ var EingangPruefung = (function () {
   }
 
   return {
-    TAB: TAB, SPALTEN: SPALTEN, MAX_XML: MAX_XML, MAX_PDF_BYTES: MAX_PDF_BYTES, MAX_ANFRAGE: MAX_ANFRAGE,
+    TAB: TAB, SPALTEN: SPALTEN, FORMAT: FORMAT, MAX_INHALT: MAX_INHALT, MAX_PDF_BYTES: MAX_PDF_BYTES, MAX_ANFRAGE: MAX_ANFRAGE,
     MAX_JE_STUNDE: MAX_JE_STUNDE, MIN_SCHLUESSEL: MIN_SCHLUESSEL,
     gleich: gleich, pruefeAnfrage: pruefeAnfrage, basisname: basisname, istPdf: istPdf, zelle: zelle, zeile: zeile,
     stundenSchluessel: stundenSchluessel
@@ -149,13 +166,13 @@ function eingangAnnehmen_(e) {
     if (zahl >= P.MAX_JE_STUNDE) return { ok: false, fehler: 'zu_viele' };
     cache.put(stunde, String(zahl + 1), 3600);
 
-    var xmlDatei = dateiAnlegen_(a.dateiname + '.xml', 'text/xml', Utilities.newBlob(a.xml, 'text/xml', a.dateiname + '.xml'), ordnerId);
+    var datei = dateiAnlegen_(a.dateiname + a.endung, a.typ, Utilities.newBlob(a.inhalt, a.typ, a.dateiname + a.endung), ordnerId);
     var pdfDatei = pdfBytes ? dateiAnlegen_(a.dateiname + '.pdf', 'application/pdf', Utilities.newBlob(pdfBytes, 'application/pdf', a.dateiname + '.pdf'), ordnerId) : null;
     blatt.appendRow(P.zeile(kopf, {
       eingang_id: a.antrag_id,
       eingang_am: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss"),
-      dateiname: a.dateiname + '.xml', xml: a.xml,
-      drive_link: xmlDatei.webViewLink, pdf_link: pdfDatei ? pdfDatei.webViewLink : '',
+      format: a.format, dateiname: a.dateiname + a.endung, inhalt: a.inhalt,
+      drive_link: datei.webViewLink, pdf_link: pdfDatei ? pdfDatei.webViewLink : '',
       unterschrift_am: a.unterschrift_am, status: 'neu'
     }));
     return { ok: true, eingang_id: a.antrag_id };

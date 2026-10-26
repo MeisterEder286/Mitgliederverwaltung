@@ -232,7 +232,10 @@ var Migration = (function () {
     var heute = optionen.stichtag || new Date().toISOString().slice(0, 10);
     var jahr = Number(optionen.beitragsjahr || heute.slice(0, 4));
     var abteilungen = optionen.abteilungen || [];      // [{ abteilung_id, bezeichnung, blsv_sportart }]
-    var beitragsarten = (optionen.beitragsarten || []).filter(function (a) { return a.aktiv !== false; });
+    // Gemeinschaftstarife (Familie/Ehepaar) sind nie Einzelbeitrag, ihr Betrag ist aber eine bekannte Pauschale
+    var beitragsarten = (optionen.beitragsarten || []).filter(function (a) { return a.aktiv !== false && !a.als_gemeinschaft; });
+    var gemeinschaftsBetraege = (optionen.beitragsarten || []).filter(function (a) { return a.aktiv !== false && a.als_gemeinschaft; })
+      .map(function (a) { return Number(a.betrag); });
     var pauschalen = (optionen.pauschalbetraege || []).map(Number);
     var muster = optionen.mandatsreferenzMuster || 'TSV-{jahr}-{mitglnr}';
     var pruefliste = [];
@@ -435,6 +438,7 @@ var Migration = (function () {
     function istPauschale(b) {
       if (b === null || b === 0) return false;
       if (pauschalen.length) return pauschalen.indexOf(b) >= 0;
+      if (gemeinschaftsBetraege.indexOf(b) >= 0) return true;
       return maxEinzel > 0 && b > maxEinzel && !beitragsarten.some(function (a) { return Number(a.betrag) === b; });
     }
     function beitragsartFuer(p) {

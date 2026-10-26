@@ -58,8 +58,8 @@ test('Online-Anträge von der Homepage: Liste mit PDF-Link, prüfen, übernehmen
   const zeile = o => kopf.map(k => (o[k] === undefined ? '' : o[k]));
   const xml = n => fs.readFileSync(path.join(DATEN, n), 'utf8');
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', properties: { EINGANG_ID: 'EIN' }, weitereDateien: { EIN: { Eingang: [kopf,
-    zeile({ eingang_id: '1', eingang_am: '2026-10-24T18:03:00', dateiname: 'familie.xml', xml: xml('familie.xml'), pdf_link: 'https://drive.google.com/file/d/p1/view', status: 'neu' }),
-    zeile({ eingang_id: '2', eingang_am: '2026-10-25T09:00:00', dateiname: 'einzel.xml', xml: xml('einzel.xml'), status: 'neu' })] } } });
+    zeile({ eingang_id: '1', eingang_am: '2026-10-24T18:03:00', dateiname: 'familie.xml', inhalt: xml('familie.xml'), pdf_link: 'https://drive.google.com/file/d/p1/view', status: 'neu' }),
+    zeile({ eingang_id: '2', eingang_am: '2026-10-25T09:00:00', dateiname: 'einzel.xml', inhalt: xml('einzel.xml'), status: 'neu' })] } } });
   const p = ui.page;
   try {
     await p.getByText('neue Online-Aufnahmeanträge').waitFor();
@@ -79,6 +79,28 @@ test('Online-Anträge von der Homepage: Liste mit PDF-Link, prüfen, übernehmen
     await p.getByRole('dialog').getByLabel(/Grund/).fill('Test: doppelt');
     await p.getByRole('dialog').getByRole('button', { name: 'Nicht übernehmen' }).click();
     await p.getByRole('heading', { name: 'Online-Anträge von der Homepage (0 offen)' }).waitFor();
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth) <= 360, 'waagrechtes Scrollen');
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
+test('Online-Antrag als JSON-Datei (Rückfall per Mail): Tarif aus den Stammdaten, Einwilligungen, Konto ohne Mitgliedschaft', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  const p = ui.page;
+  try {
+    await p.locator('#navigation button', { hasText: 'Mitglieder' }).click();
+    await p.locator('button', { hasText: 'Beitritte aus XML importieren' }).click();
+    await p.getByLabel('Beitritts-XML-Dateien auswählen').setInputFiles([
+      { name: 'online-familie.json', mimeType: 'application/json', buffer: fs.readFileSync(path.join(DATEN, 'online-familie.json')) },
+      { name: 'online-kind.json', mimeType: 'application/json', buffer: fs.readFileSync(path.join(DATEN, 'online-kind.json')) }]);
+    await p.waitForSelector('text=online-familie.json – 3 Person(en)');
+    await p.getByText(/Familienbeitrag – Familie Onlinebeispiel \(180,00\s€\)/).waitFor();
+    await p.getByText('Fotos und Videos, Ehrungen und Geburtstage in Vereinsmedien').waitFor();
+    await p.getByText('Konto (Inhaber ist kein Mitglied)').waitFor();
+    assert.ok(!(await p.content()).includes('0532013000'), 'IBAN im Klartext auf der Seite');
+    await p.locator('button', { hasText: /^Importieren$/ }).click();
+    await p.waitForSelector('text=4 neue Person(en) aus 2 Antrag/Anträgen hinzugefügt.');
+    assert.strictEqual(ui.objekte('Einwilligung').filter(e => e.nachweis_ort && /Online-Aufnahmeantrag/.test(e.nachweis_ort)).length, 7);
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth) <= 360, 'waagrechtes Scrollen');
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }

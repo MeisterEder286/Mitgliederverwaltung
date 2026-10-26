@@ -37,6 +37,8 @@ ehrung_status,verliehen
 ehrung_status,verschoben
 ehrung_status,abgelehnt
 intervall,jährlich
+gemeinschaft_art,Familie
+gemeinschaft_art,Ehepaar
 rolle,Vorstand
 rolle,Mitgliederverwalter
 rolle,Kassier

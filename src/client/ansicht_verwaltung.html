@@ -34,7 +34,10 @@
 
   // ================================================================== Hilfen
 
+  var TITEL = { online_schluessel: 'Schlüssel im Online-Formular', als_gemeinschaft: 'Als Gemeinschaft (Familie/Ehepaar)',
+    betrag_vorher: 'Betrag vor „gültig ab“' };
   function titelVon(name) {
+    if (TITEL[name]) return TITEL[name];
     var t = String(name).replace(/_id$/, '').replace(/_/g, ' ');
     return t.charAt(0).toUpperCase() + t.slice(1);
   }

@@ -24,10 +24,10 @@ function eingangTab(g) {
   const kopf = g.Eingang.SPALTEN;
   const zeile = o => kopf.map(k => (o[k] === undefined ? '' : o[k]));
   return [kopf,
-    zeile({ eingang_id: '1', eingang_am: '2026-10-24T18:03:00', dateiname: 'antrag-beispielhuber.xml', xml: xml('familie.xml'), pdf_link: PDF, status: 'neu' }),
-    zeile({ eingang_id: '2', eingang_am: '2026-10-25T09:00:00', dateiname: 'antrag-einzel.xml', xml: xml('einzel.xml'), status: 'neu' }),
-    zeile({ eingang_id: '3', eingang_am: '2026-10-25T10:00:00', dateiname: 'kaputt.xml', xml: '<dataroot><nix/></dataroot>', status: 'neu' }),
-    zeile({ eingang_id: '4', eingang_am: '2026-10-25T21:30:00', unterschrift_am: '2026-10-25', dateiname: 'homepage.xml', xml: xml('homepage.xml'), pdf_link: PDF, status: 'neu' })];
+    zeile({ eingang_id: '1', eingang_am: '2026-10-24T18:03:00', dateiname: 'antrag-beispielhuber.xml', inhalt: xml('familie.xml'), pdf_link: PDF, status: 'neu' }),
+    zeile({ eingang_id: '2', eingang_am: '2026-10-25T09:00:00', dateiname: 'antrag-einzel.xml', inhalt: xml('einzel.xml'), status: 'neu' }),
+    zeile({ eingang_id: '3', eingang_am: '2026-10-25T10:00:00', dateiname: 'kaputt.xml', inhalt: '<dataroot><nix/></dataroot>', status: 'neu' }),
+    zeile({ eingang_id: '4', eingang_am: '2026-10-25T21:30:00', unterschrift_am: '2026-10-25', dateiname: 'homepage.xml', inhalt: xml('homepage.xml'), pdf_link: PDF, status: 'neu' })];
 }
 
 function umgebung(rolle, optionen) {
@@ -97,7 +97,7 @@ test('Vorschau und Übernahme: Zeile abgeschlossen (XML geleert), PDF als Aufnah
   assert.strictEqual(erg.dokumente, 4);
   const zeile = u.eingang().find(z => z.eingang_id === '1');
   assert.strictEqual(zeile.status, 'uebernommen');
-  assert.strictEqual(zeile.xml, '', 'XML nach Übernahme geleert');
+  assert.strictEqual(zeile.inhalt, '', 'Inhalt nach Übernahme geleert');
   assert.match(zeile.ergebnis, /^Nr\. \d+, \d+, \d+$/);
   const konto = u.obj('Beitragskonto').find(k => k.beitragskonto_id === erg.konto_id);
   assert.strictEqual(konto.iban, IBAN_FAMILIE);
@@ -120,7 +120,7 @@ test('Übernahme ohne PDF: Hinweis; Ablehnen mit Grund schließt die Zeile ab', 
   fehler(u.g.apiBeitrittEingangAblehnen('3', '  '), 'fachlich');
   ok(u.g.apiBeitrittEingangAblehnen('3', 'doppelt abgeschickt'));
   const z = u.eingang().find(x => x.eingang_id === '3');
-  assert.deepStrictEqual([z.status, z.ergebnis, z.xml], ['abgelehnt', 'doppelt abgeschickt', '']);
+  assert.deepStrictEqual([z.status, z.ergebnis, z.inhalt], ['abgelehnt', 'doppelt abgeschickt', '']);
   assert.ok(!u.obj('_Protokoll').some(p => String(p.kommentar).includes('doppelt abgeschickt')), 'Freitext nicht ins Protokoll');
   fehler(u.g.apiBeitrittEingangAblehnen('3', 'nochmal'), 'fachlich');
   const e = ok(u.g.apiBeitrittEingang());

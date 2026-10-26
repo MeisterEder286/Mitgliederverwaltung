@@ -77,7 +77,7 @@ var BeitrittModul = (function () {
 
   /** Einen Antrag atomar übernehmen. Läuft innerhalb DB.mitSperre. */
   function einen(ktx, antrag, ent) {
-    var d = DB.lese(['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilungszugehoerigkeit', 'Beitragskonto', 'Abteilung', 'Beitragsart', '_Konfig']);
+    var d = DB.lese(['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilungszugehoerigkeit', 'Beitragskonto', 'Abteilung', 'Beitragsart', 'Einwilligung', '_Konfig']);
     var konfig = {};
     (d._Konfig || []).forEach(function (z) { if (z.schluessel) konfig[z.schluessel] = z.wert === null ? '' : String(z.wert); });
     var nummern = Beitritt.nummernkreis(d, konfig.mitgliedsnummer_naechste);
@@ -197,7 +197,13 @@ var BeitrittModul = (function () {
       var mitgliedNeu = {};
       angelegt.forEach(function (m) { mitgliedNeu[m.mitglied_id] = m; });
       DB.aktualisiereViele('Mitglied', nachMitglied, ktx).forEach(function (r) { mitgliedNeu[r.neu.mitglied_id] = r.neu; });
-      if (kontoNeu) {
+      // 5b. Einwilligungen (Online-Antrag); bei Wiedereintritt keine doppelte laufende Einwilligung derselben Art
+      var laufend = {};
+      (d.Einwilligung || []).forEach(function (x) { if (!x.widerrufen_am) laufend[x.mitglied_id + '|' + x.art] = true; });
+      var einw = rein('Einwilligung', (t.Einwilligung || []).map(function (x) {
+        var o = Object.assign({}, x); o.mitglied_id = idVon[x.mitglied_id]; return o;
+      }).filter(function (x) { return !laufend[x.mitglied_id + '|' + x.art]; }));
+      if (kontoNeu && !plan.konto_extern) {
         var inhaberId = idVon[t.Mitglied[0].mitglied_id];
         var kr = DB.aktualisiereViele('Beitragskonto', [{ id: kontoNeu.beitragskonto_id, aenderungen: { kontoinhaber_mitglied_id: inhaberId }, version: 1 }], ktx);
         if (kr.length) kontoNeu = kr[0].neu;
@@ -216,6 +222,8 @@ var BeitrittModul = (function () {
       Object.keys(mitgliedNeu).forEach(function (id) { aenderungen.push({ tab: 'Mitglied', neu: mitgliedNeu[id] }); });
       zr.forEach(function (z) { aenderungen.push({ tab: 'Mitgliedschaftszeitraum', neu: z }); });
       zug.forEach(function (z) { aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: z }); });
+      einw.forEach(function (z) { aenderungen.push({ tab: 'Einwilligung', neu: z }); });
+      if (einw.length) protokoll.push({ aktion: 'angelegt', tabelle: 'Einwilligung', datensatz_id: einw.map(function (z) { return z.einwilligung_id; }).join(','), kommentar: 'aus dem Online-Antrag: ' + plan.einwilligungen.join(', ') });
       var zeilen = t.Mitglied.map(function (m, i) {
         var id = idVon[m.mitglied_id];
         var x = mitgliedNeu[id] || {};

@@ -58,7 +58,7 @@ test('Prüfung: Schlüssel, IDs, XML (Daten16, kein DOCTYPE, Größe), PDF, Datu
   assert.strictEqual(P.pruefeAnfrage(antrag({ antrag_id: 'x' }), SCHLUESSEL).fehler, 'ungueltig');
   assert.strictEqual(P.pruefeAnfrage(antrag({ xml: '<dataroot/>' }), SCHLUESSEL).fehler, 'ungueltig');
   assert.strictEqual(P.pruefeAnfrage(antrag({ xml: '<!DOCTYPE x><dataroot><Daten16/></dataroot>' }), SCHLUESSEL).fehler, 'ungueltig');
-  assert.strictEqual(P.pruefeAnfrage(antrag({ xml: '<dataroot><Daten16>' + 'x'.repeat(P.MAX_XML) + '</Daten16></dataroot>' }), SCHLUESSEL).fehler, 'ungueltig');
+  assert.strictEqual(P.pruefeAnfrage(antrag({ xml: '<dataroot><Daten16>' + 'x'.repeat(P.MAX_INHALT) + '</Daten16></dataroot>' }), SCHLUESSEL).fehler, 'ungueltig');
   assert.strictEqual(P.pruefeAnfrage(antrag({ pdf_base64: 'kein base64!' }), SCHLUESSEL).fehler, 'ungueltig');
   assert.strictEqual(P.pruefeAnfrage(antrag({ unterschrift_am: '25.10.2026' }), SCHLUESSEL).fehler, 'ungueltig');
   const ok = P.pruefeAnfrage(antrag(), SCHLUESSEL);
@@ -81,7 +81,8 @@ test('doPost: XML und PDF im Ordner, Zeile „neu“ angehängt, Antwort ohne De
   const z = u.zeilen();
   assert.strictEqual(z.length, 1);
   assert.strictEqual(z[0].status, 'neu');
-  assert.strictEqual(z[0].xml, XML);
+  assert.strictEqual(z[0].inhalt, XML);
+  assert.strictEqual(z[0].format, 'access-xml');
   assert.strictEqual(z[0].unterschrift_am, '2026-10-25');
   assert.match(z[0].pdf_link, /^https:\/\/drive\.google\.com\/file\/d\/f2\//);
   assert.match(z[0].eingang_am, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
@@ -138,4 +139,34 @@ test('Ganzer Weg: Homepage → Eingangs-Skript → WebApp übernimmt, Mandatsdat
   const konto = g.DB.lese(['Beitragskonto']).Beitragskonto.find(x => x.beitragskonto_id === erg.konto_id);
   assert.strictEqual(konto.mandatsdatum, '2026-10-25');
   assert.strictEqual(f.daten(EIN + '/Eingang')[1][P.SPALTEN.indexOf('status')], 'uebernommen');
+});
+
+test('Neues Format: antrag als JSON → Datei .json, Spalte format, Unterschriftsdatum aus dem Antrag; ganzer Weg bis zur Übernahme', () => {
+  const ANTRAG = JSON.parse(fs.readFileSync(path.join(__dirname, 'daten', 'beitritt', 'online-familie.json'), 'utf8'));
+  assert.strictEqual(P.pruefeAnfrage(antrag({ xml: undefined, antrag: Object.assign({}, ANTRAG, { format: 'alt' }) }), SCHLUESSEL).fehler, 'ungueltig');
+  const e = umgebung();
+  const r = e.sende(antrag({ xml: undefined, antrag: ANTRAG, unterschrift_am: undefined, antrag_id: 'json-0001', dateiname: 'tsv-antrag-Onlinebeispiel.json' }));
+  assert.deepStrictEqual(r, { ok: true, eingang_id: 'json-0001' });
+  assert.deepStrictEqual(e.dateien.map(d => [d.meta.name, d.meta.mimeType]), [['tsv-antrag-Onlinebeispiel.json', 'application/json'], ['tsv-antrag-Onlinebeispiel.pdf', 'application/pdf']]);
+  const z = e.zeilen()[0];
+  assert.deepStrictEqual([z.format, z.unterschrift_am], ['tsv-antrag-2', '2026-10-25']);
+  assert.deepStrictEqual(JSON.parse(z.inhalt), ANTRAG);
+
+  const v = erzeugeVerein({ seed: 5, mitglieder: 300 });
+  const k = v.tabs.Benutzer[0];
+  const mv = v.tabs.Benutzer.slice(1).find(x => x[k.indexOf('rolle')] === 'Mitgliederverwalter');
+  const f = erzeugeFakes({ tabs: v.tabs, email: mv[k.indexOf('email')], properties: { EINGANG_ID: EIN },
+    weitereDateien: { [EIN]: { Eingang: e.f.daten(EIN + '/Eingang') } } });
+  const g = ladeProjekt(f.globale);
+  const liste = rein(g.apiBeitrittEingang()).daten;
+  assert.deepStrictEqual(liste.offen[0].personen, ['Onlinebeispiel, Hans', 'Onlinebeispiel, Anna', 'Onlinebeispiel, Lukas']);
+  const vorschau = rein(g.apiBeitrittEingangVorschau(['json-0001'])).daten.antraege[0];
+  assert.strictEqual(vorschau.tarif.gemeinschaft, 'Familie Onlinebeispiel');
+  assert.ok(!JSON.stringify(vorschau).includes('0532013000'));
+  const imp = rein(g.apiBeitrittEingangImportieren(['json-0001'], [{ eingang_id: 'json-0001' }])).daten.ergebnisse[0];
+  assert.ok(imp.ok, JSON.stringify(imp));
+  assert.strictEqual(imp.dokumente, 4);
+  const db = g.DB.lese(['Einwilligung', 'Beitragskonto']);
+  assert.strictEqual(db.Einwilligung.filter(x => imp.personen.some(p => p.mitglied_id === x.mitglied_id)).length, 6);
+  assert.strictEqual(db.Beitragskonto.find(x => x.beitragskonto_id === imp.konto_id).mandatsdatum, '2026-10-25');
 });

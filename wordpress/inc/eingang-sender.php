@@ -2,10 +2,10 @@
 /**
  * Eingang-Sender – schickt Online-Aufnahmeanträge an das Eingangs-Skript der Mitgliederverwaltung.
  *
- * Zweck:       Nach dem Absenden der „Beitrittserklaerung“ (Contact Form 7) liegen XML und PDF mit Unterschrift im
- *              PHP-Temp-Verzeichnis (inc/xml-generator.php, inc/pdf-generator.php). Statt sie nur per Mail zu
- *              verschicken, sendet dieses Modul beide per HTTPS an das Eingangs-Skript (Apps Script, Repo
- *              Mitgliederverwaltung, eingang/). Dort landen sie im Drive-Ordner und in der Eingangstabelle.
+ * Zweck:       Nach dem Absenden der „Beitrittserklaerung“ (Contact Form 7) sendet dieses Modul den Antrag im Format
+ *              „tsv-antrag-2“ (inc/antrag-generator.php) und das PDF mit Unterschrift (inc/pdf-generator.php) per HTTPS
+ *              an das Eingangs-Skript (Apps Script, Repo Mitgliederverwaltung, eingang/). Dort landen beide im
+ *              Drive-Ordner und in der Eingangstabelle. Die Access-XML bleibt nur für die Rückfall-Mail.
  * Einbau:      Child-Theme tsv-ergoldsbach-child, require in functions.php, Aufruf in tsv_beitritt_before_send()
  *              (inc/beitritt-hook.php) – siehe wordpress/LIESMICH.md im Repo Mitgliederverwaltung.
  * Konfiguration (wp-config.php, je Umgebung):
@@ -24,7 +24,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const TSV_EINGANG_MAX_XML = 45000;
+const TSV_EINGANG_MAX_INHALT = 45000;   // Zellgrenze der Eingangstabelle (50 000 Zeichen)
 
 /** Konfiguration aus wp-config.php (Filter „tsv_eingang_konfig“ für Tests). */
 function tsv_eingang_konfig(): array {
@@ -45,38 +45,34 @@ function tsv_eingang_aktiv(): bool {
 }
 
 /**
- * XML und PDF an das Eingangs-Skript senden.
+ * Antrag und PDF an das Eingangs-Skript senden.
  *
- * @param string      $xml_path        Pfad der XML im Temp-Verzeichnis.
- * @param string      $pdf_path        Pfad des PDF mit Unterschrift ('' = keins).
- * @param string      $unterschrift_am Datum auf dem PDF, 'Y-m-d' (wird zum Mandatsdatum).
- * @param string|null $antrag_id       Für Tests; sonst neue UUID.
+ * @param array       $antrag    Antrag „tsv-antrag-2“ aus tsv_antrag_erzeugen().
+ * @param string      $pdf_path  Pfad des PDF mit Unterschrift ('' = keins).
+ * @param string      $dateiname Dateiname ohne Endung, z. B. „tsv-beitritt-Mustermann-2026-10-25-213000“.
+ * @param string|null $antrag_id Für Tests; sonst neue UUID.
  * @return array{ok: bool, fehler?: string, eingang_id?: string, doppelt?: bool}
  */
-function tsv_eingang_senden( string $xml_path, string $pdf_path, string $unterschrift_am, ?string $antrag_id = null ): array {
+function tsv_eingang_senden( array $antrag, string $pdf_path, string $dateiname, ?string $antrag_id = null ): array {
 	if ( ! tsv_eingang_aktiv() ) {
 		return [ 'ok' => false, 'fehler' => 'inaktiv' ];
 	}
-	$k   = tsv_eingang_konfig();
-	$xml = is_readable( $xml_path ) ? (string) file_get_contents( $xml_path ) : '';
-	if ( '' === $xml ) {
-		return tsv_eingang_fehler( 'xml_fehlt' );
+	$k = tsv_eingang_konfig();
+	if ( ( $antrag['format'] ?? '' ) !== 'tsv-antrag-2' || empty( $antrag['personen'] ) ) {
+		return tsv_eingang_fehler( 'antrag_ungueltig' );
 	}
-	if ( strlen( $xml ) > TSV_EINGANG_MAX_XML ) {
-		return tsv_eingang_fehler( 'xml_zu_gross' );
+	$inhalt = (string) wp_json_encode( $antrag );
+	if ( mb_strlen( $inhalt, 'UTF-8' ) > TSV_EINGANG_MAX_INHALT ) {
+		return tsv_eingang_fehler( 'antrag_zu_gross' );
 	}
-	$pdf = ( '' !== $pdf_path && is_readable( $pdf_path ) ) ? (string) file_get_contents( $pdf_path ) : '';
-	if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $unterschrift_am ) ) {
-		$unterschrift_am = '';
-	}
+	$pdf       = ( '' !== $pdf_path && is_readable( $pdf_path ) ) ? (string) file_get_contents( $pdf_path ) : '';
 	$antrag_id = $antrag_id ?? wp_generate_uuid4();
 	$body      = wp_json_encode( [
-		'schluessel'      => $k['schluessel'],
-		'antrag_id'       => $antrag_id,
-		'dateiname'       => basename( $xml_path ),
-		'xml'             => $xml,
-		'pdf_base64'      => '' === $pdf ? '' : base64_encode( $pdf ),
-		'unterschrift_am' => $unterschrift_am,
+		'schluessel' => $k['schluessel'],
+		'antrag_id'  => $antrag_id,
+		'dateiname'  => preg_replace( '/\.(xml|json|pdf)$/i', '', basename( $dateiname ) ),
+		'antrag'     => $antrag,
+		'pdf_base64' => '' === $pdf ? '' : base64_encode( $pdf ),
 	] );
 
 	$fehler = 'unbekannt';
