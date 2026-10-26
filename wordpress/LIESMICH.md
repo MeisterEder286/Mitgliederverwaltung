@@ -66,8 +66,8 @@ gesetzt ist, ändert sich nichts: Die Mail geht wie bisher mit PDF und XML. Gesa
 
 ## Empfehlungen aus der Bestandsaufnahme
 
-- **Spam-Schutz:** Das Beitrittsformular hat kein `[honeypot …]`-Tag (nur das Kontaktformular). Bitte ergänzen.
-  Das Eingangs-Skript nimmt zusätzlich höchstens 30 Anträge je Stunde an.
+- **Spam-Schutz:** Honeypot ist im Beitrittsformular vorhanden. Das Eingangs-Skript nimmt zusätzlich höchstens
+  30 Anträge je Stunde an.
 - **IBAN in der Mail:** Im Rückfall enthält der Mailtext weiter die IBAN. Sobald der Eingang zuverlässig läuft, die
   IBAN im Rückfalltext maskieren (`DE89 •••• 3000`) – die vollständige steht in der angehängten XML.
 - **Datenschutz:** Das PDF nennt im Footer die IP-Adresse. Das gehört ins Verarbeitungsverzeichnis (erledigt in

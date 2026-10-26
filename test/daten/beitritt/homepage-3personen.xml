@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETISCH – Beispiel aus WordPress (inc/xml-generator.php, alte Struktur), Daten erfunden. -->
+<dataroot xmlns:od="urn:schemas-microsoft-com:officedata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" generated="2026-09-25T19:47:45">
+  <Daten16>
+    <Anrede>Herr</Anrede>
+    <Nachname>Beispiel</Nachname>
+    <Vorname>Hans</Vorname>
+    <Titel>Dr.</Titel>
+    <Strasse>Hauptstraße 5</Strasse>
+    <Plz>84066</Plz>
+    <Ort>Ergoldsbach</Ort>
+    <GebDat>1980-01-02T00:00:00</GebDat>
+    <EinDat>2026-09-25T00:00:00</EinDat>
+    <Arbeitsdatum>2026-09-25T00:00:00</Arbeitsdatum>
+    <Telefon>08771 12345</Telefon>
+    <email>hans@example.com</email>
+    <ReZiff>0</ReZiff>
+    <BANK>Commerzbank</BANK>
+    <IBAN>DE89370400440532013000</IBAN>
+    <BIC>COBADEFFXXX</BIC>
+    <Kontoinhaber>Hans Beispiel</Kontoinhaber>
+    <Gesamtbeitrag>140</Gesamtbeitrag>
+    <Zahler>0</Zahler>
+    <Bemerkung>Online-Beitritt 25.09.2026 19:47</Bemerkung>
+    <Abteilung_x0020_1>Fußball</Abteilung_x0020_1>
+    <Status_x0020_Abteilung_x0020_1>Familien</Status_x0020_Abteilung_x0020_1>
+    <Betrag_x0020_1>140</Betrag_x0020_1>
+    <Abteilung_x0020_2>Leichtathletik</Abteilung_x0020_2>
+    <Beitrag_x0020_Abt_x0020_2>0</Beitrag_x0020_Abt_x0020_2>
+    <Betrag_x0020_2>0</Betrag_x0020_2>
+    <Beitrag_x0020_Abt_x0020_3>0</Beitrag_x0020_Abt_x0020_3>
+    <Betrag_x0020_3>0</Betrag_x0020_3>
+    <Beitrag_x0020_Abt_x0020_4>0</Beitrag_x0020_Abt_x0020_4>
+    <Betrag_x0020_4>0</Betrag_x0020_4>
+    <Geschlecht>m</Geschlecht>
+  </Daten16>
+  <Daten16>
+    <Anrede>Frau</Anrede>
+    <Nachname>Beispiel</Nachname>
+    <Vorname>Anna</Vorname>
+    <Strasse>Hauptstraße 5</Strasse>
+    <Plz>84066</Plz>
+    <Ort>Ergoldsbach</Ort>
+    <GebDat>1982-05-06T00:00:00</GebDat>
+    <EinDat>2026-09-25T00:00:00</EinDat>
+    <Arbeitsdatum>2026-09-25T00:00:00</Arbeitsdatum>
+    <Telefon>0</Telefon>
+    <ReZiff>0</ReZiff>
+    <BANK>Commerzbank</BANK>
+    <IBAN>DE89370400440532013000</IBAN>
+    <BIC>COBADEFFXXX</BIC>
+    <Kontoinhaber>Hans Beispiel</Kontoinhaber>
+    <Gesamtbeitrag>0</Gesamtbeitrag>
+    <Zahler>0</Zahler>
+    <Bemerkung>Online-Beitritt 25.09.2026 19:47</Bemerkung>
+    <Abteilung_x0020_1>Fußball</Abteilung_x0020_1>
+    <Status_x0020_Abteilung_x0020_1>Beitragsfrei</Status_x0020_Abteilung_x0020_1>
+    <Betrag_x0020_1>0</Betrag_x0020_1>
+    <Abteilung_x0020_2>Leichtathletik</Abteilung_x0020_2>
+    <Beitrag_x0020_Abt_x0020_2>0</Beitrag_x0020_Abt_x0020_2>
+    <Betrag_x0020_2>0</Betrag_x0020_2>
+    <Beitrag_x0020_Abt_x0020_3>0</Beitrag_x0020_Abt_x0020_3>
+    <Betrag_x0020_3>0</Betrag_x0020_3>
+    <Beitrag_x0020_Abt_x0020_4>0</Beitrag_x0020_Abt_x0020_4>
+    <Betrag_x0020_4>0</Betrag_x0020_4>
+    <Geschlecht>w</Geschlecht>
+  </Daten16>
+  <Daten16>
+    <Anrede>Herr</Anrede>
+    <Nachname>Beispiel</Nachname>
+    <Vorname>Lukas</Vorname>
+    <Strasse>Hauptstraße 5</Strasse>
+    <Plz>84066</Plz>
+    <Ort>Ergoldsbach</Ort>
+    <GebDat>2012-09-30T00:00:00</GebDat>
+    <EinDat>2026-09-25T00:00:00</EinDat>
+    <Arbeitsdatum>2026-09-25T00:00:00</Arbeitsdatum>
+    <Telefon>0</Telefon>
+    <ReZiff>0</ReZiff>
+    <BANK>Commerzbank</BANK>
+    <IBAN>DE89370400440532013000</IBAN>
+    <BIC>COBADEFFXXX</BIC>
+    <Kontoinhaber>Hans Beispiel</Kontoinhaber>
+    <Gesamtbeitrag>0</Gesamtbeitrag>
+    <Zahler>0</Zahler>
+    <Bemerkung>Online-Beitritt 25.09.2026 19:47</Bemerkung>
+    <Abteilung_x0020_1>Fußball</Abteilung_x0020_1>
+    <Status_x0020_Abteilung_x0020_1>Beitragsfrei</Status_x0020_Abteilung_x0020_1>
+    <Betrag_x0020_1>0</Betrag_x0020_1>
+    <Abteilung_x0020_2>Leichtathletik</Abteilung_x0020_2>
+    <Beitrag_x0020_Abt_x0020_2>0</Beitrag_x0020_Abt_x0020_2>
+    <Betrag_x0020_2>0</Betrag_x0020_2>
+    <Beitrag_x0020_Abt_x0020_3>0</Beitrag_x0020_Abt_x0020_3>
+    <Betrag_x0020_3>0</Betrag_x0020_3>
+    <Beitrag_x0020_Abt_x0020_4>0</Beitrag_x0020_Abt_x0020_4>
+    <Betrag_x0020_4>0</Betrag_x0020_4>
+    <Geschlecht>m</Geschlecht>
+  </Daten16>
+</dataroot>

@@ -166,3 +166,18 @@ test('XML im Format der Homepage: Beitragsstatus ohne Warnung, Telefon „0“ l
   const konto = u.g.DB.lese(['Beitragskonto']).Beitragskonto.find(k => k.beitragskonto_id === r.ergebnisse[0].konto_id);
   assert.strictEqual(konto.mandatsdatum, '2026-10-25');
 });
+
+test('Beispiele aus WordPress (alte Struktur): 1 Person mit eigenem Konto, Familie mit 3 Personen', () => {
+  const { g } = umgebung();
+  const vorschau = datei => rein(g.apiBeitrittVorschau([Object.assign({ datei }, rein(g.Eingang.zerlege(xml(datei))), { unterschrift_am: '2026-09-25' })])).daten.antraege[0];
+  const eins = vorschau('homepage-1person.xml');
+  assert.deepStrictEqual(eins.personen.map(p => p.name), ['Mustermann, Max']);
+  assert.strictEqual(eins.konto.zahlweg, 'Lastschrift');
+  assert.strictEqual(eins.konto.mandatsdatum, '2026-09-25');
+  assert.strictEqual(eins.gemeinschaft, null);
+  assert.ok(!eins.personen[0].warnungen.some(w => /Status Abteilung/.test(w)), '„Erwachsene“ als Beitragsstatus');
+  const drei = vorschau('homepage-3personen.xml');
+  assert.deepStrictEqual(drei.personen.map(p => p.rolle), ['zahlt selbst', 'Zahler: Person 1', 'Zahler: Person 1']);
+  assert.strictEqual(drei.gemeinschaft.festbetrag, 140, 'Pauschale heute aus dem von WordPress berechneten Gesamtbeitrag');
+  assert.ok(drei.personen.every(p => p.in_gemeinschaft));
+});

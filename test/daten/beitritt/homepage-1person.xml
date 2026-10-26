@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETISCH – Beispiel aus WordPress (inc/xml-generator.php, alte Struktur), Daten erfunden. -->
+<dataroot xmlns:od="urn:schemas-microsoft-com:officedata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" generated="2026-09-25T20:02:08">
+  <Daten16>
+    <Anrede>Herr</Anrede>
+    <Nachname>Mustermann</Nachname>
+    <Vorname>Max</Vorname>
+    <Strasse>Musterstraße 1</Strasse>
+    <Plz>84066</Plz>
+    <Ort>Ergoldsbach</Ort>
+    <GebDat>1985-03-14T00:00:00</GebDat>
+    <EinDat>2026-09-25T00:00:00</EinDat>
+    <Arbeitsdatum>2026-09-25T00:00:00</Arbeitsdatum>
+    <Telefon>0</Telefon>
+    <Handy>0170 1234567</Handy>
+    <email>max@example.com</email>
+    <ReZiff>0</ReZiff>
+    <BANK>Commerzbank</BANK>
+    <IBAN>DE89370400440532013000</IBAN>
+    <BIC>COBADEFFXXX</BIC>
+    <Kontoinhaber>Max Mustermann</Kontoinhaber>
+    <Gesamtbeitrag>75</Gesamtbeitrag>
+    <Zahler>0</Zahler>
+    <Bemerkung>Online-Beitritt 25.09.2026 20:02</Bemerkung>
+    <Abteilung_x0020_1>Fußball</Abteilung_x0020_1>
+    <Status_x0020_Abteilung_x0020_1>Erwachsene</Status_x0020_Abteilung_x0020_1>
+    <Betrag_x0020_1>75</Betrag_x0020_1>
+    <Beitrag_x0020_Abt_x0020_2>0</Beitrag_x0020_Abt_x0020_2>
+    <Betrag_x0020_2>0</Betrag_x0020_2>
+    <Beitrag_x0020_Abt_x0020_3>0</Beitrag_x0020_Abt_x0020_3>
+    <Betrag_x0020_3>0</Betrag_x0020_3>
+    <Beitrag_x0020_Abt_x0020_4>0</Beitrag_x0020_Abt_x0020_4>
+    <Betrag_x0020_4>0</Betrag_x0020_4>
+    <Geschlecht>m</Geschlecht>
+  </Daten16>
+</dataroot>
