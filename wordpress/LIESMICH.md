@@ -9,6 +9,7 @@ gesetzt ist, ändert sich nichts: Die Mail geht wie bisher mit PDF und XML. Gesa
 |---|---|
 | `inc/antrag-generator.php` | `tsv_antrag_erzeugen()` – baut aus den CF7-Feldern den Antrag im Format `tsv-antrag-2` (JSON) |
 | `inc/eingang-sender.php` | `tsv_eingang_aktiv()`, `tsv_eingang_senden()`, `tsv_eingang_hinweis_text()` |
+| `PROMPT_WORDPRESS.md` | fertiger Auftrag für den WordPress-Chat (enthält beide `inc/`-Dateien wörtlich) |
 | `tests/eingang-sender-test.php` | Test ohne WordPress (Stubs), läuft hier im Repo über `npm test`; prüft auch, dass die Mitgliederverwaltung den erzeugten Antrag versteht |
 
 Beide `inc/`-Dateien unverändert ins Child-Theme nach `inc/` kopieren. `inc/xml-generator.php` bleibt, solange Access
