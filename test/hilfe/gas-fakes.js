@@ -24,6 +24,9 @@
  *
  * Zeilen: deleteRow(nr) / deleteRows(nr, anzahl) entfernen Zeilen (Raster schrumpft wie in Sheets).
  *
+ * Weitere Dateien: opt.weitereDateien = { 'ID': { Tab: [[Kopf…], …] } } – openById('ID') liefert sie; ihre Tabs
+ *   liest der Test über daten('ID/Tab').
+ *
  * Rückgabe: { globale, datei, daten(tab), zaehler, cache, properties, trigger }
  *   zaehler.sheets  alle Aufrufe an SpreadsheetApp/Sheet/Range/Sheets-API (Builder ausgenommen)
  *   zaehler.<methode>  Aufrufe je Methode, z. B. batchGet, getValues, setValues, appendRow, openById
@@ -58,6 +61,15 @@ function erzeugeFakes(opt) {
   Object.keys(opt.tabs || {}).forEach(t => {
     tabs[t] = (opt.tabs[t] || []).map(z => z.slice());
     groesse[t] = { zeilen: Math.max(1000, tabs[t].length), spalten: Math.max(26, ...tabs[t].map(z => z.length)) };
+  });
+  // Weitere Dateien (z. B. Eingangstabelle): Tabs liegen intern unter „<Datei-ID>/<Tab>“
+  const weitere = opt.weitereDateien || {};
+  Object.keys(weitere).forEach(id => {
+    Object.keys(weitere[id]).forEach(t => {
+      const n = id + '/' + t;
+      tabs[n] = weitere[id][t].map(z => z.slice());
+      groesse[n] = { zeilen: Math.max(1000, tabs[n].length), spalten: Math.max(26, ...tabs[n].map(z => z.length)) };
+    });
   });
 
   function letzteZeile(daten) {
@@ -126,7 +138,7 @@ function erzeugeFakes(opt) {
 
   function blatt(name) {
     return {
-      getName() { return name; },
+      getName() { return name.slice(name.indexOf('/') + 1); },
       getLastRow() { zaehle('getLastRow'); return letzteZeile(tabs[name]); },
       getLastColumn() { zaehle('getLastColumn'); return letzteSpalte(tabs[name]); },
       getMaxRows() { zaehle('getMaxRows'); return groesse[name].zeilen; },
@@ -167,7 +179,7 @@ function erzeugeFakes(opt) {
     getId() { return dbId; },
     getName() { return 'Mitgliederverwaltung (Test)'; },
     getSheetByName(n) { zaehle('getSheetByName'); return tabs[n] ? blatt(n) : null; },
-    getSheets() { zaehle('getSheets'); return Object.keys(tabs).map(blatt); },
+    getSheets() { zaehle('getSheets'); return Object.keys(tabs).filter(n => n.indexOf('/') < 0).map(blatt); },
     insertSheet(n) {
       zaehle('insertSheet');
       if (tabs[n]) throw new Error('Fake: Tab existiert bereits: ' + n);
@@ -185,9 +197,27 @@ function erzeugeFakes(opt) {
     return b;
   }
 
+  function weitereDatei(id) {
+    const n = t => id + '/' + t;
+    return {
+      getId() { return id; },
+      getName() { return 'Weitere Datei ' + id; },
+      getSheetByName(t) { zaehle('getSheetByName'); return tabs[n(t)] ? blatt(n(t)) : null; },
+      getSheets() { zaehle('getSheets'); return Object.keys(tabs).filter(x => x.indexOf(id + '/') === 0).map(blatt); },
+      insertSheet(t) {
+        zaehle('insertSheet');
+        if (tabs[n(t)]) throw new Error('Fake: Tab existiert bereits: ' + t);
+        tabs[n(t)] = [];
+        groesse[n(t)] = { zeilen: 1000, spalten: 26 };
+        return blatt(n(t));
+      }
+    };
+  }
+
   const SpreadsheetApp = {
     openById(id) {
       zaehle('openById');
+      if (weitere[id]) return weitereDatei(id);
       if (id !== dbId) throw new Error('Fake: unbekannte Datei-ID ' + id);
       return datei;
     },

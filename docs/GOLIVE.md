@@ -11,7 +11,7 @@ Legende: ✅ im Code/Repo erledigt und geprüft · 🔧 manuell in Google zu pr�
 | Keine dynamischen IDs vom Client | ✅ | `DB_ID` nur aus Script Properties |
 | OAuth-Scopes minimal | ✅ | 4 Scopes (`spreadsheets`, `userinfo.email`, `script.scriptapp`, `script.send_mail` – nur Senden, kein Postfachzugriff), `check.js` lehnt andere ab |
 | Datei-/Ordnerfreigaben | 🔧 | Ordner nur Funktionskonto |
-| Öffentliche Schreibziele isoliert | — | Der Online-Aufnahmeantrag läuft auf der Vereins-Homepage (eigenes System) und erzeugt XML-Dateien; die WebApp hat kein öffentliches Formular. Import über „Beitritte aus XML importieren“ |
+| Öffentliche Schreibziele isoliert | — | Der Online-Aufnahmeantrag läuft auf der Vereins-Homepage (eigenes System) und erzeugt XML-Dateien; die WebApp hat kein öffentliches Formular. Import über „Beitritte aus XML importieren“. Künftig über ein eigenes Eingangs-Skript in eine getrennte Eingangstabelle (`docs/EINGANG.md`) |
 | LockService | ✅ | `DB.mitSperre` |
 | Tokens | — | kein Token-Zugang |
 | Secrets in PropertiesService | ✅ | `DB_ID` |

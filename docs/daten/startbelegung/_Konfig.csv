@@ -25,7 +25,7 @@ next_id_Qualifikation,10,ID-Zähler
 next_id_Ehrungsregel,13,ID-Zähler
 next_id_Ehrung,8,ID-Zähler
 next_id_Benutzer,6,ID-Zähler
-antrag_eingangsdatei,DATEI-ID EINTRAGEN,Getrennte Tabelle Aufnahmeantraege_TSV_Ergoldsbach — einziges Ziel des öffentlichen Endpunkts
+antrag_eingangsdatei,siehe Script Property EINGANG_ID,"Die ID der getrennten Eingangstabelle steht in der Script Property EINGANG_ID (nie in _Konfig, A3) – docs/EINGANG.md"
 antrag_abholung,stündlich,"Zeitgesteuerter Abruf: offene Anträge lesen, Dublettenprüfung, danach hier archivieren"
 antrag_drive_ordner,ORDNER-ID EINTRAGEN,"Drive-Ordner für unterschriebene Aufnahmeanträge. Freigabe: eingeschränkt, NICHT „jeder mit dem Link“."
 antrag_dateiname,JJJJ-MM-TT_Nachname_Vorname_Aufnahmeantrag.pdf,"Namensschema, damit der Ordner auch nach Jahren durchsuchbar bleibt"

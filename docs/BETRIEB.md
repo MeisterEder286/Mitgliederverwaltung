@@ -38,6 +38,8 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
     **Jeder in [Domain]**“. Die Deployment-ID und die exec-URL im zentralen Register (`docs/REGISTER.md`)
     eintragen.
 11. **Homepage:** WordPress-Seite `/verwaltung` mit Redirect-Block auf die exec-URL (Sicherheitsregel B3).
+12. **Online-Aufnahmeanträge (optional):** Eingangstabelle anlegen, Script Property `EINGANG_ID` setzen, im Editor
+    `eingangEinrichten` ausführen – Details und Spaltenvertrag in `docs/EINGANG.md`.
 
 ## 2. Updates
 
@@ -66,7 +68,7 @@ Rohdaten im Tab `_Messung` (keine Personendaten).
 |---|---|---|
 | Laufzeit je Ausführung | 6 min | Setup und Migration bleiben deutlich darunter |
 | CacheService | 100 KB je Wert, max. 6 h | Snapshot wird in Teilstücke zerlegt (Phase 3) |
-| Script Properties | ca. 9 KB je Wert | nur `DB_ID` |
+| Script Properties | ca. 9 KB je Wert | `DB_ID`, optional `EINGANG_ID` |
 | Trigger-Laufzeit gesamt | je nach Kontotyp, für Nonprofits prüfen | stündlicher Messwert-Trigger: Sekunden pro Lauf; nächtliche Wartung: Sekunden bis wenige Minuten, Abbruch nach 4,5 min mit Fortsetzung |
 | Gleichzeitige Ausführungen | weiß ich nicht genau | wenige Nutzer, unkritisch |
 | E-Mail-Kontingent (MailApp) | je nach Kontotyp, Stand meines Wissens ca. 100 Empfänger/Tag (Consumer) bis 1.500 (Workspace) – prüfen | Versand prüft vorher `MailApp.getRemainingDailyQuota()`; reicht es nicht, wird nichts gesendet. Zusätzlich `_Konfig.mail_max_je_lauf` (Standard 100) |

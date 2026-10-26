@@ -154,6 +154,12 @@ function setup() {
   return Setup.ausfuehren();
 }
 
+/** Legt in der Eingangstabelle (Script Property EINGANG_ID) den Tab „Eingang“ an bzw. ergänzt fehlende Spalten. */
+function eingangEinrichten() {
+  Zugriff.nurFunktionskonto();
+  return BeitrittModul.eingangEinrichten();
+}
+
 /** Legt den stündlichen Trigger zum Wegschreiben der Messwerte an (vorhandene werden ersetzt). */
 function triggerEinrichten() {
   Zugriff.nurFunktionskonto();

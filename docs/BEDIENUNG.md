@@ -42,6 +42,11 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 ## Mitgliederverwaltung / Vorstand
 - **Neues Mitglied:** Mitglieder → „Neues Mitglied“. Nummer wird automatisch vergeben; bei Namensgleichheit mit gleichem
   Geburtsdatum erscheint ein Hinweis (oft ein Wiedereintritt → „Wiedereintritt“ statt neu anlegen).
+- **Online-Anträge von der Homepage:** Startseite-Kachel „neue Online-Aufnahmeanträge“ bzw. Mitglieder → „Beitritte aus XML
+  importieren“ → oben „Online-Anträge von der Homepage“. Anträge ankreuzen (das PDF mit Unterschrift lässt sich daneben
+  öffnen) → „Ausgewählte prüfen“ → wie unten. Beim Übernehmen wird das PDF automatisch als Dokument verknüpft
+  (Aufnahmeantrag bei jeder Person, SEPA-Mandat am Konto). Doppelt abgeschickte oder zurückgezogene Anträge mit „Nicht
+  übernehmen“ und kurzem Grund abschließen.
 - **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
   bearbeiten). Eine oder mehrere Antrags-Dateien (XML wie bisher aus Access) auswählen – sie werden nur im Browser gelesen.
   Die Vorschau zeigt je Antrag die Personen mit vorläufiger Nummer, das Konto (IBAN nur maskiert), ggf. den

@@ -181,6 +181,12 @@
           if (p && p.anzahl) verw.appendChild(A.kachel(A.zahl(p.anzahl), 'Schreiben im Postausgang', 'warnung', function () { A.zeige('korrespondenz'); }));
         }).catch(function () {});
       }
+      // Online-Aufnahmeanträge von der Homepage (nur wenn die Eingangstabelle eingerichtet ist)
+      if (A.darf('mitglied_anlegen') && A.darf('konto_bearbeiten')) {
+        A.rufe('apiBeitrittEingangAnzahl', A.still).then(function (e) {
+          if (e && e.anzahl) verw.appendChild(A.kachel(A.zahl(e.anzahl), 'neue Online-Aufnahmeanträge', 'warnung', function () { A.zeige('beitritt'); }));
+        }).catch(function () {});
+      }
       if (A.darf('stammdaten_bearbeiten')) {
         A.rufe('apiVerwaltungPruefregelnZusammenfassung', A.still).then(function (q) {
           verw.appendChild(A.kachel(A.zahl(q.fehler), 'Datenfehler (Prüfregeln)', q.fehler ? 'fehler' : '', function () { A.zeige('verwaltung', { reiter: 'datenqualitaet' }); }));

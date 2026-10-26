@@ -51,3 +51,35 @@ test('Abteilungsleitung sieht keinen Import-Knopf; Server weist ab', async () =>
     assert.strictEqual(a.fehler.art, 'zugriff');
   } finally { await ui.schliessen(); }
 });
+
+test('Online-Anträge von der Homepage: Liste mit PDF-Link, prüfen, übernehmen, Zeile abgeschlossen; ablehnen', async () => {
+  const { ladeProjekt } = require('../hilfe/projekt');
+  const kopf = ladeProjekt({}).Eingang.SPALTEN;
+  const zeile = o => kopf.map(k => (o[k] === undefined ? '' : o[k]));
+  const xml = n => fs.readFileSync(path.join(DATEN, n), 'utf8');
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', properties: { EINGANG_ID: 'EIN' }, weitereDateien: { EIN: { Eingang: [kopf,
+    zeile({ eingang_id: '1', eingang_am: '2026-10-24T18:03:00', dateiname: 'familie.xml', xml: xml('familie.xml'), pdf_link: 'https://drive.google.com/file/d/p1/view', status: 'neu' }),
+    zeile({ eingang_id: '2', eingang_am: '2026-10-25T09:00:00', dateiname: 'einzel.xml', xml: xml('einzel.xml'), status: 'neu' })] } } });
+  const p = ui.page;
+  try {
+    await p.getByText('neue Online-Aufnahmeanträge').waitFor();
+    await p.getByText('neue Online-Aufnahmeanträge').click();
+    await p.getByRole('heading', { name: 'Online-Anträge von der Homepage (2 offen)' }).waitFor();
+    assert.strictEqual(await p.getByRole('link', { name: 'PDF mit Unterschrift' }).getAttribute('href'), 'https://drive.google.com/file/d/p1/view');
+    await p.getByLabel(/Musterfrau/).uncheck();
+    await p.getByRole('button', { name: 'Ausgewählte prüfen' }).click();
+    await p.waitForSelector('text=familie.xml – 3 Person(en)');
+    assert.ok(!(await p.content()).includes('0532013000'), 'IBAN im Klartext auf der Seite');
+    await p.locator('button', { hasText: /^Importieren$/ }).click();
+    await p.waitForSelector('text=3 neue Person(en) aus 1 Antrag/Anträgen hinzugefügt.');
+    await p.getByText('Unterschriebenes PDF verknüpft (4 Dokument-Link(s)).').waitFor();
+    await p.getByRole('heading', { name: 'Online-Anträge von der Homepage (1 offen)' }).waitFor();
+    assert.strictEqual(ui.objekte('EIN/Eingang').find(z => z.eingang_id === '1').status, 'uebernommen');
+    await p.getByRole('button', { name: 'Nicht übernehmen' }).click();
+    await p.getByRole('dialog').getByLabel(/Grund/).fill('Test: doppelt');
+    await p.getByRole('dialog').getByRole('button', { name: 'Nicht übernehmen' }).click();
+    await p.getByRole('heading', { name: 'Online-Anträge von der Homepage (0 offen)' }).waitFor();
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth) <= 360, 'waagrechtes Scrollen');
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});

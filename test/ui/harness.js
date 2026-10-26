@@ -53,7 +53,7 @@ async function starteOberflaeche(opt) {
     if (!z) throw new Error('Keine Benutzerzeile mit Rolle ' + opt.rolle);
     email = z[k.indexOf('email')];
   }
-  const f = erzeugeFakes({ tabs, email, eigentuemer: 'verwaltung@tsv-ergoldsbach.de' });
+  const f = erzeugeFakes({ tabs, email, eigentuemer: 'verwaltung@tsv-ergoldsbach.de', properties: opt.properties, weitereDateien: opt.weitereDateien });
   const g = ladeProjekt(f.globale);
   const start = g.apiStart();
   if (!start.ok) throw new Error('apiStart: ' + JSON.stringify(start.fehler));

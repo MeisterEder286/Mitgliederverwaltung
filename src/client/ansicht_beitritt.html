@@ -6,6 +6,8 @@
               Links zu den Personen und „Aufnahmebestätigungen erstellen“.
   Datenquelle: Die Dateien liest NUR dieser Browser (FileReader + DOMParser); geschickt werden je Person die Felder als
               Texte an apiBeitrittVorschau / apiBeitrittImportieren. Nichts wird als Datei gespeichert.
+              Online-Anträge von der Homepage (Eingangstabelle) zerlegt dagegen der Server (apiBeitrittEingang…):
+              der Browser bekommt nur Namen, Links und die maskierte Vorschau und schickt nur eingang_id zurück.
   Wer darf:   mitglied_anlegen und konto_bearbeiten (Bankdaten werden übernommen) – serverseitig erzwungen.
   Besonderheiten: Je Antrag zahlt Person 1 selbst, alle weiteren über Person 1 (wie in Access). Mitgliedsnummern werden
               immer NEU vergeben (höchste + 1). Die IBAN zeigt die Vorschau nur maskiert.
@@ -20,6 +22,9 @@
   .bt-zeile { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 6px 0; }
   .bt-zeile label { display: inline-flex; gap: 6px; align-items: center; min-height: 44px; }
   .bt-bericht li { margin: 4px 0; }
+  .bt-eingang li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 6px 0; border-top: 1px solid var(--rand); }
+  .bt-eingang li:first-child { border-top: 0; }
+  .bt-eingang label { display: inline-flex; gap: 8px; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
 </style>
 <script>
 (function () {
@@ -63,9 +68,11 @@
     ziel.appendChild(A.el('h1', 'Beitritte aus XML importieren'));
     ziel.appendChild(A.el('p', 'Beitrittsanträge im XML-Format (wie bisher in Access) auswählen – auch mehrere auf einmal. Je Antrag zahlt Person 1 ' +
       'selbst, alle weiteren über Person 1. Die Mitgliedsnummern werden neu vergeben. Die Dateien werden nur in diesem Browser gelesen.', { className: 'leise' }));
+    var bereich = A.el('div');
+    if (A.darf('konto_bearbeiten')) zeigeEingang(ziel, bereich);
+    ziel.appendChild(A.el('h2', 'XML-Dateien'));
     var eingabe = A.el('input', null, { type: 'file', accept: '.xml,application/xml,text/xml', multiple: true, className: 'bt-datei' });
     eingabe.setAttribute('aria-label', 'Beitritts-XML-Dateien auswählen');
-    var bereich = A.el('div');
     ziel.appendChild(eingabe);
     ziel.appendChild(bereich);
     eingabe.addEventListener('change', function () {
@@ -78,13 +85,88 @@
         A.leere(bereich);
         kaputt.forEach(function (x) { bereich.appendChild(A.el('p', 'NICHT lesbar: ' + x.datei + ' – ' + x.fehler, { className: 'meldung' })); });
         if (!lesbar.length) return;
-        A.rufe('apiBeitrittVorschau', lesbar).then(function (v) { zeigeVorschau(bereich, lesbar, v); }, function () {});
+        A.rufe('apiBeitrittVorschau', lesbar).then(function (v) {
+          zeigeVorschau(bereich, v, function (ent) { return A.rufe('apiBeitrittImportieren', lesbar, ent); });
+        }, function () {});
       });
     });
   }
 
-  function zeigeVorschau(bereich, antraege, v) {
-    var entscheidungen = antraege.map(function (a, i) { return { index: i, ueberspringen: false, gemeinschaft: true, personen: {} }; });
+  // ------------------------------------------------------------------ Online-Anträge (Eingang von der Homepage)
+
+  function zeigeEingang(ziel, bereich) {
+    var box = A.el('section', null, { className: 'karte' });
+    ziel.appendChild(box);
+    lade();
+    function lade() {
+      A.leere(box);
+      box.appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
+      A.rufe('apiBeitrittEingang', A.still).then(function (e) {
+        A.leere(box);
+        if (!e.eingerichtet) { box.remove(); return; }
+        box.appendChild(A.el('h2', 'Online-Anträge von der Homepage (' + e.offen.length + ' offen)'));
+        if (!e.offen.length) box.appendChild(A.el('p', 'Keine offenen Online-Anträge.', { className: 'leise' }));
+        var gewaehlt = {};
+        var ul = A.el('ul', null, { className: 'liste bt-eingang' });
+        e.offen.forEach(function (o) {
+          var li = A.el('li');
+          if (!o.fehler) {
+            gewaehlt[o.eingang_id] = true;
+            var c = A.el('input', null, { type: 'checkbox', checked: true });
+            c.addEventListener('change', function () { gewaehlt[o.eingang_id] = c.checked; });
+            li.appendChild(A.el('label', null, null, [c, A.el('span', (o.personen.join(' · ') || o.datei) + (o.eingang_am ? ' – ' + A.datum(o.eingang_am) : ''))]));
+          } else {
+            li.appendChild(A.el('span', o.datei + ' – NICHT lesbar: ' + o.fehler, { className: 'bt-warnung' }));
+          }
+          var pdf = A.sichereUrl(o.pdf_link);
+          if (pdf) li.appendChild(A.el('a', 'PDF mit Unterschrift', { href: pdf, target: '_blank', rel: 'noopener' }));
+          else li.appendChild(A.el('span', 'kein PDF', { className: 'leise' }));
+          li.appendChild(A.knopf('Nicht übernehmen', function () { ablehnen(o); }, 'zweit klein'));
+          ul.appendChild(li);
+        });
+        if (e.offen.length) box.appendChild(ul);
+        if (e.offen.some(function (o) { return !o.fehler; })) {
+          box.appendChild(A.el('div', null, { className: 'knopfleiste' }, [A.knopf('Ausgewählte prüfen', function () {
+            var ids = Object.keys(gewaehlt).filter(function (k) { return gewaehlt[k]; });
+            if (!ids.length) { A.meldung('Bitte mindestens einen Antrag auswählen.', 'hinweis'); return; }
+            A.leere(bereich);
+            bereich.appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
+            A.rufe('apiBeitrittEingangVorschau', ids).then(function (v) {
+              A.leere(bereich);
+              v.nicht_lesbar.forEach(function (x) { bereich.appendChild(A.el('p', 'NICHT lesbar: ' + x.datei + ' – ' + x.fehler, { className: 'meldung' })); });
+              zeigeVorschau(bereich, v, function (ent) {
+                return A.rufe('apiBeitrittEingangImportieren', ids, ent).then(function (r) { lade(); return r; });
+              });
+              bereich.scrollIntoView();
+            }, function () { A.leere(bereich); });
+          })]));
+        }
+        if (e.erledigt.length) {
+          box.appendChild(A.details(e.erledigt.map(function (x) {
+            return [A.datum(x.erledigt_am) + ' · ' + (x.status === 'uebernommen' ? 'übernommen' : 'nicht übernommen'), x.datei + (x.ergebnis ? ' – ' + x.ergebnis : '')];
+          })));
+        }
+      }, function () { A.leere(box); box.appendChild(A.el('p', 'Die Online-Anträge konnten nicht geladen werden.', { className: 'leise' })); });
+    }
+  }
+
+  function ablehnen(o) {
+    var form = A.formular([{ name: 'grund', titel: 'Grund', typ: 'text', pflicht: true, hilfe: 'z. B. doppelt abgeschickt, zurückgezogen – ohne Bankdaten' }], {});
+    A.dialog('Online-Antrag nicht übernehmen', form.element, [
+      { text: 'Abbrechen' },
+      { text: 'Nicht übernehmen', art: '', aktion: function (schliessen) {
+        A.rufe('apiBeitrittEingangAblehnen', o.eingang_id, form.werte().grund).then(function () {
+          schliessen(); A.neuZeichnen(); A.meldung('Antrag als „nicht übernommen“ abgeschlossen.', 'ok');
+        }, function (err) { if (err && err.felder) form.setzeFehler(err.felder); });
+      } }
+    ]);
+  }
+
+  // ------------------------------------------------------------------ Vorschau und Import (Dateien und Eingang)
+
+  /** importiere(entscheidungen) → Promise mit dem Import-Ergebnis (je Quelle eigener API-Aufruf). */
+  function zeigeVorschau(bereich, v, importiere) {
+    var entscheidungen = v.antraege.map(function (a, i) { return { index: i, eingang_id: a.eingang_id || null, ueberspringen: false, gemeinschaft: true, personen: {} }; });
     if (v.hinweis) bereich.appendChild(A.el('p', v.hinweis, { className: 'leise' }));
     v.antraege.forEach(function (a, i) {
       var e = entscheidungen[i];
@@ -130,7 +212,7 @@
     });
     var los = A.knopf('Importieren', function () {
       los.disabled = true;
-      A.rufe('apiBeitrittImportieren', antraege, entscheidungen).then(function (r) {
+      importiere(entscheidungen).then(function (r) {
         A.daten.uebernehme(r.aenderung);
         A.leere(bereich);
         zeigeBericht(bereich, r);
@@ -157,6 +239,7 @@
       });
       k.appendChild(ul);
       (x.warnungen || []).forEach(function (w) { k.appendChild(A.el('p', '⚠ ' + w, { className: 'bt-warnung' })); });
+      if (x.dokumente) k.appendChild(A.el('p', 'Unterschriebenes PDF verknüpft (' + x.dokumente + ' Dokument-Link(s)).', { className: 'leise' }));
       if (x.konto_id) k.appendChild(A.knopf('Konto ' + x.konto_id + ' öffnen', function () { A.zeige('konto', { id: x.konto_id }); }, 'zweit klein'));
       bereich.appendChild(k);
     });
