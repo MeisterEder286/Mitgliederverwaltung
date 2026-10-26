@@ -26,7 +26,8 @@ function eingangTab(g) {
   return [kopf,
     zeile({ eingang_id: '1', eingang_am: '2026-10-24T18:03:00', dateiname: 'antrag-beispielhuber.xml', xml: xml('familie.xml'), pdf_link: PDF, status: 'neu' }),
     zeile({ eingang_id: '2', eingang_am: '2026-10-25T09:00:00', dateiname: 'antrag-einzel.xml', xml: xml('einzel.xml'), status: 'neu' }),
-    zeile({ eingang_id: '3', eingang_am: '2026-10-25T10:00:00', dateiname: 'kaputt.xml', xml: '<dataroot><nix/></dataroot>', status: 'neu' })];
+    zeile({ eingang_id: '3', eingang_am: '2026-10-25T10:00:00', dateiname: 'kaputt.xml', xml: '<dataroot><nix/></dataroot>', status: 'neu' }),
+    zeile({ eingang_id: '4', eingang_am: '2026-10-25T21:30:00', unterschrift_am: '2026-10-25', dateiname: 'homepage.xml', xml: xml('homepage.xml'), pdf_link: PDF, status: 'neu' })];
 }
 
 function umgebung(rolle, optionen) {
@@ -64,14 +65,14 @@ test('Übersicht: offene Anträge nur mit Namen und PDF-Link, nicht lesbare mark
   const u = umgebung();
   const e = ok(u.g.apiBeitrittEingang());
   assert.strictEqual(e.eingerichtet, true);
-  assert.strictEqual(e.offen.length, 3);
+  assert.strictEqual(e.offen.length, 4);
   assert.deepStrictEqual(e.offen[0].personen, ['Beispielhuber, Max', 'Beispielhuber, Anna', 'Beispielhuber, Lena']);
   assert.strictEqual(e.offen[0].pdf_link, PDF);
   assert.strictEqual(e.offen[0].eingang_am, '2026-10-24T18:03:00');
   assert.match(e.offen[2].fehler, /Daten16/);
   const text = JSON.stringify(e);
   assert.ok(!text.includes('0532') && !text.includes('<dataroot') && !text.includes('<IBAN>'), 'Bankdaten oder XML an den Browser');
-  assert.deepStrictEqual(ok(u.g.apiBeitrittEingangAnzahl()), { anzahl: 3 });
+  assert.deepStrictEqual(ok(u.g.apiBeitrittEingangAnzahl()), { anzahl: 4 });
 });
 
 test('Nicht eingerichtet, Datenbank als Eingang, Rechte', () => {
@@ -108,7 +109,7 @@ test('Vorschau und Übernahme: Zeile abgeschlossen (XML geleert), PDF als Aufnah
   assert.ok(!JSON.stringify(u.obj('_Protokoll')).includes(IBAN_FAMILIE));
   // erneut: nichts mehr offen → kein Doppel-Import
   fehler(u.g.apiBeitrittEingangImportieren(['1'], [{ eingang_id: '1' }]), 'fachlich');
-  assert.deepStrictEqual(ok(u.g.apiBeitrittEingangAnzahl()), { anzahl: 2 }, 'Zähler nach Übernahme neu');
+  assert.deepStrictEqual(ok(u.g.apiBeitrittEingangAnzahl()), { anzahl: 3 }, 'Zähler nach Übernahme neu');
 });
 
 test('Übernahme ohne PDF: Hinweis; Ablehnen mit Grund schließt die Zeile ab', () => {
@@ -123,7 +124,7 @@ test('Übernahme ohne PDF: Hinweis; Ablehnen mit Grund schließt die Zeile ab', 
   assert.ok(!u.obj('_Protokoll').some(p => String(p.kommentar).includes('doppelt abgeschickt')), 'Freitext nicht ins Protokoll');
   fehler(u.g.apiBeitrittEingangAblehnen('3', 'nochmal'), 'fachlich');
   const e = ok(u.g.apiBeitrittEingang());
-  assert.strictEqual(e.offen.length, 1);
+  assert.strictEqual(e.offen.length, 2);
   assert.deepStrictEqual(e.erledigt.map(x => x.status), ['abgelehnt', 'uebernommen']);
 });
 
@@ -146,4 +147,22 @@ test('Fehler beim Abschließen der Eingangszeile: Antrag bleibt übernommen, Hin
   assert.strictEqual(r.ergebnisse[0].ok, true);
   assert.ok(r.ergebnisse[0].warnungen.some(w => /nicht abgeschlossen werden/.test(w)));
   assert.ok(u.obj('Mitglied').some(m => m.nachname === 'Musterfrau'));
+});
+
+test('XML im Format der Homepage: Beitragsstatus ohne Warnung, Telefon „0“ leer, Mandatsdatum = Unterschrift', () => {
+  const u = umgebung();
+  const v = ok(u.g.apiBeitrittEingangVorschau(['4']));
+  const a = v.antraege[0];
+  assert.strictEqual(a.personen.length, 3);
+  assert.strictEqual(a.gemeinschaft.festbetrag, 140);
+  assert.strictEqual(a.konto.mandatsdatum, '2026-10-25');
+  const alle = a.warnungen.concat(...a.personen.map(p => p.warnungen)).join(' | ');
+  assert.ok(!/Familien|Beitragsfrei|Mandatsdatum vorläufig/.test(alle), alle);
+  const r = ok(u.g.apiBeitrittEingangImportieren(['4'], [{ eingang_id: '4' }]));
+  const ids = r.ergebnisse[0].personen.map(p => p.mitglied_id);
+  const neu = u.g.DB.lese(['Mitglied']).Mitglied.filter(m => ids.includes(m.mitglied_id));
+  assert.strictEqual(neu.find(m => m.vorname === 'Hans').telefon, '08771 12345');
+  assert.ok(neu.filter(m => m.vorname !== 'Hans').every(m => !m.telefon), 'Platzhalter-Telefon „0“');
+  const konto = u.g.DB.lese(['Beitragskonto']).Beitragskonto.find(k => k.beitragskonto_id === r.ergebnisse[0].konto_id);
+  assert.strictEqual(konto.mandatsdatum, '2026-10-25');
 });

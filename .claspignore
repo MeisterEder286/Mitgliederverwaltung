@@ -1,6 +1,7 @@
 # Nur src/ wird nach Apps Script übertragen (rootDir in .clasp.json). backup/ liegt außerhalb von rootDir
-# und gehört zu einem EIGENEN Projekt (npm run push:backup, backup/.clasp.json) – nie ins Hauptprojekt.
+# und gehört zu einem EIGENEN Projekt (npm run push:backup, backup/.clasp.json) – nie ins Hauptprojekt. Ebenso eingang/.
 backup/**
+eingang/**
 **/*.md
 **/*.csv
 **/*.py

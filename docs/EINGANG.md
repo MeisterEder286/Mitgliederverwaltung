@@ -1,7 +1,7 @@
 # Online-Aufnahmeanträge von der Homepage (Eingang)
 
-Stand 10/2026. Entscheidung: Variante a (Johann). Der WebApp-Teil ist fertig. Das Eingangs-Skript und die
-Anbindung in WordPress folgen.
+Stand 10/2026. Entscheidung: Variante a (Johann). Fertig sind der WebApp-Teil, das Eingangs-Skript (`eingang/`) und
+das WordPress-Modul zum Vorbauen (`wordpress/`, Schalter `TSV_EINGANG_AKTIV`, Standard aus).
 
 ## Ablauf
 
@@ -34,9 +34,10 @@ Kopfzeile genau so (Reihenfolge egal). `eingangEinrichten()` in der WebApp legt 
 | `eingang_id` | Eingangs-Skript | eindeutig, nie wiederverwendet (z. B. Zeitstempel + Zufall) – Pflicht |
 | `eingang_am` | Eingangs-Skript | Zeitpunkt des Eingangs (Server-Zeit, nicht vom Formular) |
 | `dateiname` | Eingangs-Skript | Name der XML-Datei im Ordner |
-| `xml` | Eingangs-Skript | XML-Text (UTF-8, ohne DOCTYPE, höchstens 500 000 Zeichen) – Pflicht |
+| `xml` | Eingangs-Skript | XML-Text (UTF-8, ohne DOCTYPE, höchstens 45 000 Zeichen – Zellgrenze 50 000) – Pflicht |
 | `drive_link` | Eingangs-Skript | Link auf die XML-Datei (`https://drive.google.com/…`) |
 | `pdf_link` | Eingangs-Skript | Link auf das PDF mit Unterschrift (`https://drive.google.com/…`) |
+| `unterschrift_am` | Eingangs-Skript | Datum auf dem PDF (JJJJ-MM-TT) – wird zum Mandatsdatum; leer = Tag des Eingangs |
 | `status` | beide | `neu` (Eingangs-Skript) → `uebernommen` / `abgelehnt` (WebApp) – Pflicht |
 | `erledigt_am`, `erledigt_von` | WebApp | wann und von wem abgeschlossen |
 | `ergebnis` | WebApp | „Nr. 1234, 1235“ bzw. Grund der Ablehnung (ohne Bankdaten) |
@@ -56,11 +57,22 @@ Regeln:
 3. Im Editor `eingangEinrichten` ausführen. Das legt den Tab „Eingang“ mit der Kopfzeile an.
 4. Ohne `EINGANG_ID` ist der Abschnitt einfach ausgeblendet. Der Datei-Import funktioniert wie bisher.
 
-## Noch zu bauen
+## Bausteine
 
-- **Eingangs-Skript** (`eingang/` im Repo, eigenes Projekt wie `backup/`): `doPost` prüft den Schlüssel
-  (Script Property, Vergleich in konstanter Zeit), Größe und Inhaltstyp, legt XML und PDF im Ordner ab und hängt die
-  Zeile an. Antwort ohne Details. Scopes: `spreadsheets`, `drive.file` (nur selbst angelegte Dateien).
-- **WordPress:** Nach dem Absenden XML und PDF per `wp_remote_post` an die Eingangs-URL schicken, statt
-  sie zu mailen. Den Schlüssel in `wp-config.php`, nicht in der Datenbank. Bei einem Fehler eine Mail als Rückfall.
-- Aufbewahrung der Dateien im Ordner: wie „Dokument-Links wie Antrag/Mandat“ im Tab `Aufbewahrungsfrist`.
+| Baustein | Wo | Anleitung |
+|---|---|---|
+| Eingangs-Skript (öffentlicher Empfänger) | `eingang/Eingang.js` | `eingang/LIESMICH.md` |
+| WordPress-Modul (Senden, Schalter, Rückfall-Mail) | `wordpress/inc/eingang-sender.php` | `wordpress/LIESMICH.md` |
+| WebApp (Liste, Vorschau, Übernahme, PDF-Verknüpfung) | `src/lib/eingang.js`, `src/modul/Beitritt.js` | oben |
+
+Reihenfolge der Inbetriebnahme: Test-Eingangstabelle + Test-Bereitstellung → Staging-WordPress mit
+`TSV_EINGANG_AKTIV = true` → Probeantrag bis zur Übernahme in der Test-WebApp → Produktion einrichten → Schalter an.
+
+## Offene Punkte
+
+- Aufbewahrung der Dateien im Ordner „Beitritte Eingang“: wie „Dokument-Links wie Antrag/Mandat“ im Tab
+  `Aufbewahrungsfrist`; abgelehnte Anträge von Hand löschen (Ordner und Zeile).
+- Abteilungen: Die XML schreibt die Anzeigenamen des Formulars (z. B. „Fußball“, „Leichtathletik“). Die Bezeichnungen
+  im Tab `Abteilung` müssen dazu passen, sonst meldet die Vorschau „Abteilung … unbekannt“.
+- Beitragsart aus dem Formular (familienbeitrag, ehegattenbeitrag, erwachsene, kind, jugendliche, rentner) steht nur
+  indirekt in der XML (Gesamtbeitrag/Status). Die Vorschau schlägt die Beitragsart nach Alter vor – bitte prüfen.

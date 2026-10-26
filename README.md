@@ -31,7 +31,7 @@ keine externen Schriften oder Bibliotheken. Mobil bedienbar, Rollen- und Feldrec
 | Migration aus Access | `docs/MIGRATION.md` |
 | Abgleich mit dem Access-VBA | `docs/VBA_ABGLEICH.md` |
 | Backup | `backup/LIESMICH.md` |
-| Online-Aufnahmeanträge (Eingang von der Homepage) | `docs/EINGANG.md` |
+| Online-Aufnahmeanträge (Eingang von der Homepage) | `docs/EINGANG.md`, `eingang/LIESMICH.md`, `wordpress/LIESMICH.md` |
 | Code-Aufbau, Schnittstellen, Konventionen | `docs/ENTWICKLUNG.md` |
 | Konzept, Entscheidungen | `docs/PHASE0_Konzept.md`, `docs/ENTSCHEIDUNGEN.md` |
 | Datenmodell (maßgeblich) | `docs/daten/*.csv` (Ausgangspunkt `docs/Mitgliederverwaltung_TSV_Ergoldsbach.xlsx`) |
@@ -47,6 +47,7 @@ npm run test:ui   # Oberflächentests in Chromium gegen den echten Servercode (P
 npm run vorschau  # Oberfläche lokal ansehen (--gross: 1.200 synthetische Mitglieder)
 npm run push      # check + test + test:ui + clasp push
 npm run schema    # Datenmodell-CSV → src/lib/schema.js
+npm run push:eingang  # Eingangs-Skript (eigenes Projekt, eingang/.clasp.json)
 ```
 
 Im Repo liegen ausschließlich erfundene Testdaten. Echtdaten nie einchecken (`migration/` ist ausgeschlossen).

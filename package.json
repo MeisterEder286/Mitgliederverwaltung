@@ -11,7 +11,8 @@
     "deploy:hinweis": "echo 'Deployment nur über bestehende Deployment-ID: clasp deploy -i <ID> -d \"Beschreibung\" (siehe docs/BETRIEB.md)'",
     "vorschau": "node tools/vorschau.js",
     "test:ui": "node --test --test-concurrency=1 \"test/ui/**/*.ui.test.js\"",
-    "push:backup": "npm run check && cd backup && clasp push"
+    "push:backup": "npm run check && cd backup && clasp push",
+    "push:eingang": "npm run check && cd eingang && clasp push"
   },
   "engines": {
     "node": ">=20"

@@ -16,6 +16,9 @@
  *     der Mandatsreferenz (Daten16 hat keine Mandatsspalten) und die Erkennung von Familienpauschalen.
  *   - Ergebnis im Format von DB.lese: Datum 'JJJJ-MM-TT', ja/nein als true/false, leere Werte null.
  *   - Optionale Nutzung von Iban, Beitrag, Mitgliedschaft (falls geladen) – sonst eigene Minimal-Logik.
+ *   - „Status Abteilung 1“ enthält in Access und im Online-Antrag oft den Beitragsstatus (Familien, Beitragsfrei,
+ *     Erwachsene …) statt aktiv/passiv – solche Werte gelten ohne Hinweis als aktiv (STATUS_BEITRAG).
+ *   - Telefon/Handy nur aus Nullen (Platzhalter „0“ aus Access bzw. dem Online-Antrag) werden leer übernommen.
  */
 var Migration = (function () {
 
@@ -67,6 +70,10 @@ var Migration = (function () {
 
   var SCHWERE = { fehler: 1, warnung: 2, hinweis: 3 };
 
+  /** Beitragsstatus-Werte in „Status Abteilung 1“ (gefaltet) – gelten als aktiv. */
+  var STATUS_BEITRAG = ['familien', 'familie', 'familienbeitrag', 'beitragsfrei', 'frei', 'erwachsene', 'erwachsener', 'kind', 'kinder',
+    'jugendliche', 'jugendlicher', 'jugend', 'rentner', 'ehegatten', 'ehegattenbeitrag', 'ehepaar'];
+
   // ================================================================== kleine Helfer
 
   function falte(s) {
@@ -78,6 +85,11 @@ var Migration = (function () {
     if (v === null || v === undefined) return null;
     var s = String(v).replace(/\s+/g, ' ').trim();
     return s === '' ? null : s;
+  }
+  /** Rufnummer; nur Nullen („0“ als Platzhalter) → null. */
+  function rufnummer(v) {
+    var s = text(v);
+    return s && /^[0\s\/\-]+$/.test(s) ? null : s;
   }
   function pad2(n) { return ('0' + n).slice(-2); }
 
@@ -357,7 +369,7 @@ var Migration = (function () {
         if (n === 1) {
           var st = falte(wert(z, 'status1'));
           if (st === 'passiv' || st === 'p') status = 'passiv';
-          else if (st && st !== 'aktiv' && st !== 'a') pruefe('abteilung_status', 'hinweis', p, 'Status Abteilung 1 „' + text(wert(z, 'status1')) + '“ unbekannt – als aktiv übernommen.');
+          else if (st && st !== 'aktiv' && st !== 'a' && STATUS_BEITRAG.indexOf(st) < 0) pruefe('abteilung_status', 'hinweis', p, 'Status Abteilung 1 „' + text(wert(z, 'status1')) + '“ unbekannt – als aktiv übernommen.');
         } else hinweisV8++;
         zugehoerigkeiten.push({ zugehoerigkeit_id: nextZug++, mitglied_id: p.id, abteilung_id: aid, passnummer: null, status: status,
           eintrittsdatum: p.eintritt, austrittsdatum: p.austritt || null, bemerkung: n > 1 ? 'Migration: Status in Daten16 nur für Abteilung 1 vorhanden' : null,
@@ -369,7 +381,7 @@ var Migration = (function () {
         mitglied_id: p.id, mitgliedsnummer: p.mitglnr, anrede: anrede.wert, briefanrede: briefanrede, titel: titel,
         vorname: p.vorname, nachname: p.nachname, strasse: str.strasse, hausnummer: str.hausnummer, plz: plz.wert,
         ort: text(wert(z, 'ort')), land: 'DE', geburtsdatum: p.geburtsdatum, geschlecht: ges.wert,
-        telefon: text(wert(z, 'telefon')), handy: text(wert(z, 'handy')), email: mail.wert,
+        telefon: rufnummer(wert(z, 'telefon')), handy: rufnummer(wert(z, 'handy')), email: mail.wert,
         versandart: mail.wert ? 'E-Mail' : 'Post', adresse_ungueltig: false, adresse_ungueltig_am: null,
         ehrenmitglied: false, ehrenmitglied_seit: null, nur_funktionstraeger: false, sterbedatum: null, status: null,
         beitragsart_id: null, beitragskonto_id: null, beitragsgemeinschaft_id: null,

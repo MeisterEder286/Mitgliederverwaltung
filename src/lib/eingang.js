@@ -17,11 +17,12 @@
  *   - Nach Übernahme oder Ablehnung wird die Spalte xml geleert (Datensparsamkeit); das Original liegt im
  *     eingeschränkten Drive-Ordner (drive_link).
  *   - pdf_link: das von der Homepage erzeugte PDF mit Unterschrift (Antrag und ggf. SEPA-Mandat) im selben Ordner.
- *     Bei der Übernahme entstehen daraus Dokument-Links (dokumente()).
+ *     Bei der Übernahme entstehen daraus Dokument-Links (dokumente()). unterschrift_am: Datum auf dem PDF (bei
+ *     beiden Unterschriften, Antrag und SEPA-Mandat) – wird zum Mandatsdatum; fehlt es, gilt der Tag des Eingangs.
  */
 var Eingang = (function () {
   var TAB = 'Eingang';
-  var SPALTEN = ['eingang_id', 'eingang_am', 'dateiname', 'xml', 'drive_link', 'pdf_link', 'status', 'erledigt_am', 'erledigt_von', 'ergebnis'];
+  var SPALTEN = ['eingang_id', 'eingang_am', 'dateiname', 'xml', 'drive_link', 'pdf_link', 'unterschrift_am', 'status', 'erledigt_am', 'erledigt_von', 'ergebnis'];
   var PFLICHT = ['eingang_id', 'xml', 'status'];
   var STATUS = { neu: 'neu', uebernommen: 'uebernommen', abgelehnt: 'abgelehnt' };
   var MAX_XML = 500000;   // wie beim Datei-Import im Browser
@@ -123,7 +124,9 @@ var Eingang = (function () {
     var d = dateiname(z);
     if (!z.eingang_id) return { datei: d, fehler: 'Zeile ohne eingang_id.' };
     var r = zerlege(z.xml);
-    return r.fehler ? { datei: d, fehler: r.fehler } : { datei: d, personen: r.personen };
+    if (r.fehler) return { datei: d, fehler: r.fehler };
+    var u = String(z.unterschrift_am || z.eingang_am || '').slice(0, 10);
+    return { datei: d, personen: r.personen, unterschrift_am: /^\d{4}-\d{2}-\d{2}$/.test(u) ? u : null };
   }
 
   /** Eintrag für den Browser: ohne XML und ohne Bankdaten – nur Eingang, Datei, Namen, Link. */

@@ -16,6 +16,8 @@
  *   - Bankdaten werden übernommen (Entscheidung Johann 10/2026). Eine ungültige IBAN wird NICHT übernommen:
  *     Zahlweg Überweisung + Warnung. Die IBAN verlässt den Server nie im Klartext (nur maskiert).
  *   - Eintritt in der Zukunft: geplant wird zum Eintrittsdatum (die Person gilt als aufgenommen) [A].
+ *   - Mandatsdatum: beim Online-Antrag das Unterschriftsdatum (antrag.unterschrift_am), sonst vorläufig der Eintritt
+ *     mit Warnung „bitte prüfen“.
  */
 var Beitritt = (function () {
   var MAX_ANTRAEGE = 50;
@@ -65,7 +67,9 @@ var Beitritt = (function () {
         });
         personen.push(o);
       }
-      aus.push({ datei: datei, personen: personen });
+      // Unterschriftsdatum (nur Online-Antrag aus dem Eingang): wird zum Mandatsdatum
+      var u = /^\d{4}-\d{2}-\d{2}$/.test(String(a.unterschrift_am || '')) ? String(a.unterschrift_am) : null;
+      aus.push(u ? { datei: datei, personen: personen, unterschrift_am: u } : { datei: datei, personen: personen });
     }
     return { antraege: aus };
   }
@@ -207,7 +211,9 @@ var Beitritt = (function () {
       konto.bemerkung = 'Beitritt aus XML: ' + antrag.datei;
       konto.geaendert_von = null;
       konto.mandatsreferenz = null;
-      if (konto.zahlweg === 'Lastschrift' && konto.iban) {
+      if (konto.zahlweg === 'Lastschrift' && konto.iban && antrag.unterschrift_am && antrag.unterschrift_am <= heute) {
+        konto.mandatsdatum = antrag.unterschrift_am;   // online unterschrieben (PDF im Eingang)
+      } else if (konto.zahlweg === 'Lastschrift' && konto.iban) {
         konto.mandatsdatum = konto.mandatsdatum || heute;
         warnungen.push('Mandatsdatum vorläufig = Eintritt (' + konto.mandatsdatum + ') – Datum der Unterschrift auf dem Formular prüfen.');
       } else konto.mandatsdatum = null;

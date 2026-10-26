@@ -321,7 +321,7 @@ var BeitrittModul = (function () {
     var fehlt = Eingang.fehlendeSpalten(werte[0] || []);
     if (fehlt.length) throw Fehler.fachlich('Eingangstabelle: Spalte(n) ' + fehlt.join(', ') + ' fehlen – bitte eingangEinrichten() ausführen.');
     var zeilen = Eingang.zeilen(werte);
-    zeilen.forEach(function (z) { z.eingang_am = zeitText(z.eingang_am); });
+    zeilen.forEach(function (z) { z.eingang_am = zeitText(z.eingang_am); z.unterschrift_am = zeitText(z.unterschrift_am); });
     return { kopf: werte[0].map(function (k) { return String(k).trim(); }), zeilen: zeilen };
   }
 
