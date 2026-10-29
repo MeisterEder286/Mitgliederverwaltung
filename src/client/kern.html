@@ -582,7 +582,7 @@
   App.csv = function (dateiname, spalten, zeilen) {
     var zelle = function (v) {
       var s = v === null || v === undefined ? '' : String(v);
-      if (/^[=+\-@]/.test(s)) s = "'" + s;   // Formel-Injektion in Excel verhindern
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;   // Formel-Injektion in Excel verhindern (auch Tab/CR am Anfang, OWASP)
       return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     var text = [spalten.map(function (s) { return zelle(s.titel); }).join(';')].concat(zeilen.map(function (z) {

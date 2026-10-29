@@ -120,7 +120,7 @@ var Pruefregeln = (function () {
       if (m.plz && (!m.land || m.land === 'DE') && !/^\d{5}$/.test(String(m.plz))) befund('plz_format', 'Mitglied', id, id, 'PLZ „' + m.plz + '“.');
       if (m.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(m.email)) befund('email_format', 'Mitglied', id, id, 'E-Mail „' + m.email + '“.');
       if (m.nachname && m.geburtsdatum) {
-        var key = (typeof Werte !== 'undefined' && Werte.falte ? Werte.falte(m.nachname) : String(m.nachname).toLowerCase().trim()) + '|' + m.geburtsdatum;
+        var key = (typeof Migration !== 'undefined' && Migration.falte ? Migration.falte(m.nachname) : String(m.nachname).toLowerCase().trim()) + '|' + m.geburtsdatum;
         (dubletten[key] = dubletten[key] || []).push(id);
       }
       if (m.sterbedatum && zs.some(function (z) { return !M.endeVon(z) || M.endeVon(z) > m.sterbedatum; })) {
@@ -256,7 +256,10 @@ var Pruefregeln = (function () {
         regeln.forEach(function (spalten) {
           var gesehen = {};
           liste(daten, tab).forEach(function (r) {
-            var werte = spalten.map(function (s) { return r[s] === null || r[s] === undefined ? '' : String(r[s]); });
+            var werte = spalten.map(function (s) {
+              if (r[s] === null || r[s] === undefined) return '';
+              return s === 'email' ? String(r[s]).trim().toLowerCase() : String(r[s]);   // wie DB/Rechteprüfung
+            });
             if (spalten.length === 1 && werte[0] === '') return;
             var key = werte.join('|');
             if (gesehen[key] !== undefined) {

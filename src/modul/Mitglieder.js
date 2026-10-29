@@ -40,8 +40,10 @@ var Mitglieder = (function () {
   function kopie(o) { var x = {}; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; }
   function name(m) { return m ? [m.nachname, m.vorname].filter(Boolean).join(', ') : ''; }
   function falte(s) {
-    return String(s || '').trim().toLowerCase()
-      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
+    // NFC zuerst: „ü“ kann zerlegt (u + Trema) ankommen und würde sonst nicht zu „ue“; übrige Akzente entfernen
+    return String(s || '').normalize('NFC').trim().toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
   function istDatum(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
 
@@ -317,19 +319,25 @@ var Mitglieder = (function () {
     return { waisen: w, laufend: laufend ? { zeitraum_id: laufend.zeitraum_id, eintrittsdatum: laufend.eintrittsdatum } : null, vorschlag_wirksam: d };
   }
 
-  /** Beendet laufende Zugehörigkeiten und Funktionen einer Person zum Datum (nie löschen, nur abschließen). */
+  /**
+   * Beendet laufende Zugehörigkeiten und Funktionen einer Person zum Datum (nie löschen, nur abschließen).
+   * Begann eine Zugehörigkeit oder Funktion erst NACH dem (rückwirkenden) Datum, endet sie an ihrem Beginn –
+   * sonst entstünde „Ende vor Beginn“ (Prüfregel datum_reihenfolge).
+   */
   function beendeLaufendes(ktx, id, datum, grund, aenderungen, protokoll) {
     (daten().Abteilungszugehoerigkeit || []).filter(function (a) {
       return a.mitglied_id === Number(id) && (!a.austrittsdatum || a.austrittsdatum > datum);
     }).forEach(function (a) {
-      var r = DB.aktualisieren('Abteilungszugehoerigkeit', a.zugehoerigkeit_id, { austrittsdatum: datum }, a.version || 0, ktx);
+      var ende = a.eintrittsdatum && a.eintrittsdatum > datum ? a.eintrittsdatum : datum;
+      var r = DB.aktualisieren('Abteilungszugehoerigkeit', a.zugehoerigkeit_id, { austrittsdatum: ende }, a.version || 0, ktx);
       aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: r.neu });
       protokoll.push({ aktion: 'beendet', tabelle: 'Abteilungszugehoerigkeit', datensatz_id: a.zugehoerigkeit_id, kommentar: grund });
     });
     (daten().Funktion || []).filter(function (f) {
       return f.mitglied_id === Number(id) && (!f.bis || f.bis > datum);
     }).forEach(function (f) {
-      var r = DB.aktualisieren('Funktion', f.funktion_id, { bis: datum, beendigungsgrund: f.beendigungsgrund || grund }, f.version || 0, ktx);
+      var ende = f.von && f.von > datum ? f.von : datum;
+      var r = DB.aktualisieren('Funktion', f.funktion_id, { bis: ende, beendigungsgrund: f.beendigungsgrund || grund }, f.version || 0, ktx);
       aenderungen.push({ tab: 'Funktion', neu: r.neu });
       protokoll.push({ aktion: 'beendet', tabelle: 'Funktion', datensatz_id: f.funktion_id, kommentar: grund });
     });
@@ -642,6 +650,17 @@ var Mitglieder = (function () {
       felder.funktionsart_id = Number(felder.funktionsart_id);
       felder.mitglied_id = mid;
       pruefeSchema('Funktion', felder);
+      // Gleiche Funktion (Art, Abteilung, Zusatz) läuft schon → keine zweite Zeile (z. B. Doppelklick); sonst
+      // entstünden doppelte Funktionsehrungen (Ehrung eindeutig je funktion_id). Prüfregel funktion_doppelt.
+      var zusatz = String(felder.zusatz || '').trim().toLowerCase();
+      var doppelt = (daten().Funktion || []).filter(function (x) {
+        return x.mitglied_id === mid && x.funktionsart_id === felder.funktionsart_id && (x.abteilung_id || null) === felder.abteilung_id &&
+          String(x.zusatz || '').trim().toLowerCase() === zusatz && (!x.bis || x.bis >= felder.von);
+      })[0];
+      if (doppelt) {
+        throw Fehler.fachlich('Diese Funktion ist für die Person bereits eingetragen (seit ' + doppelt.von + ').',
+          [{ feld: 'funktionsart_id', meldung: 'Läuft bereits – ggf. die bestehende Funktion beenden oder einen Zusatz (Mannschaft) angeben.' }]);
+      }
       var neu = DB.einfuegen('Funktion', felder, ktx);
       var a = antwort(ktx, [{ tab: 'Funktion', neu: neu }],
         [{ aktion: 'angelegt', tabelle: 'Funktion', datensatz_id: neu.funktion_id, kommentar: art.bezeichnung + (felder.zusatz ? ' ' + felder.zusatz : '') }]);

@@ -106,6 +106,20 @@ var Setup = (function () {
   }
 
   /**
+   * Weicht die Zeitzone der Tabelle von der des Skripts (appsscript.json) ab, verschieben sich Datumswerte beim
+   * Lesen über SpreadsheetApp und Zurückschreiben um einen Tag (src/lib/werte.js rechnet in Skript-Ortszeit).
+   * Setup ändert die Einstellung NICHT selbst (Eingriff in die Datei) – es meldet die Abweichung.
+   */
+  function zeitzoneHinweis_(ss) {
+    if (typeof ss.getSpreadsheetTimeZone !== 'function') return '';
+    var tabelle = ss.getSpreadsheetTimeZone(), skript = Session.getScriptTimeZone();
+    if (!tabelle || tabelle === skript) return '';
+    return '\n\nACHTUNG Zeitzone: Die Tabelle steht auf „' + tabelle + '“, das Skript auf „' + skript + '“. ' +
+      'Bitte in der Tabelle unter Datei → Einstellungen → Zeitzone „' + skript + '“ wählen – sonst können sich Datumswerte ' +
+      'beim Speichern um einen Tag verschieben.';
+  }
+
+  /**
    * Führt das Setup aus und gibt den Bericht zurück.
    * @param {{formateErneuern: boolean}=} optionen
    */
@@ -114,8 +128,9 @@ var Setup = (function () {
     var plan = SetupPlan.plane(bestand_(ss), optionen);
     plan.schritte.forEach(function (s) { fuehreAus_(ss, s); });
     SpreadsheetApp.flush();
-    console.log(plan.bericht);
-    return plan.bericht;
+    var bericht = plan.bericht + zeitzoneHinweis_(ss);
+    console.log(bericht);
+    return bericht;
   }
 
   return { ausfuehren: ausfuehren };

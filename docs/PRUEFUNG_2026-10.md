@@ -15,6 +15,7 @@ ausdrücklich **nicht** produktive Sheets oder Echtdaten. Die beiden `.xlsx` unt
 | vorher | ok | 293/293 | 51/51 |
 | nach Abschnitt 5 | ok | 304/304 | 51/51 |
 | nach Abschnitt 7 | ok | 312/312 | 51/51 |
+| nach den übrigen 🔵-Punkten | ok | 323/323 | 51/51 |
 
 ## 1. Kurzurteil
 
@@ -66,7 +67,7 @@ Zeilenangaben beziehen sich auf den Stand **nach** dieser Prüfung.
 | M7 | **Wiedereintritt in eine Abteilung überschreibt die Historie.** Die Eindeutigkeit (Mitglied, Abteilung) zwingt dazu, die alte Zeile wieder zu öffnen. | `src/modul/Mitglieder.js:473`, `docs/daten/tabellen.csv` | 🟡 Struktur (Abschnitt 4) |
 | M8 | **Beitragsart, Konto und Gemeinschaft hängen ohne Gültigkeit am Mitglied.** Die Historie wird nur aus `_Protokoll` rekonstruiert, und dort leert die Wartung `alt_wert`/`neu_wert` nach Frist. | `docs/daten/feldkatalog.csv` (Mitglied), `src/modul/Familie.js` (Bezahlhistorie) | 🟡 Struktur |
 | M9 | **Zählweise „gesamt“: der letzte Tag beendeter Zeiträume fehlt.** Der Zeitraum 2000-01-01 bis 2009-12-31 ergibt 9 statt 10 Jahre. Der Test schreibt dieses Verhalten fest. | `src/lib/mitgliedschaft.js:110`, `test/mitgliedschaft.test.js` | 🟡 ändert Ehrungsergebnisse (nur Modus „gesamt“) |
-| M10 | **Aufnahmeanträge fehlen im Löschkonzept.** Sie werden weder in Auskunft und Anonymisierung erfasst, noch nach der Frist „abgelehnt + 6 Monate“ gelöscht. Die Auskunft enthält außerdem keine Anschreiben, Dokumente oder Protokolleinträge. | `src/modul/Datenschutz.js` (`BASIS_TABS`), `src/lib/loeschung.js` (`auskunft`), `src/lib/startbelegung.js` | 🔵/🟡 |
+| M10 | **Aufnahmeanträge fehlen im Löschkonzept.** Sie werden weder in Auskunft und Anonymisierung erfasst, noch nach der Frist „abgelehnt + 6 Monate“ gelöscht. Die Auskunft enthält außerdem keine Anschreiben, Dokumente oder Protokolleinträge. | `src/modul/Datenschutz.js` (`BASIS_TABS`), `src/lib/loeschung.js` (`auskunft`), `src/lib/startbelegung.js` | ✅ Auskunft und Anonymisierung (archivierte Anträge der Person, nicht fremde Dubletten-Hinweise). 🟡 offen: Löschfrist für abgelehnte Anträge (E12) und die getrennte Datei offener Anträge |
 | M11 | **Berichte zeigen gesperrte und anonymisierte Personen.** `bewegungen` filtert Art. 18 nicht, `geburtstage` und `jubilaeen` tun es. | `src/modul/Berichte.js` (`bewegungen`, BLSV-Prüfliste, Nachmeldung) | ✅ ohne Namen, Nummer und ID für Rollen ohne `verwaltung`; Zählung bleibt |
 | M12 | **Nachweise ändern oder löschen ohne Sichtprüfung.** Ein Abteilungsleiter kann einen Vermerk ändern, den der Snapshot ihm nicht zeigt; geprüft wird nur, ob die Person sichtbar ist. | `src/modul/Nachweise.js` (`aendern`, `loeschen`) | ✅ `Snapshot.pruefeZeile` mit der Snapshot-Regel |
 | M13 | **Cache nach dem Schreiben aus Sheets-API neu gebaut.** `flush()` kommt erst beim Freigeben der Sperre, der Neubau sieht die Änderung womöglich nicht. | `src/Datenzugriff.js` (`leseVomSheet`) | ✅ `flush()` vor jedem Lesen über die Sheets-API in der Sperre; die Wirkung im Echtsystem ist noch nicht geprüft (die Fakes bilden den Puffer der Sheets-API nicht ab) |
@@ -82,18 +83,18 @@ Zeilenangaben beziehen sich auf den Stand **nach** dieser Prüfung.
 | Befund | Beleg | Stand |
 |---|---|---|
 | `neueId` übernimmt den Zähler ohne Abgleich mit dem Bestand. Bei von Hand eingefügten Zeilen entstehen doppelte IDs. | `src/Datenzugriff.js` (`neueId`, `hoechsteId`) | ✅ |
-| Austritt rückwirkend vor dem Eintritt in eine Sparte bzw. vor Beginn einer Funktion ergibt `bis < von`. | `src/modul/Mitglieder.js` (`beendeLaufendes`) | 🔵 |
+| Austritt rückwirkend vor dem Eintritt in eine Sparte bzw. vor Beginn einer Funktion ergibt `bis < von`. | `src/modul/Mitglieder.js` (`beendeLaufendes`) | ✅ Ende = Beginn |
 | Prüfregeln fehlen für überlappende oder mehrere offene Zeiträume, Austritt vor Eintritt, `bis < von` und mehrere Fremdschlüssel. | `src/lib/pruefregeln.js` | ✅ `zeitraum_ueberlappung`, `datum_reihenfolge`, `funktion_doppelt`, Verweise in Zeitraum, Sollstellung, Konto, Benutzer und Notiz. Noch offen: Zugehörigkeit außerhalb eines Mitgliedschaftszeitraums |
-| Fehler beim Schreiben in den Cache wird verschluckt, der alte Stand bleibt bis zu 6 h gültig. | `src/Cache.js:57` | 🔵 |
-| `funktionEintragen` prüft keine Duplikate (Doppelklick ergibt doppelte Ehrung je `funktion_id`). | `src/modul/Mitglieder.js` | 🔵 |
-| E-Mail-Eindeutigkeit im Tab Benutzer unterscheidet Groß- und Kleinschreibung. | `src/Datenzugriff.js` (`pruefeEindeutig`) | 🔵 |
-| Dublettenprüfung: NFD-Eingaben („Müller“ zerlegt) ergeben `muller` statt `mueller`. | `src/lib/migration.js` (`falte`) | 🔵 |
-| Migration liest `1985` als Seriennummer (→ 1905). | `src/lib/migration.js` (`datum`) | 🔵 |
-| CSV-Formelschutz ohne `\t`/`\r` am Zellanfang. | `src/client/kern.html:585`, `src/lib/blsv.js` | 🔵 |
-| Konto-Notizen werden nie gelöscht. | `src/modul/Notizen.js` | 🔵 |
+| Fehler beim Schreiben in den Cache wird verschluckt, der alte Stand bleibt bis zu 6 h gültig. | `src/Cache.js` | ✅ alter Stand wird verworfen |
+| `funktionEintragen` prüft keine Duplikate (Doppelklick ergibt doppelte Ehrung je `funktion_id`). | `src/modul/Mitglieder.js` | ✅ gleiche laufende Funktion (Art, Abteilung, Zusatz) wird abgelehnt |
+| E-Mail-Eindeutigkeit im Tab Benutzer unterscheidet Groß- und Kleinschreibung. | `src/Datenzugriff.js` (`schluesselWert`), `src/lib/pruefregeln.js` | ✅ |
+| Dublettenprüfung: NFD-Eingaben („Müller“ zerlegt) ergeben `muller` statt `mueller`. | `src/lib/migration.js`, `src/modul/Mitglieder.js` (`falte`); Prüfregel `dublette` nutzt jetzt dieselbe Faltung | ✅ |
+| Migration liest `1985` als Seriennummer (→ 1905). | `src/lib/migration.js` (`datum`) | ✅ Fehler „nur Jahreszahl“ |
+| CSV-Formelschutz ohne `\t`/`\r` am Zellanfang. | `src/client/kern.html` (`App.csv`), `src/lib/blsv.js` | ✅ |
+| Konto-Notizen werden nie gelöscht. | `src/modul/Notizen.js`, `src/modul/Datenschutz.js` (`kontoLeeren`) | ✅ beim Konto-Leeren entfernt; erledigte zu geleerten oder fehlenden Konten in der Fristbereinigung |
 | Rundung `runde(1.005) = 1` (Gleitkomma). Für ganze und halbe Euro unkritisch, die XML rechnet in Cent. | `src/lib/beitrag.js` | – |
-| `tagImJahr('29.02.', 2026)` ergibt ein ungültiges Datum (nur bei falscher Konfiguration). | `src/lib/beitrag.js` | 🔵 |
-| Datumsfelder verschieben sich, wenn die Tabellen-Zeitzone von der Skript-Zeitzone abweicht. | `src/lib/werte.js`, `src/Setup.js` | 🔵 Setup-Prüfung |
+| `tagImJahr('29.02.', 2026)` ergibt ein ungültiges Datum (nur bei falscher Konfiguration). | `src/lib/beitrag.js` | ✅ am Monatsende gekappt |
+| Datumsfelder verschieben sich, wenn die Tabellen-Zeitzone von der Skript-Zeitzone abweicht. | `src/lib/werte.js`, `src/Setup.js` | ✅ Setup meldet die Abweichung (ändert die Datei nicht), `docs/BETRIEB.md` |
 | ✅ Datenschutz-Felder ließen sich per Anlegen setzen | `src/modul/Mitglieder.js` (`anlegen`) | ✅ |
 | ✅ Storno-Grund wurde bei langer Bemerkung abgeschnitten | `src/lib/sollstellung.js` | ✅ |
 | ✅ Dokument-Link ohne `https`-Prüfung im Browser | `src/client/ansicht_korrespondenz.html` | ✅ |
@@ -260,6 +261,26 @@ Gegenprobe: Alle 11 Regressionstests schlagen auf dem Stand vor der Änderung fe
 
 Gegenprobe: Die 8 neuen Regressionstests schlagen auf dem Stand vorher fehl.
 
+### Nachtrag: übrige 🔵-Punkte aus Abschnitt 2
+
+Je ein Regressionstest in `test/regression.test.js` (11 Tests). Alle schlagen auf dem Stand vorher fehl.
+
+| Änderung | Datei |
+|---|---|
+| Austritt: Ende einer Sparte oder Funktion nie vor ihrem Beginn | `src/modul/Mitglieder.js` |
+| Cache: fehlgeschlagenes Speichern verwirft den alten Stand | `src/Cache.js` |
+| Funktion: gleiche laufende Funktion nicht doppelt | `src/modul/Mitglieder.js` |
+| E-Mail-Eindeutigkeit ohne Groß-/Kleinschreibung (DB und Prüfregel) | `src/Datenzugriff.js`, `src/lib/pruefregeln.js` |
+| Faltung mit NFC und ohne Akzente; Prüfregel `dublette` mit derselben Faltung | `src/lib/migration.js`, `src/modul/Mitglieder.js`, `src/lib/pruefregeln.js` |
+| Migration: vierstellige Jahreszahl ist kein Datum | `src/lib/migration.js` |
+| CSV-Formelschutz für Tab und CR | `src/client/kern.html`, `src/lib/blsv.js` |
+| Notizen nur am Konto: Löschung beim Konto-Leeren und in der Fristbereinigung | `src/modul/Datenschutz.js`, `src/modul/Notizen.js` |
+| Setup: Hinweis bei abweichender Zeitzone | `src/Setup.js`, `docs/BETRIEB.md`, Fake `getSpreadsheetTimeZone` in `test/hilfe/gas-fakes.js` |
+| `tagImJahr` kappt am Monatsende | `src/lib/beitrag.js` |
+| Aufnahmeanträge (Archiv) in Auskunft und Anonymisierung (M10, Teil ohne neue Fachfunktion) | `src/lib/loeschung.js`, `src/modul/Datenschutz.js` |
+
+Nicht geändert, weil es Sheet-Daten verändern würde: Der Formelschutz beim Schreiben ins Sheet (`Werte.zelleSchreiben`, `Protokoll`) bleibt bei `= + - @`. Google Sheets wertet Tab und CR am Anfang nicht als Formel.
+
 ## 6. Offene Entscheidungen
 
 | # | Frage | Optionen | betrifft |
@@ -275,7 +296,7 @@ Gegenprobe: Die 8 neuen Regressionstests schlagen auf dem Stand vorher fehl.
 | E9 | Status für einen Eintritt in der Zukunft | neuer Status „künftig“ oder als aktiv behandeln | M1 |
 | E10 | Zählweise „gesamt“: Austrittstag mitzählen | korrigieren (ändert Ehrungsergebnisse) | M9 |
 | E11 | Halbjahresbeitrag bei Austritt bis 30.06. | `_Konfig.csv` nennt ihn „beschlossen“, `ENTSCHEIDUNGEN.md` VBA3 nur den Eintritt ab 01.07. Bestätigen und Entscheidungslog angleichen; außerdem klären, ob `austrittsdatum` der letzte Mitgliedstag ist | Beitrag |
-| E12 | Aufnahmeanträge: Löschung abgelehnter Anträge (Frist 9), Teil der Auskunft | neue Wartungsfunktion | M10 |
+| E12 | Aufnahmeanträge: Löschung abgelehnter Anträge (Frist 9) und Umgang mit der getrennten Datei offener Anträge (Auskunft und Anonymisierung des Archivs erledigt) | neue Wartungsfunktion | M10 |
 | E13 | Beitritt: Dublettenwahl bei mehreren Treffern, Kriterium bei fehlendem Geburtsdatum, neue Stammdaten beim Wiedereintritt übernehmen? | – | M14 |
 | E14 | Zeitachse für Beitrag, Konto und Gemeinschaft (`Beitragszuordnung`) und Historie der Abteilungen | Strukturänderung, Migration | M7, M8 |
 
@@ -283,7 +304,7 @@ Gegenprobe: Die 8 neuen Regressionstests schlagen auf dem Stand vorher fehl.
 
 1. ~~**Ohne Freigabe möglich, kleine Korrekturen**~~ – **erledigt** (siehe Nachtrag in Abschnitt 5). Noch zu tun:
    - im Testsystem prüfen, ob nach einem Einfügen der Cache-Neubau den neuen Stand sieht (`flush()`)
-   - weitere 🔵-Punkte aus Abschnitt 2 (Austritt vor Spartenbeginn, Cache-Fehler beim Speichern, Duplikatprüfung beim Eintragen von Funktionen, E-Mail-Eindeutigkeit, NFD bei der Dublettenprüfung, Jahreszahl als Seriennummer, CSV-Formelschutz `\t`/`\r`, Konto-Notizen, Zeitzonen-Prüfung im Setup)
+   - ~~weitere 🔵-Punkte aus Abschnitt 2~~ – erledigt (siehe Nachtrag in Abschnitt 5). Damit sind alle 🔵-Punkte erledigt. Die Löschung abgelehnter Anträge ist eine neue Fachfunktion (E12) und wartet auf deine Entscheidung
 2. **Mit Verein und Hausbank klären:** E1–E6, E9–E11.
 3. **Datenmodell in Stufen umbauen** (je eine Migration mit Prüfbericht, zuerst gegen synthetische Daten):
    - (a) `Zahlung` und abgeleiteter Saldo

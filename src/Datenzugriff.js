@@ -152,7 +152,7 @@ var DB = (function () {
           var a = z[f], b = obj[f];
           var aLeer = a === null || a === undefined || a === '';
           var bLeer = b === null || b === undefined || b === '';
-          return (aLeer && bLeer) || String(a) === String(b);
+          return (aLeer && bLeer) || schluesselWert(f, a) === schluesselWert(f, b);
         });
       });
       if (doppelt) {
@@ -163,6 +163,14 @@ var DB = (function () {
   }
 
   function istLeer(v) { return v === null || v === undefined || v === ''; }
+
+  /**
+   * Vergleichswert für Eindeutigkeiten: E-Mail-Adressen ohne Groß-/Kleinschreibung und Randleerzeichen – so wie die
+   * Rechteprüfung sie vergleicht (Rechte.kontext); sonst gälten „A@x.de“ und „a@x.de“ als zwei Zugänge.
+   */
+  function schluesselWert(feld, v) {
+    return feld === 'email' ? String(v).trim().toLowerCase() : String(v);
+  }
 
   function fachlichAusPruefung(fehler) {
     // Feldliste mitgeben: der Browser zeigt die Meldungen direkt am jeweiligen Eingabefeld (App.formular).
@@ -393,7 +401,7 @@ var DB = (function () {
 
   /** Schlüssel einer Eindeutigkeitsgruppe; null, wenn alle Felder leer sind (dann keine Prüfung). */
   function gruppenSchluessel(gruppe, z) {
-    var w = gruppe.map(function (f) { return istLeer(z[f]) ? '' : String(z[f]); });
+    var w = gruppe.map(function (f) { return istLeer(z[f]) ? '' : schluesselWert(f, z[f]); });
     return w.every(function (x) { return x === ''; }) ? null : w.join('\u0001');
   }
 

@@ -35,6 +35,19 @@ var Loeschung = (function () {
   function zeitraeume(daten, id) { return Mitgliedschaft.zeitraeumeVon(id, liste(daten, 'Mitgliedschaftszeitraum')); }
 
   /** Konten, die die Person betreffen: eigenes Beitragskonto und Konten, deren Inhaber sie ist. */
+  /**
+   * Archivierte Aufnahmeanträge einer Person: übernommen (mitglied_id) oder über den Mitgliedschaftszeitraum verknüpft.
+   * Nicht: Anträge, die nur als mögliche Dublette auf die Person zeigen (dublette_mitglied_id) – das sind die Daten
+   * einer ANDEREN Person.
+   */
+  function antraegeVon(mitgliedId, daten) {
+    var ueberZeitraum = {};
+    liste(daten, 'Mitgliedschaftszeitraum').forEach(function (z) {
+      if (z.mitglied_id === mitgliedId && z.aufnahmeantrag_id) ueberZeitraum[z.aufnahmeantrag_id] = true;
+    });
+    return liste(daten, 'Aufnahmeantrag').filter(function (a) { return a.mitglied_id === mitgliedId || ueberZeitraum[a.antrag_id]; });
+  }
+
   function kontenVon(mitglied, daten) {
     return liste(daten, 'Beitragskonto').filter(function (k) {
       return k.beitragskonto_id === mitglied.beitragskonto_id || k.kontoinhaber_mitglied_id === mitglied.mitglied_id;
@@ -205,6 +218,9 @@ var Loeschung = (function () {
     liste(daten, 'Qualifikation').forEach(function (q) { if (q.mitglied_id === id) entferne('Qualifikation', q.qualifikation_id); });
     // Interne Notizen zur Person: vollständig entfernen (Freitext, kein Nachweiszweck)
     liste(daten, 'Notiz').forEach(function (n) { if (n.mitglied_id === id) entferne('Notiz', n.notiz_id); });
+    // Archivierte Aufnahmeanträge: vollständiger Personenbezug (Anschrift, Geburtsdatum, Kontakt), Nachweiszweck
+    // entfällt mit den entfernten Zeiträumen → entfernen (vor den Zeiträumen ermittelt, die auf sie verweisen)
+    antraegeVon(id, daten).forEach(function (a) { entferne('Aufnahmeantrag', a.antrag_id); });
     // Anschreiben: Datum/Anlass bleiben als Nachweis, Inhalt und Anschrift werden geleert
     liste(daten, 'Anschreiben').forEach(function (a) {
       if (a.mitglied_id === id) aendere('Anschreiben', a.anschreiben_id, { inhalt: null, empfaenger: null, email_an: null, betreff: 'Schreiben (anonymisiert)', dokument_link: null, bemerkung: null });
@@ -337,6 +353,7 @@ var Loeschung = (function () {
       { titel: 'Ehrungen', eintraege: von('Ehrung').map(function (r) { return lesbar('Ehrung', r, aufloesen); }) },
       { titel: 'Einwilligungen', eintraege: von('Einwilligung').map(function (r) { return lesbar('Einwilligung', r, aufloesen); }) },
       { titel: 'Interne Notizen', eintraege: von('Notiz').map(function (r) { return lesbar('Notiz', r, aufloesen); }) },
+      { titel: 'Aufnahmeanträge', eintraege: antraegeVon(mitgliedId, daten).map(function (r) { return lesbar('Aufnahmeantrag', r, aufloesen); }) },
       { titel: 'Anfragen nach DSGVO', eintraege: von('Betroffenenanfrage').map(function (r) { return lesbar('Betroffenenanfrage', r, aufloesen); }) }
     ];
     return { abschnitte: abschnitte.filter(function (a) { return a.eintraege.length; }) };

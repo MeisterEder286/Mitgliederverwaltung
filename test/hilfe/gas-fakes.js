@@ -168,6 +168,7 @@ function erzeugeFakes(opt) {
     getName() { return 'Mitgliederverwaltung (Test)'; },
     getSheetByName(n) { zaehle('getSheetByName'); return tabs[n] ? blatt(n) : null; },
     getSheets() { zaehle('getSheets'); return Object.keys(tabs).map(blatt); },
+    getSpreadsheetTimeZone() { return opt.tabellenZeitzone || zeitzone; },
     insertSheet(n) {
       zaehle('insertSheet');
       if (tabs[n]) throw new Error('Fake: Tab existiert bereits: ' + n);

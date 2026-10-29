@@ -56,6 +56,8 @@ var Cache = (function () {
       return n;
     } catch (e) {
       console.warn('Cache.speichere(' + schluessel + ') fehlgeschlagen: ' + (e && e.message));
+      // Den bisherigen Stand nicht weiter ausliefern – sonst sähen alle Leser bis zu 6 h die Fassung VOR der Änderung
+      verwerfe(schluessel);
       return 0;
     }
   }

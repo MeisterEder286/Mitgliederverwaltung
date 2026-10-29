@@ -372,3 +372,149 @@ test('Lesen über die Sheets-API innerhalb der Sperre: vorher SpreadsheetApp.flu
   const i = folge.lastIndexOf('batchGet');
   assert.ok(i > 0 && folge[i - 1] === 'flush', folge.join(' → '));
 });
+
+// ================================================================== Weitere 🔵-Punkte des Prüfberichts
+
+function zeile(tabs, tab, werte) {
+  const k = tabs[tab][0];
+  tabs[tab].push(k.map(h => (h in werte ? werte[h] : '')));
+}
+
+test('Austritt rückwirkend vor Spartenbeginn: Zugehörigkeit endet an ihrem Beginn, nie davor', () => {
+  let ziel = null;
+  const u = mitTabs(MV, (tabs, obj) => {
+    // Person ohne Konto (kein Konto-Guard), laufende Mitgliedschaft; Sparte beginnt später als der Austritt
+    const zr = obj('Mitgliedschaftszeitraum');
+    const m = obj('Mitglied').find(x => x.status === 'aktiv' && !x.sterbedatum && !obj('Beitragskonto').some(k => k.kontoinhaber_mitglied_id === x.mitglied_id) &&
+      zr.some(z => z.mitglied_id === x.mitglied_id && !z.austrittsdatum && !z.austritt_wirksam && z.eintrittsdatum < '2025-01-01'));
+    ziel = m.mitglied_id;
+    zeile(tabs, 'Abteilungszugehoerigkeit', { zugehoerigkeit_id: 99501, mitglied_id: ziel, abteilung_id: 4, status: 'aktiv', eintrittsdatum: '2026-06-01', version: 1 });
+  });
+  ok(u.g.apiMitgliedAustritt(ziel, { austritt_wirksam: '2026-03-31', austrittsgrund: 'Umzug' }));
+  const z = u.obj('Abteilungszugehoerigkeit').find(x => x.zugehoerigkeit_id === 99501);
+  assert.strictEqual(z.austrittsdatum, '2026-06-01');
+  assert.ok(!u.obj('Abteilungszugehoerigkeit').some(x => x.mitglied_id === ziel && x.austrittsdatum && x.eintrittsdatum && x.austrittsdatum < x.eintrittsdatum));
+});
+
+test('Cache: schlägt das Speichern fehl, wird der alte Stand verworfen statt weiter ausgeliefert', () => {
+  const f = erzeugeFakes({ tabs: {} });
+  const g = ladeProjekt(f.globale);
+  g.Cache.speichere('t', { stand: 'alt' }, 600);
+  assert.deepStrictEqual(rein(g.Cache.lade('t')), { stand: 'alt' });
+  const original = f.globale.CacheService.getScriptCache;
+  f.globale.CacheService.getScriptCache = () => Object.assign({}, original(), {
+    putAll: () => { throw new Error('Kontingent erschöpft'); },
+    remove: k => original().remove(k)
+  });
+  assert.strictEqual(g.Cache.speichere('t', { stand: 'neu' }, 600), 0);
+  f.globale.CacheService.getScriptCache = original;
+  assert.strictEqual(g.Cache.lade('t'), null, 'kein veralteter Stand');
+});
+
+test('Funktion eintragen: dieselbe laufende Funktion ein zweites Mal wird abgelehnt (Doppelklick)', () => {
+  const u = als(MV);
+  const art = u.obj('Funktionsart').find(a => a.ebene === 'Abteilung' && a.aktiv !== false);
+  const m = u.obj('Mitglied').find(x => x.status === 'aktiv' && !x.sterbedatum);
+  const werte = { mitglied_id: m.mitglied_id, funktionsart_id: art.funktionsart_id, abteilung_id: 2, zusatz: 'E-Jugend', von: '2026-09-01' };
+  ok(u.g.apiFunktionEintragen(werte));
+  const f = fehler(u.g.apiFunktionEintragen(Object.assign({}, werte, { zusatz: ' e-jugend ' })));
+  assert.match(f.meldung, /bereits eingetragen/);
+  ok(u.g.apiFunktionEintragen(Object.assign({}, werte, { zusatz: 'D-Jugend' })));   // andere Mannschaft geht
+  assert.strictEqual(u.obj('Funktion').filter(x => x.mitglied_id === m.mitglied_id && x.funktionsart_id === art.funktionsart_id && x.von === '2026-09-01').length, 2);
+});
+
+test('Benutzer: gleiche E-Mail in anderer Schreibweise gilt als derselbe Zugang (Eindeutigkeit)', () => {
+  const u = als(MV);
+  const b = u.obj('Benutzer').find(x => x.rolle === 'Kassier');
+  assert.throws(() => u.g.DB.mitSperre(() => u.g.DB.einfuegen('Benutzer',
+    { email: ' ' + b.email.toUpperCase(), rolle: 'Kassier', name: 'Doppelt', aktiv: true }, { email: MV })), e => e.art === 'fachlich');
+  assert.throws(() => u.g.DB.mitSperre(() => u.g.DB.einfuegenViele('Benutzer',
+    [{ email: b.email.toUpperCase(), rolle: 'Kassier', name: 'Doppelt', aktiv: true }], { email: MV })), e => e.art === 'fachlich');
+  const { g } = ladeFachdaten();
+  const befunde = rein(g.Pruefregeln.pruefe({ Benutzer: [
+    { benutzer_id: 1, email: 'a@x.de', rolle: 'Kassier', abteilung_id: null }, { benutzer_id: 2, email: 'A@X.de', rolle: 'Kassier', abteilung_id: null }] }, '2026-10-25', {}));
+  assert.ok(befunde.some(x => x.regel === 'eindeutigkeit' && x.tab === 'Benutzer'));
+});
+
+test('Dublettenprüfung: zerlegte Umlaute (NFD) und Akzente werden wie die zusammengesetzte Schreibweise gefaltet', () => {
+  const { g } = ladeFachdaten();
+  assert.strictEqual(g.Migration.falte('Müller'), g.Migration.falte('Müller'));
+  assert.strictEqual(g.Migration.falte('Müller'), 'mueller');
+  assert.strictEqual(g.Migration.falte('René'), g.Migration.falte('Rene'));
+  // Mitglieder: Dubletten-Suche beim Anlegen
+  const u = als(MV);
+  const m = u.obj('Mitglied').find(x => /[äöü]/.test(x.nachname || '') && x.geburtsdatum && !x.anonymisiert);
+  assert.ok(m, 'Testdaten: kein Nachname mit Umlaut');
+  const d = ok(u.g.apiMitgliedDublettenPruefen(m.nachname.normalize('NFD'), m.geburtsdatum));
+  assert.ok(d.some(x => x.mitglied_id === m.mitglied_id));
+});
+
+test('Migration: Jahreszahl „1985“ wird nicht als Seriennummer (1905) gelesen', () => {
+  const { g } = ladeFachdaten();
+  const r = rein(g.Migration.datum('1985'));
+  assert.strictEqual(r.wert, null);
+  assert.match(r.fehler, /Jahreszahl/);
+  assert.strictEqual(rein(g.Migration.datum('29221')).wert, '1980-01-01', 'echte Seriennummer bleibt lesbar');
+  assert.strictEqual(rein(g.Migration.datum('14.03.1985')).wert, '1985-03-14');
+});
+
+test('CSV-Formelschutz: auch Tab und Wagenrücklauf am Zellanfang', () => {
+  const { g } = ladeFachdaten();
+  const csv = g.Blsv.csv({ sportarten: [{ sportart: '\t=1+1' }, { sportart: '\r=2' }], verein: {} });
+  assert.ok(csv.includes("'\t=1+1"), 'Tab geschützt');
+  assert.ok(csv.includes("\"'\r=2\""), 'CR geschützt und gequotet');
+});
+
+test('Notizen nur am Konto: beim Konto-Leeren entfernt; erledigte zu geleerten Konten in der Fristbereinigung', () => {
+  const u = mitTabs(MV, (tabs) => {
+    const id = 99601;
+    zeile(tabs, 'Beitragskonto', { beitragskonto_id: id, kontoinhaber_name: 'Alt, Zahler', zahlweg: 'Lastschrift', iban: 'DE89370400440532013000',
+      mandatsreferenz: 'TSV-ALT-1', mandatsdatum: '2015-01-10', aktiv: 'ja', version: 1 });
+    zeile(tabs, 'Beitragskonto', { beitragskonto_id: id + 1, kontoinhaber_name: 'Geleert', zahlweg: 'Lastschrift', aktiv: 'nein', version: 1 });
+    zeile(tabs, 'Notiz', { notiz_id: 99701, beitragskonto_id: id, art: 'Notiz', text: 'Zahler bittet um …', sichtbar_fuer: 'Finanzen', version: 1 });
+    zeile(tabs, 'Notiz', { notiz_id: 99702, beitragskonto_id: id + 1, art: 'Notiz', text: 'erledigt', sichtbar_fuer: 'Finanzen', erledigt_am: '2020-01-01', version: 1 });
+    zeile(tabs, 'Notiz', { notiz_id: 99703, beitragskonto_id: id + 1, art: 'Notiz', text: 'offen', sichtbar_fuer: 'Finanzen', version: 1 });
+  });
+  ok(u.g.apiDatenschutzKontoLeeren(99601, 1));
+  const ids = () => u.obj('Notiz').map(n => n.notiz_id);
+  assert.ok(!ids().includes(99701), 'Notiz zum geleerten Konto entfernt');
+  rein(u.g.Notizen.fristBereinigung('2026-10-25'));
+  assert.ok(!ids().includes(99702), 'erledigte Notiz zum geleerten Konto entfernt');
+  assert.ok(ids().includes(99703), 'offene Notiz bleibt');
+});
+
+test('Setup meldet abweichende Zeitzone der Tabelle (ändert sie nicht)', () => {
+  const eigen = 'verwaltung@tsv-ergoldsbach.de';
+  const f = erzeugeFakes({ tabs: {}, email: eigen, eigentuemer: eigen, tabellenZeitzone: 'Etc/UTC' });
+  const bericht = String(ladeProjekt(f.globale).setup());
+  assert.match(bericht, /ACHTUNG Zeitzone.*Etc\/UTC.*Europe\/Berlin/s);
+  const f2 = erzeugeFakes({ tabs: {}, email: eigen, eigentuemer: eigen });
+  assert.doesNotMatch(String(ladeProjekt(f2.globale).setup()), /ACHTUNG Zeitzone/);
+});
+
+test('tagImJahr: Tag wird am Monatsende gekappt (kein 29.02. in Nicht-Schaltjahren)', () => {
+  const { g } = beitragsdaten();
+  assert.strictEqual(g.Beitrag.tagImJahr('29.02.', 2026), '2026-02-28');
+  assert.strictEqual(g.Beitrag.tagImJahr('29.02.', 2028), '2028-02-29');
+  assert.strictEqual(g.Beitrag.tagImJahr('31.04.', 2027), '2027-04-30');
+  assert.strictEqual(g.Beitrag.tagImJahr('15.02.', 2027), '2027-02-15');
+  assert.strictEqual(g.Beitrag.tagImJahr('15.13.', 2027), '2027-01-01', 'ungültiger Monat → Jahresanfang wie bisher bei Unlesbarem');
+});
+
+test('Aufnahmeanträge: Teil der Auskunft und bei der Anonymisierung entfernt – fremde Dubletten-Hinweise bleiben', () => {
+  const { g, daten, konfig } = ladeFachdaten();
+  const d = kopie(daten);
+  d.Mitgliedschaftszeitraum.push({ zeitraum_id: 9801, mitglied_id: 14, eintrittsdatum: '1999-01-01', austrittsdatum: '2010-12-31', aufnahmeantrag_id: 502 });
+  d.Aufnahmeantrag = [
+    { antrag_id: 501, mitglied_id: 14, vorname: 'Probe', nachname: 'Antrag', status: 'übernommen' },
+    { antrag_id: 502, mitglied_id: null, vorname: 'Früher', nachname: 'Antrag', status: 'übernommen' },
+    { antrag_id: 503, mitglied_id: null, dublette_mitglied_id: 14, vorname: 'Andere', nachname: 'Person', status: 'abgelehnt' }
+  ];
+  const m = d.Mitglied.find(x => x.mitglied_id === 14);
+  const plan = kopie(g.Loeschung.anonymisierePlan(m, d, konfig || {}));
+  assert.deepStrictEqual((plan.entfernen.Aufnahmeantrag || []).sort(), [501, 502]);
+  const a = kopie(g.Loeschung.auskunft(14, d));
+  const abschnitt = a.abschnitte.find(x => x.titel === 'Aufnahmeanträge');
+  assert.ok(abschnitt, 'Abschnitt Aufnahmeanträge');
+  assert.strictEqual(abschnitt.eintraege.length, 2);
+});

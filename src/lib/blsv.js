@@ -193,7 +193,7 @@ var Blsv = (function () {
   function nachmeldungCsv(n) {
     function feld(v) {
       var t = String(v === null || v === undefined ? '' : v);
-      if (/^[=+\-@]/.test(t)) t = "'" + t;
+      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;   // auch Tab/CR am Anfang (OWASP)
       return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
     }
     var kopf = ['Sportart', 'Neumitglieder', 'neue Sportart', 'gesamt', 'männlich', 'weiblich', 'divers', 'bis 14', '15–18', '19–26', 'ab 27'];
@@ -287,7 +287,7 @@ var Blsv = (function () {
     // Feld-Escaping + Formelschutz (Befund N5): Abteilungsnamen stammen aus den Stammdaten.
     function feld(v) {
       var t = String(v === null || v === undefined ? '' : v);
-      if (/^[=+\-@]/.test(t)) t = "'" + t;
+      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;   // auch Tab/CR am Anfang (OWASP)
       return /[";\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
     }
     function z(name, x) {
