@@ -53,7 +53,7 @@
     ];
   }
   function mitgliedLink(id, text) {
-    if (!A.ansichten.mitglied) return A.el('span', text);
+    if (!A.ansichten.mitglied || !id) return A.el('span', text);   // ohne ID: gesperrter Datensatz, kein Link
     var b = A.el('button', text, { type: 'button', className: 'sortierknopf' });
     b.style.textDecoration = 'underline';
     b.addEventListener('click', function () { A.zeige('mitglied', { id: id }); });
@@ -143,7 +143,7 @@
     ziel.appendChild(A.el('h2', 'Prüfliste vor dem Export'));
     if (!b.pruefliste.length) { ziel.appendChild(A.el('p', 'Keine fehlenden Angaben.', { className: 'leise' })); return; }
     ziel.appendChild(A.tabelle([
-      { feld: 'name', titel: 'Mitglied / Abteilung', wert: function (p) { return p.mitglied_id ? mitgliedLink(p.mitglied_id, (p.name || '') + (p.mitgliedsnummer ? ' (' + p.mitgliedsnummer + ')' : '')) : 'Abteilung'; } },
+      { feld: 'name', titel: 'Mitglied / Abteilung', wert: function (p) { return p.mitglied_id || p.name ? mitgliedLink(p.mitglied_id, (p.name || '') + (p.mitgliedsnummer ? ' (' + p.mitgliedsnummer + ')' : '')) : 'Abteilung'; } },
       { feld: 'meldung', titel: 'Fehlt' }
     ], b.pruefliste));
   }

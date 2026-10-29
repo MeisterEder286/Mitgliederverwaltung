@@ -28,7 +28,7 @@ var Verwaltung = (function () {
   var SNAPSHOT_TABS = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel'];
   var PRUEF_TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
     'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
-    'Ehrungsregel', 'Ehrung', 'Einwilligung'];
+    'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Benutzer', 'Notiz'];   // Benutzer/Notiz nur für Verweisprüfungen (keine Inhalte in den Befunden)
   // Welche Ämter (Funktionsart.bezeichnung, Anfang) zu welcher Rolle passen – für die Warnliste (V10)
   var AMT_ZU_ROLLE = {
     Abteilungsleiter: ['Abteilungsleiter'],
@@ -82,6 +82,9 @@ var Verwaltung = (function () {
           meldung: 'Aktiver Zugang „' + b.rolle + '“, aber kein laufendes passendes Amt' +
             (b.rolle === 'Abteilungsleiter' ? ' in dieser Abteilung' : '') + '. Bitte prüfen, ob der Zugang noch nötig ist.' });
       }
+    });
+    Rechte.mehrfachrollenWarnungen(benutzer).forEach(function (w) {
+      warn.push({ benutzer_id: w.benutzer_id, email: w.email, rolle: w.rollen.join(' + '), meldung: w.meldung, art: 'mehrfachrolle' });
     });
     return warn;
   }

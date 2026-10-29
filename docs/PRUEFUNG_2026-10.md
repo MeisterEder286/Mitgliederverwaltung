@@ -13,7 +13,8 @@ ausdrücklich **nicht** produktive Sheets oder Echtdaten. Die beiden `.xlsx` unt
 | Stand | `npm run check` | `npm test` | `npm run test:ui` |
 |---|---|---|---|
 | vorher | ok | 293/293 | 51/51 |
-| nachher | ok | 304/304 | 51/51 |
+| nach Abschnitt 5 | ok | 304/304 | 51/51 |
+| nach Abschnitt 7 | ok | 312/312 | 51/51 |
 
 ## 1. Kurzurteil
 
@@ -44,8 +45,8 @@ Zeilenangaben beziehen sich auf den Stand **nach** dieser Prüfung.
 |---|---|---|---|
 | H1 | **Nachzügler auf einem Konto mit Sollstellung werden nie belastet.** `plane()` überspringt jedes Paar (Konto, Jahr), das schon existiert. Ein Mitglied, das später über ein bestehendes Konto dazukommt, erhöht den Betrag nicht. Die Klärliste meldet das nicht, `nachzuegler_ohne_sollstellung` zählt nur Konten ohne jede Sollstellung. | `src/lib/sollstellung.js:41`, `src/modul/Finanzen.js` (`sepaProbelauf`) | 🟡 Nachtrags-Sollstellung braucht eine Schemaänderung (Abschnitt 4) |
 | H2 | **Sollstellung nicht korrigierbar.** Nach `storniert` plant `plane()` nichts mehr. Die Eindeutigkeit (Konto, Jahr) verhindert eine Neustellung, und `soll_betrag` ist über keine API änderbar. | `src/lib/sollstellung.js:41`, `docs/daten/tabellen.csv` (Sollstellung) | 🟡 |
-| H3 | **Mehrfachrollen heben die Zeilengrenze auf.** Sichtklassen und Zeilensicht werden getrennt vereinigt. Beispiel Kassier + Abteilungsleiter: Er bekommt `hochsensibel` (vom AL) und Zeilen `alle` (vom Kassier) und sieht damit FZ- und Lizenzvermerke des ganzen Vereins. `pruefeAbteilung` lässt ihn außerdem in allen Abteilungen schreiben. | `src/lib/rechte.js:85,90`, `src/lib/snapshot.js` (`personenkreis`) | 🟡 Rechteänderung, Freigabe nötig. Sofort möglich: Warnung in `Verwaltung.warnliste` |
-| H4 | **Beitritts-Import: Rücknahme bei Fehlern unvollständig.** Zurückgenommen werden nur eingefügte Zeilen. `aktualisiereViele` (Wiedereintritt: Status, Konto, Zugehörigkeit) und `Konfig.setze('mitgliedsnummer_naechste')` bleiben stehen, die Meldung lautet trotzdem „nichts gespeichert“. | `src/modul/Beitritt.js:211`, Rücknahme ab `:236` | 🔵 Zähler zuletzt setzen und Altwerte im `catch` zurückschreiben |
+| H3 | **Mehrfachrollen heben die Zeilengrenze auf.** Sichtklassen und Zeilensicht werden getrennt vereinigt. Beispiel Kassier + Abteilungsleiter: Er bekommt `hochsensibel` (vom AL) und Zeilen `alle` (vom Kassier) und sieht damit FZ- und Lizenzvermerke des ganzen Vereins. `pruefeAbteilung` lässt ihn außerdem in allen Abteilungen schreiben. | `src/lib/rechte.js:85,90`, `src/lib/snapshot.js` (`personenkreis`) | 🟡 Rechteänderung, Freigabe nötig. ✅ Warnung in der Benutzerverwaltung (`Rechte.mehrfachrollenWarnungen`) |
+| H4 | **Beitritts-Import: Rücknahme bei Fehlern unvollständig.** Zurückgenommen werden nur eingefügte Zeilen. `aktualisiereViele` (Wiedereintritt: Status, Konto, Zugehörigkeit) und `Konfig.setze('mitgliedsnummer_naechste')` bleiben stehen, die Meldung lautet trotzdem „nichts gespeichert“. | `src/modul/Beitritt.js:211`, Rücknahme ab `:236` | ✅ Zähler, Änderungen und Einfügungen werden zurückgenommen, Cache verworfen |
 | H5 | **Klartext-IBAN und Altwerte bleiben im `_Protokoll`.** Das gilt nach Anonymisierung und nach `kontoLeeren`. Die Bereinigung erfasst nur Zeilen der Tabelle Mitglied, Konto-Anlage und Konto-Änderung protokollieren die IBAN per `ausDiff`. Die Frist für IBANs beträgt 14 Monate, das Protokoll bleibt 36 Monate. | `src/lib/loeschung.js:259`, `src/modul/Finanzen.js` (`kontoSpeichern`), `src/modul/Datenschutz.js` (`kontoLeeren`) | 🟡 Löschkonzept betroffen, Freigabe nötig |
 | ✅ | Bearbeiten-Formular umging „eine Gemeinschaft = ein Konto“ → Festbetrag doppelt | `src/modul/Mitglieder.js` (`speichern`, `gemeinschaftKontoFehler`) | ✅ |
 | ✅ | Wiedereintritt brach nach dem Schreiben des Zeitraums ab (Abteilung ruht/unbekannt/zugeordnet) → beim zweiten Versuch zwei offene Zeiträume | `src/modul/Mitglieder.js` (`wiedereintritt`, `zugehoerigkeitPruefen`) | ✅ |
@@ -61,14 +62,14 @@ Zeilenangaben beziehen sich auf den Stand **nach** dieser Prüfung.
 | M3 | **Teilzahlung setzt den Status `bezahlt`.** Der Rest wird nirgends offen geführt. | `src/lib/sollstellung.js:89` | 🟡 |
 | M4 | **Mandatsänderungen.** Ein IBAN-Wechsel erzeugt kein `AmdmntInd`. Ein Inhaberwechsel erzwingt keine neue Referenz und kein neues Mandatsdatum. | `src/modul/Finanzen.js` (`kontoSpeichern`) | 🟡 mit Hausbank klären |
 | M5 | **Mandatsreferenz mit Leerzeichen** ist in der DB eindeutig, in der Datei aber nicht. `kennung()` entfernt die Leerzeichen, deshalb weicht die Referenz vom unterschriebenen Mandat ab. | `src/lib/sepa.js` (`kennung`), Regex in `Finanzen.js` (`kontoPruefen`) | 🟡 Migrationsdaten erst prüfen |
-| M6 | **Zahlweg-Hinweis zu Dritten in `Mitglied.bemerkung`.** Das Feld hat die Sichtklasse `kontakt` und ist damit für Abteilungs- und Jugendleiter lesbar. | `src/modul/Mitglieder.js:398`, `docs/daten/feldkatalog.csv` | 🔵 als `Notiz` mit Leserkreis Finanzen |
+| M6 | **Zahlweg-Hinweis zu Dritten in `Mitglied.bemerkung`.** Das Feld hat die Sichtklasse `kontakt` und ist damit für Abteilungs- und Jugendleiter lesbar. | `src/modul/Mitglieder.js` (Austritt, Option `zahlweg_offen`) | ✅ jetzt `Notiz` mit Leserkreis Finanzen und Kontobezug |
 | M7 | **Wiedereintritt in eine Abteilung überschreibt die Historie.** Die Eindeutigkeit (Mitglied, Abteilung) zwingt dazu, die alte Zeile wieder zu öffnen. | `src/modul/Mitglieder.js:473`, `docs/daten/tabellen.csv` | 🟡 Struktur (Abschnitt 4) |
 | M8 | **Beitragsart, Konto und Gemeinschaft hängen ohne Gültigkeit am Mitglied.** Die Historie wird nur aus `_Protokoll` rekonstruiert, und dort leert die Wartung `alt_wert`/`neu_wert` nach Frist. | `docs/daten/feldkatalog.csv` (Mitglied), `src/modul/Familie.js` (Bezahlhistorie) | 🟡 Struktur |
 | M9 | **Zählweise „gesamt“: der letzte Tag beendeter Zeiträume fehlt.** Der Zeitraum 2000-01-01 bis 2009-12-31 ergibt 9 statt 10 Jahre. Der Test schreibt dieses Verhalten fest. | `src/lib/mitgliedschaft.js:110`, `test/mitgliedschaft.test.js` | 🟡 ändert Ehrungsergebnisse (nur Modus „gesamt“) |
 | M10 | **Aufnahmeanträge fehlen im Löschkonzept.** Sie werden weder in Auskunft und Anonymisierung erfasst, noch nach der Frist „abgelehnt + 6 Monate“ gelöscht. Die Auskunft enthält außerdem keine Anschreiben, Dokumente oder Protokolleinträge. | `src/modul/Datenschutz.js` (`BASIS_TABS`), `src/lib/loeschung.js` (`auskunft`), `src/lib/startbelegung.js` | 🔵/🟡 |
-| M11 | **Berichte zeigen gesperrte und anonymisierte Personen.** `bewegungen` filtert Art. 18 nicht, `geburtstage` und `jubilaeen` tun es. | `src/modul/Berichte.js:178` | 🔵 |
-| M12 | **Nachweise ändern oder löschen ohne Sichtprüfung.** Ein Abteilungsleiter kann einen Vermerk ändern, den der Snapshot ihm nicht zeigt; geprüft wird nur, ob die Person sichtbar ist. | `src/modul/Nachweise.js:131,153` | 🔵 |
-| M13 | **Cache nach dem Schreiben aus Sheets-API neu gebaut.** `flush()` kommt erst beim Freigeben der Sperre, der Neubau sieht die Änderung womöglich nicht. | `src/Snapshot.js` (`schreibe`), `src/Datenzugriff.js` (`mitSperre`) | 🔵 im Echtsystem verifizieren |
+| M11 | **Berichte zeigen gesperrte und anonymisierte Personen.** `bewegungen` filtert Art. 18 nicht, `geburtstage` und `jubilaeen` tun es. | `src/modul/Berichte.js` (`bewegungen`, BLSV-Prüfliste, Nachmeldung) | ✅ ohne Namen, Nummer und ID für Rollen ohne `verwaltung`; Zählung bleibt |
+| M12 | **Nachweise ändern oder löschen ohne Sichtprüfung.** Ein Abteilungsleiter kann einen Vermerk ändern, den der Snapshot ihm nicht zeigt; geprüft wird nur, ob die Person sichtbar ist. | `src/modul/Nachweise.js` (`aendern`, `loeschen`) | ✅ `Snapshot.pruefeZeile` mit der Snapshot-Regel |
+| M13 | **Cache nach dem Schreiben aus Sheets-API neu gebaut.** `flush()` kommt erst beim Freigeben der Sperre, der Neubau sieht die Änderung womöglich nicht. | `src/Datenzugriff.js` (`leseVomSheet`) | ✅ `flush()` vor jedem Lesen über die Sheets-API in der Sperre; die Wirkung im Echtsystem ist noch nicht geprüft (die Fakes bilden den Puffer der Sheets-API nicht ab) |
 | M14 | **Mehrere Dubletten beim Beitritt.** Es zählt immer `dubletten[0]`. Ohne Geburtsdatum passt jeder gleichnamige Eintrag. | `src/modul/Beitritt.js:90` | 🟡 |
 | ✅ | FZ-Vermerk erschien nach dem Eintragen einer Funktion bis zur Nachtwartung als löschbar | `src/lib/fristen.js` (`loeschdatum`), `src/modul/Nachweise.js` | ✅ |
 | ✅ | Mandatsverfall gegen „heute“ statt gegen das Einzugsdatum geprüft | `src/lib/sepa.js` (`laufIntern`) | ✅ |
@@ -80,9 +81,9 @@ Zeilenangaben beziehen sich auf den Stand **nach** dieser Prüfung.
 
 | Befund | Beleg | Stand |
 |---|---|---|
-| `neueId` übernimmt den Zähler ohne Abgleich mit dem Bestand. Bei von Hand eingefügten Zeilen entstehen doppelte IDs. | `src/Datenzugriff.js:185` | 🔵 |
+| `neueId` übernimmt den Zähler ohne Abgleich mit dem Bestand. Bei von Hand eingefügten Zeilen entstehen doppelte IDs. | `src/Datenzugriff.js` (`neueId`, `hoechsteId`) | ✅ |
 | Austritt rückwirkend vor dem Eintritt in eine Sparte bzw. vor Beginn einer Funktion ergibt `bis < von`. | `src/modul/Mitglieder.js` (`beendeLaufendes`) | 🔵 |
-| Prüfregeln fehlen für überlappende oder mehrere offene Zeiträume, Austritt vor Eintritt, `bis < von` und mehrere Fremdschlüssel. | `src/lib/pruefregeln.js` | 🔵 |
+| Prüfregeln fehlen für überlappende oder mehrere offene Zeiträume, Austritt vor Eintritt, `bis < von` und mehrere Fremdschlüssel. | `src/lib/pruefregeln.js` | ✅ `zeitraum_ueberlappung`, `datum_reihenfolge`, `funktion_doppelt`, Verweise in Zeitraum, Sollstellung, Konto, Benutzer und Notiz. Noch offen: Zugehörigkeit außerhalb eines Mitgliedschaftszeitraums |
 | Fehler beim Schreiben in den Cache wird verschluckt, der alte Stand bleibt bis zu 6 h gültig. | `src/Cache.js:57` | 🔵 |
 | `funktionEintragen` prüft keine Duplikate (Doppelklick ergibt doppelte Ehrung je `funktion_id`). | `src/modul/Mitglieder.js` | 🔵 |
 | E-Mail-Eindeutigkeit im Tab Benutzer unterscheidet Groß- und Kleinschreibung. | `src/Datenzugriff.js` (`pruefeEindeutig`) | 🔵 |
@@ -243,6 +244,22 @@ Alle Punkte setzen eine **bereits dokumentierte Regel** durch. Fachregeln, Recht
 
 Gegenprobe: Alle 11 Regressionstests schlagen auf dem Stand vor der Änderung fehl.
 
+### Nachtrag: Abschnitt 7, Schritt 1 (ohne Freigabe)
+
+| Änderung | Datei | Regressionstest (`test/regression.test.js`) |
+|---|---|---|
+| Warnung bei Mehrfachrollen, z. B. Kassier + Abteilungsleiter oder Kassier + Jugendleiter. Die Rechte bleiben unverändert. | `src/lib/rechte.js`, `src/modul/Verwaltung.js` | Mehrfachrollen (2 Tests) |
+| Art. 18: Gesperrte und anonymisierte Personen erscheinen in Ein-/Austritten, BLSV-Prüfliste und Nachmeldung ohne Namen für Rollen ohne `verwaltung` | `src/modul/Berichte.js`, `src/client/ansicht_berichte.html` | Berichte |
+| Nachweise ändern oder löschen nur, wenn der Vermerk sichtbar ist (Regel aus dem Snapshot) | `src/lib/snapshot.js`, `src/Snapshot.js`, `src/modul/Nachweise.js` | Nachweise |
+| „Zahlweg offen“ als Finanz-Notiz statt in `Mitglied.bemerkung` | `src/modul/Mitglieder.js` | `test/mitglieder.test.js`, `test/ui/mitglieder.ui.test.js` (angepasst) |
+| Beitritts-Import: Bei einem Fehler werden Änderungen, Zähler und Einfügungen zurückgenommen und der Cache verworfen | `src/modul/Beitritt.js` | Beitritt: Fehler nach dem Schreiben |
+| Neue Prüfregeln für Zeitachsen und Fremdschlüssel | `src/lib/pruefregeln.js`, `src/modul/Verwaltung.js` | Prüfregeln |
+| `neueId` vergibt nie eine ID unter der höchsten im Bestand + 1 | `src/Datenzugriff.js` | neueId |
+| `flush()` vor dem Lesen über die Sheets-API innerhalb der Sperre (Budget im Leistungstest 16 → 17 Zugriffe) | `src/Datenzugriff.js`, `test/datenzugriff.test.js` | Lesen über die Sheets-API |
+| Testdaten-Generator: Spartenbeitritt liegt nie nach dem Austritt. Der Fehler fiel durch die neue Regel `datum_reihenfolge` auf. | `test/daten/generator.js` | `test/pruefregeln.test.js` |
+
+Gegenprobe: Die 8 neuen Regressionstests schlagen auf dem Stand vorher fehl.
+
 ## 6. Offene Entscheidungen
 
 | # | Frage | Optionen | betrifft |
@@ -264,15 +281,9 @@ Gegenprobe: Alle 11 Regressionstests schlagen auf dem Stand vor der Änderung fe
 
 ## 7. Nächste Schritte (Vorschlag)
 
-1. **Ohne Freigabe möglich, kleine Korrekturen** (🔵):
-   - Warnung für Mehrfachrollen
-   - Zahlweg-Hinweis als Finanz-Notiz
-   - Filter Art. 18 in `bewegungen`
-   - Sichtprüfung in `Nachweise.aendern/loeschen`
-   - Rücknahme des Beitritt-Imports vervollständigen
-   - fehlende Prüfregeln (Zeitachsen, Fremdschlüssel)
-   - `neueId` gegen den Bestand
-   - `flush()` vor dem Cache-Neubau (vorher im Echtsystem testen)
+1. ~~**Ohne Freigabe möglich, kleine Korrekturen**~~ – **erledigt** (siehe Nachtrag in Abschnitt 5). Noch zu tun:
+   - im Testsystem prüfen, ob nach einem Einfügen der Cache-Neubau den neuen Stand sieht (`flush()`)
+   - weitere 🔵-Punkte aus Abschnitt 2 (Austritt vor Spartenbeginn, Cache-Fehler beim Speichern, Duplikatprüfung beim Eintragen von Funktionen, E-Mail-Eindeutigkeit, NFD bei der Dublettenprüfung, Jahreszahl als Seriennummer, CSV-Formelschutz `\t`/`\r`, Konto-Notizen, Zeitzonen-Prüfung im Setup)
 2. **Mit Verein und Hausbank klären:** E1–E6, E9–E11.
 3. **Datenmodell in Stufen umbauen** (je eine Migration mit Prüfbericht, zuerst gegen synthetische Daten):
    - (a) `Zahlung` und abgeleiteter Saldo

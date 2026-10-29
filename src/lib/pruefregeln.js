@@ -39,7 +39,11 @@ var Pruefregeln = (function () {
     status_veraltet: { schwere: 'hinweis', titel: 'Gespeicherter Status weicht vom abgeleiteten ab' },
     minderjaehrig_ohne_vertretung: { schwere: 'hinweis', titel: 'Minderjährig ohne gesetzliche Vertretung' },
     konto_ohne_mitglied: { schwere: 'hinweis', titel: 'Aktives Beitragskonto ohne aktives Mitglied' },
-    waise: { schwere: 'warnung', titel: 'Kontoinhaber nicht mehr aktiv, Abhängige zahlen weiter über sein Mandat' }
+    waise: { schwere: 'warnung', titel: 'Kontoinhaber nicht mehr aktiv, Abhängige zahlen weiter über sein Mandat' },
+    // Zeitachsen (Prüfung 10/2026): finden Altlasten aus Migration, Handänderungen und abgebrochenen Abläufen
+    zeitraum_ueberlappung: { schwere: 'fehler', titel: 'Mehrere offene oder überlappende Mitgliedschaftszeiträume' },
+    datum_reihenfolge: { schwere: 'fehler', titel: 'Ende liegt vor dem Beginn' },
+    funktion_doppelt: { schwere: 'warnung', titel: 'Gleiche Funktion zeitgleich mehrfach eingetragen' }
   };
 
   function liste(daten, tab) { return (daten && daten[tab]) || []; }
@@ -129,16 +133,44 @@ var Pruefregeln = (function () {
       });
     });
 
+    // ---------- Zeitachsen: Mitgliedschaftszeiträume
+    liste(daten, 'Mitgliedschaftszeitraum').forEach(function (z) {
+      if (!mNachId[z.mitglied_id]) befund('verweis_ungueltig', 'Mitgliedschaftszeitraum', z.zeitraum_id, z.mitglied_id, 'Mitglied ' + z.mitglied_id + ' existiert nicht.');
+      var ende = M.endeVon(z);
+      if (z.eintrittsdatum && ende && ende < z.eintrittsdatum) {
+        befund('datum_reihenfolge', 'Mitgliedschaftszeitraum', z.zeitraum_id, z.mitglied_id, 'Austritt ' + ende + ' liegt vor dem Eintritt ' + z.eintrittsdatum + '.');
+      }
+    });
+    Object.keys(zr).forEach(function (mid) {
+      var zs = zr[mid];
+      if (mNachId[mid] && mNachId[mid].anonymisiert === true) return;
+      var offen = zs.filter(function (z) { return !M.endeVon(z); });
+      if (offen.length > 1) {
+        befund('zeitraum_ueberlappung', 'Mitgliedschaftszeitraum', offen[1].zeitraum_id, Number(mid), offen.length + ' offene Zeiträume (Eintritte ' + offen.map(function (z) { return z.eintrittsdatum; }).join(', ') + ').');
+        return;
+      }
+      for (var i = 1; i < zs.length; i++) {
+        var vorher = M.endeVon(zs[i - 1]);
+        if (!vorher || (zs[i].eintrittsdatum && vorher >= zs[i].eintrittsdatum)) {
+          befund('zeitraum_ueberlappung', 'Mitgliedschaftszeitraum', zs[i].zeitraum_id, Number(mid), 'Eintritt ' + zs[i].eintrittsdatum + ' liegt vor dem Ende des vorigen Zeitraums (' + (vorher || 'offen') + ').');
+        }
+      }
+    });
+
     // ---------- Zugehörigkeit / Funktion: laufend trotz Tod/Austritt, Verweise, Ebene
     function laufendNach(von, bis, ende) { return !bis || bis > ende; }
     liste(daten, 'Abteilungszugehoerigkeit').forEach(function (z) {
       var m = mNachId[z.mitglied_id];
       if (!m) { befund('verweis_ungueltig', 'Abteilungszugehoerigkeit', z.zugehoerigkeit_id, z.mitglied_id, 'Mitglied ' + z.mitglied_id + ' existiert nicht.'); return; }
       if (!abteilungen[z.abteilung_id]) befund('verweis_ungueltig', 'Abteilungszugehoerigkeit', z.zugehoerigkeit_id, z.mitglied_id, 'Abteilung ' + z.abteilung_id + ' existiert nicht.');
+      if (z.eintrittsdatum && z.austrittsdatum && z.austrittsdatum < z.eintrittsdatum) {
+        befund('datum_reihenfolge', 'Abteilungszugehoerigkeit', z.zugehoerigkeit_id, z.mitglied_id, 'Austritt ' + z.austrittsdatum + ' liegt vor dem Eintritt ' + z.eintrittsdatum + '.');
+      }
       if (m.anonymisiert === true) return;
       if (m.sterbedatum && laufendNach(z.eintrittsdatum, z.austrittsdatum, m.sterbedatum)) befund('verstorben_laufend', 'Abteilungszugehoerigkeit', z.zugehoerigkeit_id, m.mitglied_id, 'Abteilungszugehörigkeit nach dem Sterbedatum offen.');
       else if (status[m.mitglied_id] === 'ausgetreten' && !z.austrittsdatum) befund('ausgetreten_laufend', 'Abteilungszugehoerigkeit', z.zugehoerigkeit_id, m.mitglied_id, 'Abteilungszugehörigkeit ohne Austrittsdatum.');
     });
+    var funktionenJe = {};
     liste(daten, 'Funktion').forEach(function (f) {
       var m = mNachId[f.mitglied_id];
       var art = fArten[f.funktionsart_id];
@@ -147,9 +179,41 @@ var Pruefregeln = (function () {
       else if (art.ebene === 'Verein' && f.abteilung_id) befund('amt_ebene', 'Funktion', f.funktion_id, f.mitglied_id, '„' + art.bezeichnung + '“ ist ein Vereinsamt und darf keine Abteilung haben.');
       else if (art.ebene === 'Abteilung' && !f.abteilung_id) befund('amt_ebene', 'Funktion', f.funktion_id, f.mitglied_id, '„' + art.bezeichnung + '“ ist ein Abteilungsamt und braucht eine Abteilung.');
       if (f.abteilung_id && !abteilungen[f.abteilung_id]) befund('verweis_ungueltig', 'Funktion', f.funktion_id, f.mitglied_id, 'Abteilung ' + f.abteilung_id + ' existiert nicht.');
+      if (f.von && f.bis && f.bis < f.von) befund('datum_reihenfolge', 'Funktion', f.funktion_id, f.mitglied_id, 'Ende ' + f.bis + ' liegt vor dem Beginn ' + f.von + '.');
+      var schluessel = [f.mitglied_id, f.funktionsart_id, f.abteilung_id || '', String(f.zusatz || '').trim().toLowerCase()].join('|');
+      (funktionenJe[schluessel] = funktionenJe[schluessel] || []).push(f);
       if (m.anonymisiert === true) return;
       if (m.sterbedatum && laufendNach(f.von, f.bis, m.sterbedatum)) befund('verstorben_laufend', 'Funktion', f.funktion_id, m.mitglied_id, 'Funktion nach dem Sterbedatum nicht beendet.');
       else if (status[m.mitglied_id] === 'ausgetreten' && !f.bis && m.nur_funktionstraeger !== true) befund('ausgetreten_laufend', 'Funktion', f.funktion_id, m.mitglied_id, 'Funktion ohne Ende trotz Austritt.');
+    });
+
+    // Gleiche Funktion (Person, Art, Abteilung, Zusatz) zeitlich überlappend – z. B. Doppelklick beim Eintragen
+    Object.keys(funktionenJe).forEach(function (k) {
+      var fs = funktionenJe[k].slice().sort(function (a, c) { return String(a.von).localeCompare(String(c.von)); });
+      for (var i = 1; i < fs.length; i++) {
+        var vorher = fs[i - 1];
+        if (!vorher.bis || (fs[i].von && vorher.bis >= fs[i].von)) {
+          befund('funktion_doppelt', 'Funktion', fs[i].funktion_id, fs[i].mitglied_id, 'Überschneidet sich mit Funktion ' + vorher.funktion_id + ' (ab ' + vorher.von + ').');
+        }
+      }
+    });
+
+    // ---------- Weitere Verweise (Fremdschlüssel)
+    liste(daten, 'Sollstellung').forEach(function (s) {
+      if (!konten[s.beitragskonto_id]) befund('verweis_ungueltig', 'Sollstellung', s.sollstellung_id, null, 'Beitragskonto ' + s.beitragskonto_id + ' existiert nicht.');
+    });
+    liste(daten, 'Beitragskonto').forEach(function (k) {
+      if (k.kontoinhaber_mitglied_id && !mNachId[k.kontoinhaber_mitglied_id]) {
+        befund('verweis_ungueltig', 'Beitragskonto', k.beitragskonto_id, null, 'Kontoinhaber (Mitglied ' + k.kontoinhaber_mitglied_id + ') existiert nicht.');
+      }
+    });
+    liste(daten, 'Benutzer').forEach(function (u) {
+      if (u.mitglied_id && !mNachId[u.mitglied_id]) befund('verweis_ungueltig', 'Benutzer', u.benutzer_id, null, 'Zugang ' + u.email + ': Mitglied ' + u.mitglied_id + ' existiert nicht.');
+      if (u.abteilung_id && !abteilungen[u.abteilung_id]) befund('verweis_ungueltig', 'Benutzer', u.benutzer_id, null, 'Zugang ' + u.email + ': Abteilung ' + u.abteilung_id + ' existiert nicht.');
+    });
+    liste(daten, 'Notiz').forEach(function (n) {
+      if (n.mitglied_id && !mNachId[n.mitglied_id]) befund('verweis_ungueltig', 'Notiz', n.notiz_id, null, 'Mitglied ' + n.mitglied_id + ' existiert nicht.');
+      if (n.beitragskonto_id && !konten[n.beitragskonto_id]) befund('verweis_ungueltig', 'Notiz', n.notiz_id, n.mitglied_id || null, 'Beitragskonto ' + n.beitragskonto_id + ' existiert nicht.');
     });
 
     // ---------- Konten und Gemeinschaften

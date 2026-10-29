@@ -392,12 +392,17 @@ var Mitglieder = (function () {
           });
           hinweise.push(abhaengige.length + ' weitere Person(en) treten mit aus.');
         } else if (opt.code === 'zahlweg_offen') {
+          // Merker als interne Notiz mit Leserkreis Finanzen – NICHT in Mitglied.bemerkung (Sichtklasse kontakt, dort
+          // läsen Abteilungs- und Jugendleitung Zahlungsdaten und den Austritt einer dritten Person; Prüfbefund M6).
           abhaengige.forEach(function (x) {
             var m = finde('Mitglied', 'mitglied_id', x.a.mitglied_id);
             if (!m) return;
-            var r = DB.aktualisieren('Mitglied', m.mitglied_id, { bemerkung: bemerkungAnhaengen(m.bemerkung, 'Zahlweg offen: ' + text + '.') }, m.version || 0, ktx);
-            aenderungen.push({ tab: 'Mitglied', neu: r.neu });
-            protokoll.push({ aktion: 'geändert', tabelle: 'Mitglied', datensatz_id: m.mitglied_id, feld: 'bemerkung', kommentar: 'Zahlweg offen' });
+            var n = DB.einfuegen('Notiz', {
+              mitglied_id: m.mitglied_id, beitragskonto_id: x.konto.konto_id, art: 'Notiz', text: 'Zahlweg offen: ' + text + '.',
+              sichtbar_fuer: 'Finanzen', erstellt_von: ktx.email
+            }, ktx);
+            aenderungen.push({ tab: 'Notiz', neu: n });
+            protokoll.push({ aktion: 'angelegt', tabelle: 'Notiz', datensatz_id: n.notiz_id, kommentar: 'Zahlweg offen · Mitglied ' + m.mitglied_id });
           });
           hinweise.push('Die Abhängigen stehen in der Klärliste des Finanzbereichs und fallen aus dem nächsten SEPA-Lauf.');
         } else if (opt.code === 'uebernahme') {

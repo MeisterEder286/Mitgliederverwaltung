@@ -135,6 +135,7 @@ var NachweiseModul = (function () {
       var q = Bereichsdaten.index(DB.lese(['Qualifikation']).Qualifikation, 'qualifikation_id')[Number(qualifikationId)];
       if (!q) throw Fehler.fachlich('Der Nachweis wurde nicht gefunden. Bitte die Ansicht neu laden.');
       Snapshot.pruefeMitglied(ktx, q.mitglied_id);
+      Snapshot.pruefeZeile(ktx, 'Qualifikation', q);   // nur Vermerke, die auch angezeigt werden (z. B. AL: Funktion in eigener Abteilung)
       var art = Bereichsdaten.index(basis.tabs.Qualifikationsart, 'qualifikationsart_id')[q.qualifikationsart_id];
       if (art && art.kategorie === 'Führungszeugnis') throw Fehler.fachlich('Eine Führungszeugnis-Einsicht wird nicht geändert, sondern neu erfasst.');
       var werte = {};
@@ -161,6 +162,7 @@ var NachweiseModul = (function () {
         var q = quals[Number(x.qualifikation_id)];
         if (!q) throw Fehler.fachlich('Ein Vermerk wurde nicht gefunden. Bitte die Ansicht neu laden.');
         Snapshot.pruefeMitglied(ktx, q.mitglied_id);
+        Snapshot.pruefeZeile(ktx, 'Qualifikation', q);
         var art = arten[q.qualifikationsart_id];
         if (!art || art.kategorie !== 'Führungszeugnis') throw Fehler.fachlich('Gelöscht werden hier nur Führungszeugnis-Vermerke.');
         if (q.geloescht_am) throw Fehler.fachlich('Ein Vermerk ist bereits gelöscht.');

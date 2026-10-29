@@ -153,9 +153,54 @@ var Rechte = (function () {
     return z;
   }
 
+  /**
+   * Mehrfachrollen, bei denen kontext() mehr Rechte ergibt als jede Rolle für sich (Prüfbefund H3 10/2026):
+   * Sichtklassen und Zeilensicht werden getrennt vereinigt. Hat eine Rolle die Zeilensicht „alle“ und eine andere
+   * eine Sichtklasse, die keiner der „alle“-Rollen zusteht (z. B. Kassier + Abteilungsleiter → hochsensibel),
+   * gilt diese Sichtklasse für den ganzen Verein; Abteilungsgrenzen beim Schreiben entfallen ebenfalls.
+   * Nur Meldung – die Rechte selbst bleiben unverändert (Änderung braucht Freigabe).
+   * Liefert [{ email, rollen, sicht: [zusätzlich vereinsweit sichtbare Klassen], meldung }].
+   */
+  function mehrfachrollenWarnungen(benutzerZeilen) {
+    var jeEmail = {};
+    (benutzerZeilen || []).forEach(function (z) {
+      if (!z || z.aktiv !== true || !MATRIX[z.rolle]) return;
+      var e = normEmail(z.email);
+      if (!e) return;
+      var x = jeEmail[e] = jeEmail[e] || { email: e, rollen: [], benutzer_id: z.benutzer_id };
+      if (x.rollen.indexOf(z.rolle) < 0) x.rollen.push(z.rolle);
+    });
+    var warn = [];
+    Object.keys(jeEmail).sort().forEach(function (e) {
+      var x = jeEmail[e];
+      var alle = x.rollen.filter(function (r) { return MATRIX[r].zeilen === 'alle'; });
+      var begrenzt = x.rollen.filter(function (r) { return MATRIX[r].zeilen !== 'alle'; });
+      if (!alle.length || !begrenzt.length) return;
+      var sichtAlle = [];
+      alle.forEach(function (r) { vereinige(sichtAlle, MATRIX[r].sicht); });
+      var zusatz = [];
+      begrenzt.forEach(function (r) { MATRIX[r].sicht.forEach(function (s) { if (sichtAlle.indexOf(s) < 0 && zusatz.indexOf(s) < 0) zusatz.push(s); }); });
+      var aktionenAlle = [];
+      alle.forEach(function (r) { vereinige(aktionenAlle, MATRIX[r].aktionen); });
+      var schreibt = begrenzt.some(function (r) {
+        return MATRIX[r].aktionen.some(function (a) {
+          return aktionenAlle.indexOf(a) < 0 && ['zugehoerigkeit_bearbeiten', 'funktion_bearbeiten', 'qualifikation_erfassen'].indexOf(a) >= 0;
+        });
+      });
+      if (!zusatz.length && !schreibt) return;
+      warn.push({
+        benutzer_id: x.benutzer_id, email: e, rollen: x.rollen.slice(), sicht: zusatz,
+        meldung: 'Mehrfachrolle ' + x.rollen.join(' + ') + ': Die Zeilensicht „alle“ (' + alle.join(', ') + ') gilt auch für die Rechte von ' +
+          begrenzt.join(', ') + (zusatz.length ? ' – Sichtklasse ' + zusatz.join(', ') + ' damit für den ganzen Verein' : '') +
+          (schreibt ? '; Bearbeiten ohne Abteilungs-/Jugendgrenze' : '') + '. Bitte prüfen, ob die Kombination nötig ist (getrennte Google-Konten vermeiden das).'
+      });
+    });
+    return warn;
+  }
+
   return {
     ROLLEN: ROLLEN, SICHTKLASSEN: SICHTKLASSEN, AKTIONEN: AKTIONEN, MATRIX: MATRIX,
     kontext: kontext, darf: darf, sichtbareSpalten: sichtbareSpalten, schneide: schneide,
-    erlaubteSchreibfelder: erlaubteSchreibfelder, zeilenSicht: zeilenSicht
+    erlaubteSchreibfelder: erlaubteSchreibfelder, zeilenSicht: zeilenSicht, mehrfachrollenWarnungen: mehrfachrollenWarnungen
   };
 })();

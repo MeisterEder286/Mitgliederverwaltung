@@ -374,6 +374,15 @@ var SnapshotKern = (function () {
     return !!personenkreis(basis, ix, ktx, heute).ids[Number(id)];
   }
 
+  /**
+   * Darf der Kontext genau diese Zeile sehen (und damit ändern)? Gleiche Regel wie im Client-Snapshot –
+   * z. B. Qualifikationen für Abteilungsleiter nur bei laufender Funktion in der eigenen Abteilung.
+   */
+  function zeileSichtbarFuer(basis, ktx, heute, tab, zeile) {
+    var ix = indexiere(basis);
+    return !!zeile && zeileSichtbar(tab, zeile, personenkreis(basis, ix, ktx, heute), ktx);
+  }
+
   // ------------------------------------------------------------------ Write-through
 
   /**
@@ -438,7 +447,7 @@ var SnapshotKern = (function () {
   return {
     LISTEN: LISTEN, TABS: TABS, BEREICHE: BEREICHE, bereichVon: bereichVon, nurBereiche: nurBereiche, packe: packe,
     ibanOk: ibanOk, ibanMaskiert: ibanMaskiert,
-    basisAusTabs: basisAusTabs, fuer: fuer, mitgliedSichtbar: mitgliedSichtbar,
+    basisAusTabs: basisAusTabs, fuer: fuer, mitgliedSichtbar: mitgliedSichtbar, zeileSichtbarFuer: zeileSichtbarFuer,
     aenderungAnwenden: aenderungAnwenden, antwortFuer: antwortFuer, fzAmpel: function (basis, id, heute) {
       return fzAmpel(id, indexiere(basis), heute);
     }

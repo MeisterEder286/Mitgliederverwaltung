@@ -177,7 +177,8 @@ test('einfuegenViele: feste Zahl an Tabellenzugriffen (5 vs. 500), IDs fortlaufe
   const klein = messe(5), gross = messe(500);
   assert.strictEqual(klein.zugriffe, gross.zugriffe, 'Zugriffe hängen von der Anzahl ab');
   assert.strictEqual(klein.fake, gross.fake, 'Fake-Aufrufe hängen von der Anzahl ab');
-  assert.ok(gross.zugriffe <= 16, 'Zugriffe: ' + gross.zugriffe);   // inkl. Öffnen, Sperr-Konfig, flush
+  // inkl. Öffnen, Sperr-Konfig, flush beim Freigeben und flush vor dem Lesen über die Sheets-API in der Sperre
+  assert.ok(gross.zugriffe <= 17, 'Zugriffe: ' + gross.zugriffe);
   const ids = gross.neu.map(x => x.einwilligung_id);
   assert.deepStrictEqual(ids, ids.map((_, i) => ids[0] + i));
   assert.ok(gross.neu.every(x => x.version === 1 && x.geaendert_von === KTX.email));

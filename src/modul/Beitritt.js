@@ -108,7 +108,20 @@ var BeitrittModul = (function () {
       t.Beitragsgemeinschaft = [];
     }
 
-    var geschrieben = [];
+    // Für das Zurückrollen: eingefügte Zeilen (werden entfernt), Änderungen an Zeilen (alte Werte werden
+    // zurückgeschrieben) und der Nummernzähler (alter Wert). Vorher wurden nur Einfügungen zurückgenommen –
+    // ein Wiedereintritt blieb dann halb gespeichert, der Zähler sprang trotz „nichts gespeichert“ (Prüfbefund H4).
+    var geschrieben = [], geaendert = [], zaehler = null;
+    function aendere(tab, liste) {
+      var r = DB.aktualisiereViele(tab, liste, ktx);
+      var feld = Schema.TABELLEN[tab].idSpalte;
+      r.forEach(function (x) {
+        var alt = {};
+        x.diff.forEach(function (d) { alt[d.feld] = d.alt; });
+        geaendert.push({ tab: tab, id: x.neu[feld], alt: alt });
+      });
+      return r;
+    }
     function rein(tab, objekte) {
       if (!objekte.length) return [];
       var r = DB.einfuegenViele(tab, objekte, ktx);
@@ -181,7 +194,7 @@ var BeitrittModul = (function () {
         zugWieder.push({ id: alt.zugehoerigkeit_id, version: alt.version, aenderungen: { austrittsdatum: null, status: z.status, eintrittsdatum: z.eintrittsdatum } });
       });
       var zug = rein('Abteilungszugehoerigkeit', zugNeu);
-      DB.aktualisiereViele('Abteilungszugehoerigkeit', zugWieder, ktx).forEach(function (r) { zug.push(r.neu); });
+      aendere('Abteilungszugehoerigkeit', zugWieder).forEach(function (r) { zug.push(r.neu); });
       // 5. Nachträge: Vertretung, Kontoinhaber, Wiedereintritte
       var nachMitglied = [];
       t.Mitglied.forEach(function (m) {
@@ -200,15 +213,15 @@ var BeitrittModul = (function () {
       nachMitglied.forEach(function (x) { Object.keys(x.aenderungen).forEach(function (f) { if (x.aenderungen[f] === undefined) delete x.aenderungen[f]; }); });
       var mitgliedNeu = {};
       angelegt.forEach(function (m) { mitgliedNeu[m.mitglied_id] = m; });
-      DB.aktualisiereViele('Mitglied', nachMitglied, ktx).forEach(function (r) { mitgliedNeu[r.neu.mitglied_id] = r.neu; });
+      aendere('Mitglied', nachMitglied).forEach(function (r) { mitgliedNeu[r.neu.mitglied_id] = r.neu; });
       if (kontoNeu) {
         var inhaberId = idVon[t.Mitglied[0].mitglied_id];
-        var kr = DB.aktualisiereViele('Beitragskonto', [{ id: kontoNeu.beitragskonto_id, aenderungen: { kontoinhaber_mitglied_id: inhaberId }, version: 1 }], ktx);
+        var kr = aendere('Beitragskonto', [{ id: kontoNeu.beitragskonto_id, aenderungen: { kontoinhaber_mitglied_id: inhaberId }, version: 1 }]);
         if (kr.length) kontoNeu = kr[0].neu;
       }
 
       // 6. Nummernzähler fortschreiben (zuletzt – nur wenn alles geklappt hat)
-      if (angelegt.length) Konfig.setze('mitgliedsnummer_naechste', nummern.stand(), 'Nächste freie Mitgliedsnummer');
+      if (angelegt.length) zaehler = { alt: Konfig.setze('mitgliedsnummer_naechste', nummern.stand(), 'Nächste freie Mitgliedsnummer') };
 
       // Protokoll (ohne IBAN-Klartext) und Snapshot
       if (kontoNeu) {
@@ -234,10 +247,20 @@ var BeitrittModul = (function () {
       return { datei: antrag.datei, ok: true, personen: zeilen, konto_id: kontoNeu ? kontoNeu.beitragskonto_id : null,
         gemeinschaft: gemNeu ? gemNeu.bezeichnung : null, warnungen: plan.warnungen, snapshot: snap };
     } catch (e) {
-      // Zurückrollen: bereits geschriebene Zeilen dieses Antrags wieder entfernen (rückwärts)
+      // Zurückrollen (rückwärts): 1. Zähler, 2. Änderungen an bestehenden Zeilen, 3. eingefügte Zeilen entfernen
+      if (zaehler) {
+        try { Konfig.setze('mitgliedsnummer_naechste', zaehler.alt === null ? '' : zaehler.alt, 'Nächste freie Mitgliedsnummer'); }
+        catch (e2) { console.error('Beitritt: Zurückrollen Nummernzähler fehlgeschlagen: ' + (e2 && e2.message)); }
+      }
+      for (var j = geaendert.length - 1; j >= 0; j--) {
+        try { DB.aktualisiereViele(geaendert[j].tab, [{ id: geaendert[j].id, aenderungen: geaendert[j].alt, version: null }], ktx); }
+        catch (e2) { console.error('Beitritt: Zurückrollen ' + geaendert[j].tab + ' ' + geaendert[j].id + ' fehlgeschlagen: ' + (e2 && e2.message)); }
+      }
       for (var i = geschrieben.length - 1; i >= 0; i--) {
         try { DB.entfernen(geschrieben[i].tab, geschrieben[i].ids); } catch (e2) { console.error('Beitritt: Zurückrollen ' + geschrieben[i].tab + ' fehlgeschlagen: ' + (e2 && e2.message)); }
       }
+      // Der Cache kann schon Zeilen dieses Antrags enthalten (Fehler nach Snapshot.schreibe) – neu aufbauen lassen
+      if (geschrieben.length || geaendert.length) { try { Snapshot.verwerfen(); } catch (e2) { /* unkritisch */ } }
       throw e;
     }
   }

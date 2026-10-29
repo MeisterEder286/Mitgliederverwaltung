@@ -94,6 +94,9 @@ var DB = (function () {
   }
 
   function leseVomSheet(tabs) {
+    // Die Sheets-API sieht gepufferte SpreadsheetApp-Schreibvorgänge erst nach flush(). Innerhalb der Sperre
+    // (Eindeutigkeitsprüfung nach einem Einfügen, Cache-Neubau in Snapshot.schreibe) deshalb vorher leeren.
+    if (gesperrt) { SpreadsheetApp.flush(); sheetsAufrufe++; }
     var antwort = Sheets.Spreadsheets.Values.batchGet(dbId(), {
       ranges: tabs.map(function (t) { return "'" + t.replace(/'/g, "''") + "'"; }),
       valueRenderOption: 'UNFORMATTED_VALUE',
@@ -181,7 +184,29 @@ var DB = (function () {
     return tabSchema(tab).spalten.some(function (sp) { return sp.name === name; });
   }
 
-  /** Nächste freie ID eines Tabs aus _Konfig (next_id_<Tab>). Nur in mitSperre. */
+  /**
+   * Höchste ID im Tab, direkt über SpreadsheetApp gelesen (sieht auch eigene, noch nicht geflushte Schreibvorgänge
+   * innerhalb der Sperre). 0 bei leerem Tab.
+   */
+  function hoechsteId(tab, idSpalte) {
+    var b = blatt(tab);
+    var letzte = b.getLastRow();
+    sheetsAufrufe++;
+    if (letzte < 2) return 0;
+    var kopf = kopfLesen(b);
+    var s = kopf.indexOf(idSpalte);
+    if (s < 0) return 0;
+    var max = 0;
+    b.getRange(2, s + 1, letzte - 1, 1).getValues().forEach(function (z) { var v = Number(z[0]); if (v > max) max = v; });
+    sheetsAufrufe++;
+    return max;
+  }
+
+  /**
+   * Nächste freie ID eines Tabs aus _Konfig (next_id_<Tab>). Nur in mitSperre.
+   * Wie reserviereIds nie unter höchster vorhandener ID + 1: Zeilen, die von Hand (oder per Wiederherstellung)
+   * eingefügt wurden, ohne den Zähler zu erhöhen, führen so nicht zu doppelten IDs (Prüfbefund 10/2026).
+   */
   function neueId(tab) {
     vorratLeeren();
     nurInSperre('neueId');
@@ -200,6 +225,7 @@ var DB = (function () {
         if (String(zeilen[i][sSchluessel]).trim() === name) {
           var id = Number(zeilen[i][sWert]);
           if (!(id > 0) || Math.floor(id) !== id) throw intern('Zähler ' + name + ' ist keine ganze Zahl');
+          id = Math.max(id, hoechsteId(tab, t.idSpalte) + 1);
           k.getRange(i + 2, sWert + 1).setValue(String(id + 1));
           sheetsAufrufe++;
           return id;

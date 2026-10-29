@@ -29,6 +29,21 @@ var BerichteModul = (function () {
     Protokoll.schreibe(ktx, [{ aktion: 'exportiert', tabelle: 'Bericht', datensatz_id: '-', kommentar: liste + (anzahl !== undefined ? ', ' + anzahl + ' Zeilen' : '') }]);
   }
 
+  /**
+   * Gesperrte (Art. 18) und anonymisierte Personen sind nur mit Sichtklasse „verwaltung“ namentlich sichtbar –
+   * dieselbe Regel wie im Snapshot (src/lib/snapshot.js, personenkreis). In vereinsweiten Berichten zählen sie
+   * weiter mit, erscheinen für andere Rollen aber ohne Namen, Nummer und Bezug.
+   */
+  function verborgen(ktx, p) {
+    return !!p && (p.verarbeitung_eingeschraenkt === true || p.anonymisiert === true) && (ktx.sicht || []).indexOf('verwaltung') < 0;
+  }
+  var GESPERRT = 'Datensatz gesperrt';
+  function benenne(ktx, eintrag, p) {
+    if (verborgen(ktx, p)) { eintrag.name = GESPERRT; eintrag.mitgliedsnummer = null; eintrag.mitglied_id = null; return eintrag; }
+    eintrag.name = Bereichsdaten.name(p); eintrag.mitgliedsnummer = (p || {}).mitgliedsnummer || null;
+    return eintrag;
+  }
+
   /** BLSV-Bestand zum Stichtag inkl. Prüfliste mit Namen. */
   function blsv(ktx, stichtag) {
     nurAlle(ktx);
@@ -37,7 +52,7 @@ var BerichteModul = (function () {
     var b = Blsv.bestand(bd.daten, stichtag);
     var m = Bereichsdaten.index(bd.daten.Mitglied, 'mitglied_id');
     b.pruefliste.forEach(function (p) {
-      if (p.mitglied_id) { p.name = Bereichsdaten.name(m[p.mitglied_id]); p.mitgliedsnummer = (m[p.mitglied_id] || {}).mitgliedsnummer || null; }
+      if (p.mitglied_id) benenne(ktx, p, m[p.mitglied_id]);
     });
     return b;
   }
@@ -60,7 +75,7 @@ var BerichteModul = (function () {
     if (bis < stichtag) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'bis', meldung: '„bis“ liegt vor dem Stichtag.' }]);
     var n = Blsv.nachmeldung(bd.daten, stichtag, bis);
     var m = Bereichsdaten.index(bd.daten.Mitglied, 'mitglied_id');
-    n.eintraege.forEach(function (e) { e.name = Bereichsdaten.name(m[e.mitglied_id]); e.mitgliedsnummer = (m[e.mitglied_id] || {}).mitgliedsnummer || null; });
+    n.eintraege.forEach(function (e) { benenne(ktx, e, m[e.mitglied_id]); });
     return n;
   }
 
@@ -183,12 +198,13 @@ var BerichteModul = (function () {
     (bd.daten.Mitgliedschaftszeitraum || []).forEach(function (z) {
       var p = m[z.mitglied_id];
       if (!p) return;
+      var gesperrt = verborgen(ktx, p);
       if (z.eintrittsdatum && z.eintrittsdatum >= von && z.eintrittsdatum <= bis) {
-        aus.push({ art: 'Eintritt', datum: z.eintrittsdatum, mitglied_id: p.mitglied_id, mitgliedsnummer: p.mitgliedsnummer || null, name: Bereichsdaten.name(p), grund: null });
+        aus.push(benenne(ktx, { art: 'Eintritt', datum: z.eintrittsdatum, mitglied_id: p.mitglied_id, grund: null }, p));
       }
       var ende = z.austrittsdatum || z.austritt_wirksam;
       if (ende && ende >= von && ende <= bis) {
-        aus.push({ art: 'Austritt', datum: ende, mitglied_id: p.mitglied_id, mitgliedsnummer: p.mitgliedsnummer || null, name: Bereichsdaten.name(p), grund: z.austrittsgrund || null });
+        aus.push(benenne(ktx, { art: 'Austritt', datum: ende, mitglied_id: p.mitglied_id, grund: gesperrt ? null : z.austrittsgrund || null }, p));
       }
     });
     aus.sort(function (a, b) { return a.datum.localeCompare(b.datum); });

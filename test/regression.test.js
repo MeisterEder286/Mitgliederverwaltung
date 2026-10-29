@@ -197,3 +197,178 @@ test('Anonymisierung: E-Mail-Adresse im Anschreiben und Ausbildungsangaben werde
   assert.strictEqual(mf.ausbildung_bis, null);
   assert.strictEqual(mf.ausbildung_nachweis_am, null);
 });
+
+// ================================================================== Abschnitt 7 des Prüfberichts (ohne Freigabe)
+
+/** Fakes über veränderbare Tabs (Kopie) – für gezielt präparierte synthetische Fälle. */
+function mitTabs(email, aendern, seed) {
+  const verein = erzeugeVerein({ seed: seed || 3, mitglieder: 300 });
+  const tabs = JSON.parse(JSON.stringify(verein.tabs));
+  if (aendern) aendern(tabs, tab => alsObjekte({ [tab]: tabs[tab] })[tab]);
+  const f = erzeugeFakes({ tabs, email, eigentuemer: MV });
+  const g = ladeProjekt(f.globale);
+  return { f, g, obj: tab => alsObjekte({ [tab]: f.daten(tab) })[tab] };
+}
+function setze(tabs, tab, idSpalte, id, felder) {
+  const k = tabs[tab][0];
+  const z = tabs[tab].slice(1).find(r => r[k.indexOf(idSpalte)] === id);
+  Object.keys(felder).forEach(f => { z[k.indexOf(f)] = felder[f]; });
+}
+function emailMit(tabs, rolle, abt) {
+  const b = tabs.Benutzer, k = b[0];
+  return b.slice(1).find(z => z[k.indexOf('rolle')] === rolle && (!abt || z[k.indexOf('abteilung_id')] === abt))[k.indexOf('email')];
+}
+
+test('Mehrfachrollen: Kassier + Abteilungsleiter wird gewarnt, Vorstand + AL und AL + Jugendleiter nicht', () => {
+  const { g } = beitragsdaten();
+  const B = (email, rolle, abt) => ({ benutzer_id: email.length + rolle.length, email, rolle, abteilung_id: abt || null, aktiv: true });
+  const w = rein(g.Rechte.mehrfachrollenWarnungen([
+    B('kasse@x.de', 'Kassier'), B('KASSE@x.de ', 'Abteilungsleiter', 1),
+    B('vorstand@x.de', 'Vorstand'), B('vorstand@x.de', 'Abteilungsleiter', 2),
+    B('al@x.de', 'Abteilungsleiter', 1), B('al@x.de', 'Jugendleiter'),
+    Object.assign(B('alt@x.de', 'Kassier'), {}), Object.assign(B('alt@x.de', 'Jugendleiter'), { aktiv: false })
+  ]));
+  assert.deepStrictEqual(w.map(x => x.email), ['kasse@x.de']);
+  assert.deepStrictEqual(w[0].sicht, ['hochsensibel']);
+  assert.match(w[0].meldung, /Kassier \+ Abteilungsleiter/);
+  // Die Rechte selbst sind unverändert (nur Meldung)
+  const ktx = rein(g.Rechte.kontext([B('kasse@x.de', 'Kassier'), B('kasse@x.de', 'Abteilungsleiter', 1)], 'kasse@x.de'));
+  assert.ok(ktx.sicht.includes('hochsensibel') && ktx.zeilen === 'alle');
+});
+
+test('Mehrfachrollen: Warnung erscheint in der Benutzerverwaltung', () => {
+  const u = mitTabs(MV, (tabs) => {
+    const b = tabs.Benutzer, k = b[0];
+    const kassier = b.slice(1).find(z => z[k.indexOf('rolle')] === 'Kassier');
+    const neu = kassier.slice();
+    neu[k.indexOf('benutzer_id')] = 9990; neu[k.indexOf('rolle')] = 'Jugendleiter'; neu[k.indexOf('abteilung_id')] = '';
+    b.push(neu);
+  });
+  const w = ok(u.g.apiVerwaltungBenutzer()).warnungen.filter(x => x.art === 'mehrfachrolle');
+  assert.strictEqual(w.length, 1);
+  assert.match(w[0].rolle, /Kassier \+ Jugendleiter|Jugendleiter \+ Kassier/);
+});
+
+test('Berichte: Ein-/Austritte zeigen gesperrte Personen ohne Namen (Kassier), Mitgliederverwaltung namentlich', () => {
+  let gesperrt = null;
+  const vorbereiten = (tabs, obj) => {
+    const z = obj('Mitgliedschaftszeitraum').find(x => x.eintrittsdatum >= '2020-01-01' && x.eintrittsdatum <= '2025-12-31');
+    gesperrt = z.mitglied_id;
+    setze(tabs, 'Mitglied', 'mitglied_id', gesperrt, { verarbeitung_eingeschraenkt: 'ja', sperre_grund: 'Test' });
+  };
+  const kasse = mitTabs('kassier@tsv-ergoldsbach.de', vorbereiten);
+  const mvU = mitTabs(MV, vorbereiten);
+  const k = ok(kasse.g.apiBerichteBewegungen('2020-01-01', '2025-12-31'));
+  const m = ok(mvU.g.apiBerichteBewegungen('2020-01-01', '2025-12-31'));
+  assert.strictEqual(k.eintraege.length, m.eintraege.length, 'gleiche Zählung');
+  assert.ok(!k.eintraege.some(e => e.mitglied_id === gesperrt), 'keine ID der gesperrten Person');
+  assert.ok(k.eintraege.some(e => e.name === 'Datensatz gesperrt' && e.mitgliedsnummer === null && e.grund === null));
+  assert.ok(m.eintraege.some(e => e.mitglied_id === gesperrt && e.name !== 'Datensatz gesperrt'));
+});
+
+test('Nachweise: Abteilungsleiter kann einen Vermerk, den er nicht sieht, weder ändern noch löschen', () => {
+  let qid = null;
+  const u = mitTabs(null, (tabs, obj) => {
+    // Person in Abteilung 1 OHNE laufende Funktion dort → Vermerke für den AL Fußball unsichtbar
+    const fkt = obj('Funktion');
+    const z = obj('Abteilungszugehoerigkeit').find(a => a.abteilung_id === 1 && !a.austrittsdatum &&
+      !fkt.some(f => f.mitglied_id === a.mitglied_id && f.abteilung_id === 1));
+    const q = tabs.Qualifikation, k = q[0];
+    qid = 99001;
+    const zeile = k.map(() => '');
+    zeile[k.indexOf('qualifikation_id')] = qid; zeile[k.indexOf('mitglied_id')] = z.mitglied_id;
+    zeile[k.indexOf('qualifikationsart_id')] = 2; zeile[k.indexOf('ausgestellt_am')] = '2025-03-01';
+    zeile[k.indexOf('gueltig_bis')] = '2028-03-01'; zeile[k.indexOf('version')] = 1;
+    q.push(zeile);
+  }, 4);
+  const al = (() => {
+    const f = erzeugeFakes({ tabs: (() => { const t = {}; u.f.datei.getSheets().forEach(b => { t[b.getName()] = u.f.daten(b.getName()).map(z => z.slice()); }); return t; })(),
+      email: emailMit({ Benutzer: u.f.daten('Benutzer') }, 'Abteilungsleiter', 1), eigentuemer: MV });
+    return { f, g: ladeProjekt(f.globale) };
+  })();
+  const a = rein(al.g.apiNachweiseAendern(qid, 1, { bemerkung: 'geändert' }));
+  assert.strictEqual(a.ok, false); assert.strictEqual(a.fehler.art, 'zugriff');
+  const l = rein(al.g.apiNachweiseLoeschen([{ qualifikation_id: qid, version: 1 }]));
+  assert.strictEqual(l.ok, false); assert.strictEqual(l.fehler.art, 'zugriff');
+});
+
+test('Beitritt: Fehler nach dem Schreiben → Wiedereintritt und Nummernzähler werden vollständig zurückgenommen', () => {
+  const u = beitrittsUmgebung();
+  const zr = u.obj('Mitgliedschaftszeitraum');
+  const aus = u.obj('Mitglied').find(m => m.status === 'ausgetreten' && m.vorname && m.nachname && !m.sterbedatum &&
+    zr.filter(z => z.mitglied_id === m.mitglied_id).every(z => z.austrittsdatum));
+  const vorher = { m: aus, zr: zr.filter(z => z.mitglied_id === aus.mitglied_id).length, zug: JSON.stringify(u.obj('Abteilungszugehoerigkeit').filter(z => z.mitglied_id === aus.mitglied_id)),
+    n: u.obj('_Konfig').find(k => k.schluessel === 'mitgliedsnummer_naechste').wert, konten: u.obj('Beitragskonto').length, mitglieder: u.obj('Mitglied').length };
+  const orig = u.g.Snapshot.schreibe;
+  u.g.Snapshot.schreibe = function () { throw new Error('erzwungen'); };
+  const d = ok(u.g.apiBeitrittImportieren([xmlAntrag('w.xml', [
+    { Anrede: 'Frau', Nachname: aus.nachname, Vorname: aus.vorname, GebDat: '', IBAN: 'DE02120300000000202051', Gesamtbeitrag: '100', 'Abteilung 1': 'Turnen' },
+    { Anrede: 'Herr', Nachname: 'Neuling', Vorname: 'Kai', GebDat: '2015-03-03' }])], [{ index: 0, personen: { 0: 'wiedereintritt' } }]));
+  u.g.Snapshot.schreibe = orig;
+  assert.strictEqual(d.ergebnisse[0].ok, false);
+  const nachher = u.obj('Mitglied').find(m => m.mitglied_id === aus.mitglied_id);
+  ['status', 'beitragskonto_id', 'beitragsgemeinschaft_id', 'beitragsart_id'].forEach(f => assert.strictEqual(nachher[f], vorher.m[f], f));
+  assert.strictEqual(u.obj('Mitgliedschaftszeitraum').filter(z => z.mitglied_id === aus.mitglied_id).length, vorher.zr);
+  assert.strictEqual(u.obj('_Konfig').find(k => k.schluessel === 'mitgliedsnummer_naechste').wert, vorher.n, 'Zähler unverändert');
+  assert.strictEqual(u.obj('Beitragskonto').length, vorher.konten);
+  assert.strictEqual(u.obj('Mitglied').length, vorher.mitglieder);
+  const zugNachher = u.obj('Abteilungszugehoerigkeit').filter(z => z.mitglied_id === aus.mitglied_id)
+    .map(z => { const o = Object.assign({}, z); delete o.version; delete o.geaendert_am; delete o.geaendert_von; return o; });
+  const zugVorher = JSON.parse(vorher.zug).map(z => { const o = Object.assign({}, z); delete o.version; delete o.geaendert_am; delete o.geaendert_von; return o; });
+  assert.deepStrictEqual(zugNachher, zugVorher, 'wieder geöffnete Zugehörigkeit ist zurückgenommen');
+});
+
+test('Prüfregeln: überlappende/mehrfach offene Zeiträume, Ende vor Beginn, doppelte Funktion, fehlende Verweise', () => {
+  const { g, daten } = ladeFachdaten();
+  const d = kopie(daten);
+  const id = d.Mitglied[0].mitglied_id;
+  const art = d.Funktion[0].funktionsart_id;
+  d.Mitgliedschaftszeitraum.push({ zeitraum_id: 9001, mitglied_id: id, eintrittsdatum: '2026-01-01', austrittsdatum: null });
+  d.Mitgliedschaftszeitraum.push({ zeitraum_id: 9002, mitglied_id: 424242, eintrittsdatum: '2020-05-01', austrittsdatum: '2019-01-01' });
+  d.Funktion.push({ funktion_id: 9101, mitglied_id: id, funktionsart_id: art, abteilung_id: d.Funktion[0].abteilung_id, von: '2024-01-01', bis: null },
+    { funktion_id: 9102, mitglied_id: id, funktionsart_id: art, abteilung_id: d.Funktion[0].abteilung_id, von: '2025-01-01', bis: null },
+    { funktion_id: 9103, mitglied_id: id, funktionsart_id: art, abteilung_id: d.Funktion[0].abteilung_id, zusatz: 'X', von: '2025-05-01', bis: '2025-01-01' });
+  d.Sollstellung = (d.Sollstellung || []).concat([{ sollstellung_id: 9201, beitragskonto_id: 777777, jahr: 2026 }]);
+  d.Notiz = [{ notiz_id: 9301, mitglied_id: 555555, beitragskonto_id: null }];
+  d.Benutzer = [{ benutzer_id: 9401, email: 'x@y.de', mitglied_id: 666666, rolle: 'Kassier', aktiv: true }];
+  const b = kopie(g.Pruefregeln.pruefe(d, '2026-10-25', {}));
+  const hat = (regel, tab, rid) => b.some(x => x.regel === regel && x.tab === tab && (rid === undefined || x.id === rid));
+  assert.ok(hat('zeitraum_ueberlappung', 'Mitgliedschaftszeitraum'), 'zweiter offener Zeitraum');
+  assert.ok(hat('datum_reihenfolge', 'Mitgliedschaftszeitraum', 9002));
+  assert.ok(hat('verweis_ungueltig', 'Mitgliedschaftszeitraum', 9002));
+  assert.ok(hat('funktion_doppelt', 'Funktion', 9102));
+  assert.ok(hat('datum_reihenfolge', 'Funktion', 9103));
+  assert.ok(hat('verweis_ungueltig', 'Sollstellung', 9201));
+  assert.ok(hat('verweis_ungueltig', 'Notiz', 9301));
+  assert.ok(hat('verweis_ungueltig', 'Benutzer', 9401));
+  Object.keys(g.Pruefregeln.REGELN).forEach(r => assert.ok(g.Pruefregeln.REGELN[r].titel));
+});
+
+test('neueId: von Hand eingefügte Zeile mit der nächsten ID → keine doppelte ID beim Anlegen', () => {
+  const u = als(MV);
+  const zaehler = Number(u.obj('_Konfig').find(k => k.schluessel === 'next_id_Notiz').wert);
+  // Zeile „von Hand“ mit genau der ID, die der Zähler als Nächstes vergeben würde
+  const blatt = u.f.datei.getSheetByName('Notiz');
+  const kopf = u.f.daten('Notiz')[0];
+  blatt.appendRow(kopf.map(h => h === 'notiz_id' ? zaehler : h === 'art' ? 'Notiz' : h === 'text' ? 'von Hand' : h === 'sichtbar_fuer' ? 'Verwaltung' : ''));
+  const neu = rein(u.g.DB.mitSperre(() => u.g.DB.einfuegen('Notiz', { art: 'Notiz', text: 'per Skript', sichtbar_fuer: 'Verwaltung', erstellt_von: MV }, { email: MV })));
+  assert.ok(neu.notiz_id > zaehler, 'ID ' + neu.notiz_id + ' liegt über der von Hand vergebenen ' + zaehler);
+  const ids = u.obj('Notiz').map(n => n.notiz_id);
+  assert.strictEqual(new Set(ids).size, ids.length, 'IDs eindeutig');
+});
+
+test('Lesen über die Sheets-API innerhalb der Sperre: vorher SpreadsheetApp.flush()', () => {
+  const u = als(MV);
+  const folge = [];
+  const flush = u.f.globale.SpreadsheetApp.flush;
+  const batchGet = u.f.globale.Sheets.Spreadsheets.Values.batchGet;
+  u.f.globale.SpreadsheetApp.flush = function () { folge.push('flush'); return flush.apply(this, arguments); };
+  u.f.globale.Sheets.Spreadsheets.Values.batchGet = function () { folge.push('batchGet'); return batchGet.apply(this, arguments); };
+  u.g.DB.mitSperre(() => {
+    u.g.DB.einfuegen('Notiz', { art: 'Notiz', text: 'a', sichtbar_fuer: 'Verwaltung', erstellt_von: MV }, { email: MV });
+    u.g.DB.vorratLeeren();
+    u.g.DB.lese(['Notiz']);
+  });
+  const i = folge.lastIndexOf('batchGet');
+  assert.ok(i > 0 && folge[i - 1] === 'flush', folge.join(' → '));
+});

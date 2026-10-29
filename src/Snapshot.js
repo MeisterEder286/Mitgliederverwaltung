@@ -88,6 +88,11 @@ var Snapshot = (function () {
     if (!SnapshotKern.mitgliedSichtbar(basis(), ktx, heute(), id)) throw Fehler.keinZugriff();
   }
 
+  /** Wirft Fehler.keinZugriff(), wenn die Zeile (z. B. ein Nachweis) für ktx nicht sichtbar ist – wie im Snapshot. */
+  function pruefeZeile(ktx, tab, zeile) {
+    if (!SnapshotKern.zeileSichtbarFuer(basis(), ktx, heute(), tab, zeile)) throw Fehler.keinZugriff();
+  }
+
   /** Cache ungültig machen (nach Setup, Massenänderungen, direkten Eingriffen in die Tabelle). */
   function verwerfen() {
     basisSpeicher = null;
@@ -107,7 +112,7 @@ var Snapshot = (function () {
 
   return {
     fuerClient: fuerClient,
-    basis: basis, fuer: fuer, schreibe: schreibe, pruefeMitglied: pruefeMitglied, verwerfen: verwerfen,
+    basis: basis, fuer: fuer, schreibe: schreibe, pruefeMitglied: pruefeMitglied, pruefeZeile: pruefeZeile, verwerfen: verwerfen,
     warmhalten: warmhalten, mitlesen: mitlesen, letzterCache: letzterCache
   };
 })();

@@ -94,7 +94,7 @@ test('Mitgliederverwalter: Austritt eines Kontoinhabers verlangt eine Entscheidu
     await ui.page.waitForSelector('dialog', { state: 'detached' });
     const z = ui.objekte('Mitgliedschaftszeitraum').filter(x => x.mitglied_id === kandidat);
     assert.ok(z.some(x => x.austritt_wirksam), 'Austritt gespeichert');
-    assert.ok(ui.objekte('Mitglied').some(m => /Zahlweg offen/.test(m.bemerkung || '')));
+    assert.ok(ui.objekte('Notiz').some(n => /Zahlweg offen/.test(n.text || '') && n.sichtbar_fuer === 'Finanzen'));
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });

@@ -419,7 +419,8 @@ function erzeugeVerein(optionen) {
     }
     const ersterZr = p._zeitraeume[p._zeitraeume.length - 1];
     gewaehlt.forEach(a => {
-      const ein = max(ersterZr.eintrittsdatum, zufallsDatum(z, jahrVon(ersterZr.eintrittsdatum), min(STICHTAG, plusMonate(ersterZr.eintrittsdatum, 36))));
+      const zufall = max(ersterZr.eintrittsdatum, zufallsDatum(z, jahrVon(ersterZr.eintrittsdatum), min(STICHTAG, plusMonate(ersterZr.eintrittsdatum, 36))));
+      const ein = istAktiv(p) || !austrittVon(p) ? zufall : min(zufall, austrittVon(p));   // nie nach dem Austritt (Prüfregel datum_reihenfolge)
       daten.Abteilungszugehoerigkeit.push({
         zugehoerigkeit_id: neueId('Abteilungszugehoerigkeit'), mitglied_id: p.mitglied_id, abteilung_id: a, passnummer: a === 1 && z.ja(0.4) ? 'SP-' + z.int(100000, 999999) : null,
         status: p._alter > 50 && z.ja(0.25) || z.ja(0.06) ? 'passiv' : 'aktiv',

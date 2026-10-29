@@ -110,7 +110,7 @@ test('Austritt: Kontoinhaber mit Abhängigen braucht eine Option; „alle treten
   assert.ok(d.aktualisiert.zeitraeume === undefined || Array.isArray(d.aktualisiert.zeitraeume));
 });
 
-test('Austritt zum Jahresende: bleibt bis dahin aktiv, Option „Zahlweg offen“ setzt Merker; Wiedereintritt danach', () => {
+test('Austritt zum Jahresende: bleibt bis dahin aktiv, Option „Zahlweg offen“ legt eine Finanz-Notiz an; Wiedereintritt danach', () => {
   const u = als(MV);
   let inhaber = null;
   for (const m of aktiveMitglieder(u)) {
@@ -121,7 +121,12 @@ test('Austritt zum Jahresende: bleibt bis dahin aktiv, Option „Zahlweg offen�
   const m = u.obj('Mitglied');
   assert.strictEqual(m.find(x => x.mitglied_id === inhaber.m.mitglied_id).status, 'aktiv');
   const abh = inhaber.w.konten[0].abhaengige[0].mitglied_id;
-  assert.match(m.find(x => x.mitglied_id === abh).bemerkung, /Zahlweg offen/);
+  // Merker als Finanz-Notiz, nicht im für Abteilungs-/Jugendleitung lesbaren Feld bemerkung
+  assert.doesNotMatch(String(m.find(x => x.mitglied_id === abh).bemerkung || ''), /Zahlweg offen/);
+  const notiz = u.obj('Notiz').find(n => n.mitglied_id === abh && /Zahlweg offen/.test(n.text));
+  assert.ok(notiz, 'Notiz „Zahlweg offen“ angelegt');
+  assert.strictEqual(notiz.sichtbar_fuer, 'Finanzen');
+  assert.strictEqual(notiz.beitragskonto_id, inhaber.w.konten[0].konto_id);
   // Wiedereintritt geht erst nach dem Austritt
   fehler(u.g.apiMitgliedWiedereintritt(inhaber.m.mitglied_id, { eintrittsdatum: '2027-02-01' }), 'fachlich');
 });
