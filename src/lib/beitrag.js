@@ -379,6 +379,8 @@ var Beitrag = (function () {
       var adr = zahleradresse(k, daten);
       if (!adr || !adr.strasse || !adr.plz || !adr.ort) {
         melde('adresse_unvollstaendig', 'warnung', id, k.kontoinhaber_mitglied_id, 'Konto ' + id + ' (' + k.kontoinhaber_name + '): Anschrift des Zahlers unvollständig (für strukturierte Adressen)');
+      } else if (!/^[A-Za-z]{2}$/.test(String(adr.land || 'DE').trim())) {
+        melde('adresse_unvollstaendig', 'warnung', id, k.kontoinhaber_mitglied_id, 'Konto ' + id + ' (' + k.kontoinhaber_name + '): Land „' + adr.land + '“ ist kein ISO-Ländercode (z. B. DE, AT) – Anschrift fehlt sonst in der SEPA-Datei');
       } else if (!adr.hausnummer) {
         melde('hausnummer_fehlt', 'warnung', id, k.kontoinhaber_mitglied_id, 'Konto ' + id + ' (' + k.kontoinhaber_name + '): Hausnummer fehlt in der Anschrift');
       }

@@ -36,6 +36,7 @@ keine externen Schriften oder Bibliotheken. Mobil bedienbar, Rollen- und Feldrec
 | Datenmodell (maßgeblich) | `docs/daten/*.csv` (Ausgangspunkt `docs/Mitgliederverwaltung_TSV_Ergoldsbach.xlsx`) |
 | Sicherheit | `docs/Sicherheitsregeln.md`, `docs/SICHERHEITSPRUEFUNG.md`, `docs/GOLIVE.md` |
 | Register (C6), Verarbeitungsverzeichnis (D2) | `docs/REGISTER.md`, `docs/VERARBEITUNGSVERZEICHNIS.md` |
+| Code-Prüfung 10/2026 (Ist/Soll, Befunde, Datenmodell-Vorschlag, offene Entscheidungen) | `docs/PRUEFUNG_2026-10.md` |
 
 ## Entwicklung
 

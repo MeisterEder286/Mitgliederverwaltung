@@ -566,8 +566,11 @@ var Finanzen = (function () {
       s.anzahl++; s.summe = Beitrag.runde(s.summe + p.betrag);
     });
     var warnungen = [];
-    var ohneAdresse = l.posten.filter(function (p) { return !(p.adresse && p.adresse.strasse && p.adresse.plz && p.adresse.ort); }).length;
+    var ohneAdresse = l.posten.filter(function (p) { return !Sepa.adresseVollstaendig(p.adresse); }).length;
     if (ohneAdresse) warnungen.push(ohneAdresse + ' Zahler ohne vollständige Anschrift – die Adresse wird in der Datei weggelassen (mit der Hausbank klären, ob das zulässig ist).');
+    var h = heute();
+    var vergangen = l.posten.filter(function (p) { return p.einzugsdatum && p.einzugsdatum < h; }).length;
+    if (vergangen) warnungen.push(vergangen + ' Lastschrift(en) mit Einzugsdatum in der Vergangenheit – für die Datei bitte ein neues Einzugsdatum angeben.');
     var g = glaeubiger(x.konfig);
     var pruef = Sepa.pruefeFuerDatei(l.posten.length ? l : { posten: [{ betrag: 1, einzugsdatum: '2000-01-01', mandatsreferenz: 'X', konto: 0 }] }, g)
       .filter(function (t) { return !/^Konto /.test(t); });
@@ -610,7 +613,7 @@ var Finanzen = (function () {
       x.daten.Sollstellung = frisch.Sollstellung;
       var l = sepaUmfang(Sepa.lauf(x.daten, jahr, sepaOptionen(x.konfig, einzugsdatum)), x.daten.Sollstellung, modus);
       if (!l.posten.length) throw Fehler.fachlich('Der Lauf enthält keine Posten – es gibt keine offenen, einziehbaren Sollstellungen für ' + jahr + '.');
-      var datei = Sepa.xml(l, glaeubiger(x.konfig), { erstelltAm: DB.jetzt() });
+      var datei = Sepa.xml(l, glaeubiger(x.konfig), { erstelltAm: DB.jetzt(), heute: heute() });
       if (!datei.ok) throw Fehler.fachlich('Die SEPA-Datei kann noch nicht erzeugt werden: ' + datei.fehler.join(' '));
       var aend = {};
       l.posten.forEach(function (p) { aend[p.sollstellung_id] = { sepa_sequenz: p.sequenz, einzugsdatum: p.einzugsdatum }; });

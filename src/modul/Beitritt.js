@@ -90,7 +90,16 @@ var BeitrittModul = (function () {
         var dub = p.dubletten[0];
         if (!dub) throw Fehler.fachlich(antrag.datei + ': ' + p.name + ' hat keinen passenden Eintrag für einen Wiedereintritt.');
         if (dub.status === 'aktiv') throw Fehler.fachlich(antrag.datei + ': ' + p.name + ' ist bereits aktives Mitglied (Nr. ' + dub.mitgliedsnummer + ') – Antrag überspringen oder als neue Person anlegen.');
+        // wie Mitglieder.wiedereintritt: für eine verstorbene Person kein Wiedereintritt
+        if (dub.status === 'verstorben') throw Fehler.fachlich(antrag.datei + ': ' + p.name + ' (Nr. ' + dub.mitgliedsnummer + ') ist als verstorben erfasst – kein Wiedereintritt möglich.');
         wieder[t.Mitglied[p.index].mitglied_id] = dub;
+      }
+    });
+    // Ohne gültiges Eintrittsdatum legt die Migration keinen Mitgliedschaftszeitraum an (Prüfliste eintritt_fehlt) –
+    // die Person wäre ohne Status, Beitrag und BLSV-Zählung. Dann nichts speichern.
+    t.Mitglied.forEach(function (m, i) {
+      if (!(t.Mitgliedschaftszeitraum || []).some(function (z) { return z.mitglied_id === m.mitglied_id; })) {
+        throw Fehler.fachlich(antrag.datei + ': Das Eintrittsdatum von ' + (plan.personen[i] ? plan.personen[i].name : 'Person ' + (i + 1)) + ' ist ungültig – bitte im Antrag korrigieren.');
       }
     });
     if (!ent.gemeinschaft && t.Beitragsgemeinschaft.length) {

@@ -164,7 +164,7 @@ var NachweiseModul = (function () {
         var art = arten[q.qualifikationsart_id];
         if (!art || art.kategorie !== 'Führungszeugnis') throw Fehler.fachlich('Gelöscht werden hier nur Führungszeugnis-Vermerke.');
         if (q.geloescht_am) throw Fehler.fachlich('Ein Vermerk ist bereits gelöscht.');
-        var ab = q.zu_loeschen_ab || Fristen.zuLoeschenAb(q.mitglied_id, basis.tabs, art, h);
+        var ab = Fristen.loeschdatum(q, basis.tabs, art, h);
         if (!ab || ab > h) throw Fehler.fachlich('Die Löschfrist eines Vermerks ist noch nicht erreicht.');
         return { id: q.qualifikation_id, version: x.version, werte: Fristen.loeschAenderungen(h) };
       });

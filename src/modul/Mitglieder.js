@@ -158,6 +158,23 @@ var Mitglieder = (function () {
 
   // ================================================================== Bearbeiten
 
+  /**
+   * Regel „alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto“ (Datenmodell, Tab
+   * Beitragsgemeinschaft). Liefert Feldfehler; id = das bearbeitete Mitglied (beim Anlegen leer).
+   */
+  function gemeinschaftKontoFehler(gemeinschaftId, kontoId, id) {
+    if (leer(gemeinschaftId)) return [];
+    var andere = (daten().Mitglied || []).filter(function (m) {
+      return m.beitragsgemeinschaft_id === Number(gemeinschaftId) && m.mitglied_id !== Number(id) && m.beitragskonto_id;
+    });
+    if (!andere.length || Number(kontoId) === andere[0].beitragskonto_id) return [];
+    return [{ feld: 'beitragskonto_id', meldung: 'Alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto (Nr. ' + andere[0].beitragskonto_id + ').' }];
+  }
+
+  // Datenschutz-Status nur über den Datenschutz-Ablauf (Sperren/Anonymisieren mit Protokoll), nicht per
+  // normalem Bearbeiten oder Anlegen (Befund N2 der Sicherheitsprüfung).
+  var DATENSCHUTZ_FELDER = ['anonymisiert', 'anonymisiert_am', 'verarbeitung_eingeschraenkt', 'sperre_grund', 'loeschbar_ab'];
+
   function speichern(ktx, id, version, werte) {
     return DB.mitSperre(function () {
       Snapshot.pruefeMitglied(ktx, id);
@@ -165,13 +182,16 @@ var Mitglieder = (function () {
       var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', werte || {}));
       delete felder.status;          // Cache, nur vom Skript
       delete felder.mitgliedsnummer; // bleibt lebenslang gleich
-      // Datenschutz-Status nur über den Datenschutz-Ablauf (Sperren/Anonymisieren mit Protokoll), nicht per
-      // normalem Bearbeiten (Befund N2 der Sicherheitsprüfung).
-      ['anonymisiert', 'anonymisiert_am', 'verarbeitung_eingeschraenkt', 'sperre_grund', 'loeschbar_ab']
-        .forEach(function (f) { delete felder[f]; });
+      DATENSCHUTZ_FELDER.forEach(function (f) { delete felder[f]; });
       pruefeSchema('Mitglied', felder, true);
       var p = plausibel(felder, alt);
-      feldfehler(p.fehler);
+      var fehler = p.fehler;
+      var hat = function (f) { return Object.prototype.hasOwnProperty.call(felder, f); };
+      if (hat('beitragsgemeinschaft_id') || hat('beitragskonto_id')) {
+        fehler = fehler.concat(gemeinschaftKontoFehler(hat('beitragsgemeinschaft_id') ? felder.beitragsgemeinschaft_id : alt.beitragsgemeinschaft_id,
+          hat('beitragskonto_id') ? felder.beitragskonto_id : alt.beitragskonto_id, id));
+      }
+      feldfehler(fehler);
       var r = DB.aktualisieren('Mitglied', id, felder, version, ktx);
       var aenderungen = [{ tab: 'Mitglied', neu: r.neu }];
       var protokoll = Protokoll.ausDiff('Mitglied', id, r.diff);
@@ -212,6 +232,7 @@ var Mitglieder = (function () {
     return DB.mitSperre(function () {
       var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', eingabe.mitglied || {}));
       delete felder.status; delete felder.mitgliedsnummer; delete felder.sterbedatum;
+      DATENSCHUTZ_FELDER.forEach(function (f) { delete felder[f]; });
       var fehler = [];
       if (!istDatum(eingabe.eintrittsdatum)) fehler.push({ feld: 'eintrittsdatum', meldung: 'Eintrittsdatum: Angabe fehlt (TT.MM.JJJJ).' });
       var p = plausibel(felder, {});
@@ -224,12 +245,7 @@ var Mitglieder = (function () {
         throw Fehler.fachlich('Mögliche Dublette: ' + d.map(function (x) { return x.name + ' (Nr. ' + x.mitgliedsnummer + ')'; }).join('; ') +
           '. Bitte prüfen – bei einem Wiedereintritt das bestehende Mitglied verwenden.', [{ feld: 'nachname', meldung: 'Gleicher Name und Geburtsdatum vorhanden.' }]);
       }
-      if (felder.beitragsgemeinschaft_id) {
-        var gleiche = (daten().Mitglied || []).filter(function (m) { return m.beitragsgemeinschaft_id === Number(felder.beitragsgemeinschaft_id); });
-        if (gleiche.length && gleiche[0].beitragskonto_id && Number(felder.beitragskonto_id) !== gleiche[0].beitragskonto_id) {
-          feldfehler([{ feld: 'beitragskonto_id', meldung: 'Alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto (Nr. ' + gleiche[0].beitragskonto_id + ').' }]);
-        }
-      }
+      feldfehler(gemeinschaftKontoFehler(felder.beitragsgemeinschaft_id, felder.beitragskonto_id, null));
       (eingabe.abteilungen || []).forEach(function (a) { pruefeAbteilung(ktx, a.abteilung_id); });
 
       felder.mitgliedsnummer = naechsteMitgliedsnummer();
@@ -275,7 +291,11 @@ var Mitglieder = (function () {
       }
       var ende = zr.length ? Mitgliedschaft.endeVon(zr[zr.length - 1]) : null;
       if (ende && eingabe.eintrittsdatum <= ende) feldfehler([{ feld: 'eintrittsdatum', meldung: 'Der Eintritt muss nach dem letzten Austritt (' + ende + ') liegen.' }]);
-      (eingabe.abteilungen || []).forEach(function (a) { pruefeAbteilung(ktx, a.abteilung_id); });
+      (eingabe.abteilungen || []).forEach(function (a) {
+        pruefeAbteilung(ktx, a.abteilung_id);
+        // Vorab prüfen, damit kein Zeitraum ohne Abteilungen geschrieben wird (Abbruch nach dem ersten Schreiben)
+        zugehoerigkeitPruefen(Number(id), Number(a.abteilung_id), eingabe.eintrittsdatum);
+      });
       var z = DB.einfuegen('Mitgliedschaftszeitraum', { mitglied_id: Number(id), eintrittsdatum: eingabe.eintrittsdatum, bemerkung: 'Wiedereintritt' }, ktx);
       var aenderungen = [{ tab: 'Mitgliedschaftszeitraum', neu: z }];
       var protokoll = [{ aktion: 'angelegt', tabelle: 'Mitgliedschaftszeitraum', datensatz_id: z.zeitraum_id, kommentar: 'Wiedereintritt ' + z.eintrittsdatum }];
@@ -432,17 +452,23 @@ var Mitglieder = (function () {
 
   // ================================================================== Abteilungszugehörigkeit
 
-  function zugehoerigkeitAnlegenOderReaktivieren(ktx, mitgliedId, abteilungId, status, ab, aenderungen, protokoll) {
+  /** Prüft, ob eine Zuordnung ab `ab` möglich ist (wirft sonst). Liefert die vorhandene, beendete Zeile oder null. */
+  function zugehoerigkeitPruefen(mitgliedId, abteilungId, ab) {
     var abt = finde('Abteilung', 'abteilung_id', abteilungId);
     if (!abt) feldfehler([{ feld: 'abteilung_id', meldung: 'Abteilung unbekannt.' }]);
     if (abt.aktiv === false) feldfehler([{ feld: 'abteilung_id', meldung: 'Die Abteilung ' + abt.bezeichnung + ' ruht.' }]);
     var vorhanden = (daten().Abteilungszugehoerigkeit || []).filter(function (a) {
       return a.mitglied_id === mitgliedId && a.abteilung_id === abteilungId;
     })[0];
+    if (vorhanden && (!vorhanden.austrittsdatum || vorhanden.austrittsdatum > ab)) {
+      throw Fehler.fachlich('Die Person ist der Abteilung ' + abt.bezeichnung + ' bereits zugeordnet.', [{ feld: 'abteilung_id', meldung: 'Bereits zugeordnet.' }]);
+    }
+    return vorhanden || null;
+  }
+
+  function zugehoerigkeitAnlegenOderReaktivieren(ktx, mitgliedId, abteilungId, status, ab, aenderungen, protokoll) {
+    var vorhanden = zugehoerigkeitPruefen(mitgliedId, abteilungId, ab);
     if (vorhanden) {
-      if (!vorhanden.austrittsdatum || vorhanden.austrittsdatum > ab) {
-        throw Fehler.fachlich('Die Person ist der Abteilung ' + abt.bezeichnung + ' bereits zugeordnet.', [{ feld: 'abteilung_id', meldung: 'Bereits zugeordnet.' }]);
-      }
       var r = DB.aktualisieren('Abteilungszugehoerigkeit', vorhanden.zugehoerigkeit_id,
         { austrittsdatum: null, status: status, eintrittsdatum: ab }, vorhanden.version || 0, ktx);
       aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: r.neu });

@@ -189,6 +189,7 @@ var Loeschung = (function () {
       telefon: null, handy: null, email: null, versandart: null, adresse_ungueltig: null, adresse_ungueltig_am: null,
       ehrenmitglied: null, ehrenmitglied_seit: null, sterbedatum: null,
       vertreter_mitglied_id: null, vertreter_name: null, vertreter_kontakt: null, bemerkung: null,
+      ausbildung_art: null, ausbildung_bis: null, ausbildung_nachweis_am: null,
       verarbeitung_eingeschraenkt: true, anonymisiert: true, anonymisiert_am: heute
     };
     if (fristInfo && !fristInfo.laeuft_noch) {
@@ -206,7 +207,7 @@ var Loeschung = (function () {
     liste(daten, 'Notiz').forEach(function (n) { if (n.mitglied_id === id) entferne('Notiz', n.notiz_id); });
     // Anschreiben: Datum/Anlass bleiben als Nachweis, Inhalt und Anschrift werden geleert
     liste(daten, 'Anschreiben').forEach(function (a) {
-      if (a.mitglied_id === id) aendere('Anschreiben', a.anschreiben_id, { inhalt: null, empfaenger: null, betreff: 'Schreiben (anonymisiert)', dokument_link: null, bemerkung: null });
+      if (a.mitglied_id === id) aendere('Anschreiben', a.anschreiben_id, { inhalt: null, empfaenger: null, email_an: null, betreff: 'Schreiben (anonymisiert)', dokument_link: null, bemerkung: null });
     });
     // Dokument-Links: entfernen – außer SEPA-Mandat (Nachweis für gesperrte Buchungen, Personenbezug gelöst)
     liste(daten, 'Dokument').forEach(function (doc) {

@@ -64,8 +64,10 @@
   }
   function mitglied(id) { return A.daten.hole('mitglieder', id); }
   function linkEl(text, url) {
-    var a = A.el('a', text, { href: url, target: '_blank', rel: 'noopener noreferrer' });
-    return a;
+    // nur https-Links (Drive) – andere Schreibwege ins Sheet dürfen keinen javascript:-Link einschleusen
+    var sicher = A.sichereUrl(url);
+    if (!sicher) return A.el('span', text);
+    return A.el('a', text, { href: sicher, target: '_blank', rel: 'noopener noreferrer' });
   }
   /** Nach dem Speichern neu zeichnen – im Mitglied-Detail auf dem Reiter „Dokumente & Schreiben“ bleiben. */
   function neuZeichnen() {
