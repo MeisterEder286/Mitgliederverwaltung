@@ -110,6 +110,7 @@ function erzeugeFakes(opt) {
         return out;
       },
       getValue() { return range.getValues()[0][0]; },
+      getDisplayValues() { return range.getValues().map(z => z.map(v => String(v))); },
       setValues(werte) { zaehle('setValues'); schreib(werte); return range; },
       setValue(v) { zaehle('setValue'); schreib([[v]]); return range; },
       setNumberFormat() { zaehle('setNumberFormat'); return range; },
@@ -200,9 +201,32 @@ function erzeugeFakes(opt) {
     return m[1].replace(/''/g, "'");
   }
 
+  // A1-Bereich "'Tab'!B3" oder "'Tab'!B3:D4" → { tab, r, c } (für values.batchUpdate)
+  function zerlegeA1(bereichText) {
+    const tab = tabAusBereich(bereichText);
+    const m = /!([A-Z]+)(\d+)(?::[A-Z]+\d+)?$/.exec(bereichText);
+    if (!m) throw new Error('Fake: values.batchUpdate braucht einen Bereich mit Startzelle: ' + bereichText);
+    const c = m[1].split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+    return { tab, r: Number(m[2]), c };
+  }
+
   const Sheets = {
     Spreadsheets: {
       Values: {
+        // values.batchUpdate(resource, id): schreibt wie setValues (USER_ENTERED wird nicht weiter nachgebildet)
+        batchUpdate(resource, id) {
+          zaehle('valuesBatchUpdate');
+          if (id !== dbId) throw new Error('Fake: unbekannte Datei-ID ' + id);
+          (resource.data || []).forEach(d => {
+            const z = zerlegeA1(d.range);
+            if (!tabs[z.tab]) throw new Error('Unable to parse range: ' + d.range);
+            const werte = d.values || [];
+            const breite = Math.max(1, ...werte.map(w => w.length));
+            bereich(z.tab, z.r, z.c, werte.length, breite).setValues(werte.map(w => { const x = w.slice(); while (x.length < breite) x.push(''); return x; }));
+            zaehler.setValues--; zaehler.sheets--;   // nicht doppelt zählen
+          });
+          return { totalUpdatedCells: (resource.data || []).reduce((n, d) => n + (d.values || []).reduce((m, w) => m + w.length, 0), 0) };
+        },
         batchGet(id, optionen) {
           zaehle('batchGet');
           if (id !== dbId) throw new Error('Fake: unbekannte Datei-ID ' + id);
@@ -210,8 +234,18 @@ function erzeugeFakes(opt) {
             valueRanges: (optionen.ranges || []).map(r => {
               const name = tabAusBereich(r);
               if (!tabs[name]) throw new Error('Unable to parse range: ' + r);
+              // Teilbereich 'Tab'!B2 bzw. 'Tab'!A2:O51 (sonst ganzer Tab)
+              const m = /!([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(r);
+              const sp = t => t.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+              let quelle = tabs[name].slice(0, letzteZeile(tabs[name]));
+              if (m) {
+                const r1 = Number(m[2]), c1 = sp(m[1]);
+                const r2 = m[4] ? Number(m[4]) : r1, c2 = m[3] ? sp(m[3]) : c1;
+                quelle = quelle.slice(r1 - 1, r2).map(z => z.slice(c1 - 1, c2));
+              }
               // Wie die echte API: leere Zeilen/Zellen am Ende werden abgeschnitten
-              const d = tabs[name].slice(0, letzteZeile(tabs[name])).map(z => {
+              while (quelle.length && quelle[quelle.length - 1].every(v => v === '' || v === null || v === undefined)) quelle.pop();
+              const d = quelle.map(z => {
                 const zeile = z.map(v => (v === null || v === undefined ? '' : v));
                 let n = zeile.length;
                 while (n > 0 && zeile[n - 1] === '') n--;

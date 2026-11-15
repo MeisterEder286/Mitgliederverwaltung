@@ -125,10 +125,14 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 ### `Messung` (`src/Messung.js`)
 `start(name)` → Handle; `ende(handle, {ok, cache, rollen})` → `{ server_ms, sheets }` und Puffer im Cache;
 `schreibePuffer()` (Trigger, stündlich) → `_Messung`; `auswertung()` → Median/P90 je Funktion.
+Messwerk (docs/LEISTUNG.md): `abschnitt(name, fn)`, `miss(art, info, fn)`, `bericht()` → `_mess` (Abschnitte, Zähler, Spur);
+`diagnoseAnfordern()`/`diagnoseUebernehmen()`. Alle Blattzugriffe über `DB.blatt` laufen durch eine Messhülle
+(`Datenzugriff.js`) – neue Sheet-/Range-Methoden dort ergänzen. Bericht nur über `apiMessen(name, args)` bzw.
+`doGet?messen=1` und nur mit `messung_lesen`. Sonden (`src/Sonden.js`) nur im Editor gegen eine Kopie (`SONDE_DB_ID`).
 
 ### Öffentliche Funktionen (`src/Einstieg.js`)
-`doGet(e)`, `apiStart()`, `apiPing()`, `apiMessungen()`, `apiClientMessungen(liste)`; für den Eigentümer im Editor:
-`setup()`, `triggerEinrichten()`; Trigger: `messungSchreiben()`.
+`doGet(e)`, `apiStart()`, `apiPing()`, `apiMessen(name, args)`, `apiMessungen()`, `apiClientMessungen(liste)`; für den Eigentümer im Editor:
+`setup()`, `triggerEinrichten()`, `sondeLesen/Schreiben/Sichtbarkeit/Werte/Preise/Alle()`; Trigger: `messungSchreiben()`.
 
 ### Client (`src/client/`)
 `index.html` (Gerüst), `stil.html`, `app.html`. Startdaten kommen als `<script type="application/json" id="startdaten">`.

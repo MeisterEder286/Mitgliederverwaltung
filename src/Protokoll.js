@@ -55,7 +55,9 @@ var Protokoll = (function () {
     if (!eintraege || !eintraege.length) return 0;
     // Fortlaufende protokoll_id = Zeilennummer → nur unter der Sperre korrekt. Aufrufer ohne Sperre (z. B. reine
     // Lese-/Exportvermerke) bekommen sie hier (Befund M2; DB.mitSperre ist wiedereintrittsfähig).
-    return DB.mitSperre(function () { return schreibeGesperrt(ktx, eintraege); });
+    return (typeof Messung !== 'undefined' && Messung.abschnitt ? Messung.abschnitt : function (n, f) { return f(); })('log', function () {
+      return DB.mitSperre(function () { return schreibeGesperrt(ktx, eintraege); });
+    });
   }
 
   function schreibeGesperrt(ktx, eintraege) {

@@ -35,10 +35,64 @@ var DB = (function () {
 
   function datei() {
     if (!datei_) {
-      datei_ = SpreadsheetApp.openById(dbId());
+      var id = dbId();
+      datei_ = mess('oeffnen', { methode: 'openById' }, function () { return SpreadsheetApp.openById(id); });
       sheetsAufrufe++;
     }
     return datei_;
+  }
+
+  // ------------------------------------------------------------------ Messhülle (docs/LEISTUNG.md)
+  // Jeder Zugriff auf ein Blatt/einen Bereich läuft durch eine dünne Hülle, die Zeit, Art und Zellen an das Messwerk
+  // meldet. Die Hülle kennt nur die Methoden, die der Code tatsächlich benutzt; eine neue Methode hier ergänzen.
+
+  function mess(art, info, fn) {
+    return (typeof Messung !== 'undefined' && Messung.miss) ? Messung.miss(art, info, fn) : fn();
+  }
+  function zellenVon(werte) {
+    return Array.isArray(werte) ? werte.reduce(function (n, z) { return n + (Array.isArray(z) ? z.length : 1); }, 0) : 1;
+  }
+
+  function messBereich(r, tab) {
+    function lies(methode) {
+      return function () { return mess('lesen', { methode: methode, tab: tab, zellen: zellenVon }, function () { return r[methode](); }); };
+    }
+    var h = {
+      getValues: lies('getValues'),
+      getDisplayValues: lies('getDisplayValues'),
+      getValue: function () { return mess('lesen', { methode: 'getValue', tab: tab, zellen: 1 }, function () { return r.getValue(); }); },
+      setValues: function (w) { mess('schreiben', { methode: 'setValues', tab: tab, zellen: zellenVon(w) }, function () { return r.setValues(w); }); return h; },
+      setValue: function (v) { mess('schreiben', { methode: 'setValue', tab: tab, zellen: 1 }, function () { return r.setValue(v); }); return h; },
+      getRow: function () { return r.getRow(); },
+      getColumn: function () { return r.getColumn(); },
+      getNumRows: function () { return r.getNumRows(); },
+      getNumColumns: function () { return r.getNumColumns(); }
+    };
+    return h;
+  }
+
+  function messBlatt(b, tab) {
+    function meta(methode) {
+      return function () { return mess('meta', { methode: methode, tab: tab }, function () { return b[methode](); }); };
+    }
+    var h = {
+      getName: function () { return b.getName(); },
+      getLastRow: meta('getLastRow'),
+      getLastColumn: meta('getLastColumn'),
+      getMaxRows: meta('getMaxRows'),
+      getMaxColumns: meta('getMaxColumns'),
+      getRange: function (r, c, nr, nc) { return messBereich(b.getRange(r, c, nr, nc), tab); },
+      getDataRange: function () { return messBereich(mess('meta', { methode: 'getDataRange', tab: tab }, function () { return b.getDataRange(); }), tab); },
+      appendRow: function (z) { mess('schreiben', { methode: 'appendRow', tab: tab, zellen: z.length }, function () { return b.appendRow(z); }); return h; },
+      insertRowsAfter: function (n, a) { mess('schreiben', { methode: 'insertRowsAfter', tab: tab }, function () { return b.insertRowsAfter(n, a); }); return h; },
+      deleteRow: function (n) { mess('schreiben', { methode: 'deleteRow', tab: tab }, function () { return b.deleteRow(n); }); return h; },
+      deleteRows: function (n, a) { mess('schreiben', { methode: 'deleteRows', tab: tab }, function () { return b.deleteRows(n, a); }); return h; }
+    };
+    return h;
+  }
+
+  function flush() {
+    mess('flush', { methode: 'flush' }, function () { SpreadsheetApp.flush(); });
   }
 
   function tabSchema(tab) {
@@ -49,10 +103,11 @@ var DB = (function () {
 
   function blatt(tab) {
     tabSchema(tab);
-    var b = datei().getSheetByName(tab);
+    var d = datei();
+    var b = mess('oeffnen', { methode: 'getSheetByName', tab: tab }, function () { return d.getSheetByName(tab); });
     sheetsAufrufe++;
     if (!b) throw intern('Tab fehlt in der Datenbank: ' + tab + ' (setup() ausführen)');
-    return b;
+    return messBlatt(b, tab);
   }
 
   function kopfLesen(b) {
@@ -94,10 +149,16 @@ var DB = (function () {
   }
 
   function leseVomSheet(tabs) {
-    var antwort = Sheets.Spreadsheets.Values.batchGet(dbId(), {
-      ranges: tabs.map(function (t) { return "'" + t.replace(/'/g, "''") + "'"; }),
-      valueRenderOption: 'UNFORMATTED_VALUE',
-      dateTimeRenderOption: 'SERIAL_NUMBER'
+    var id = dbId();
+    var antwort = mess('vorladen', {
+      methode: 'batchGet', tabs: tabs,
+      zellen: function (a) { return ((a && a.valueRanges) || []).reduce(function (n, vr) { return n + zellenVon(vr.values || []); }, 0); }
+    }, function () {
+      return Sheets.Spreadsheets.Values.batchGet(id, {
+        ranges: tabs.map(function (t) { return "'" + t.replace(/'/g, "''") + "'"; }),
+        valueRenderOption: 'UNFORMATTED_VALUE',
+        dateTimeRenderOption: 'SERIAL_NUMBER'
+      });
     });
     sheetsAufrufe++;
     var bereiche = (antwort && antwort.valueRanges) || [];
@@ -290,16 +351,20 @@ var DB = (function () {
     try { wartezeit = Number(Konfig.wert('sperre_wartezeit_ms')) || 10000; } catch (e) { /* Standardwert */ }
     var sperre = LockService.getScriptLock();
     try {
-      sperre.waitLock(wartezeit);
+      mess('sperre', { methode: 'waitLock' }, function () { sperre.waitLock(wartezeit); });
     } catch (e) {
       throw Fehler.fachlich('Gerade speichert jemand anderes. Bitte in einigen Sekunden erneut versuchen.');
     }
     gesperrt = true;
+    var seit = Date.now();
     try {
       return fn();
     } finally {
       gesperrt = false;
-      try { SpreadsheetApp.flush(); sheetsAufrufe++; } finally { sperre.releaseLock(); }
+      try { flush(); sheetsAufrufe++; } finally {
+        mess('sperre', { methode: 'releaseLock' }, function () { sperre.releaseLock(); });
+        if (typeof Messung !== 'undefined' && Messung.sperreGehalten) Messung.sperreGehalten(Date.now() - seit);
+      }
     }
   }
 

@@ -62,6 +62,15 @@ var Snapshot = (function () {
 
   /** Für den Browser: nur die gewünschten Bereiche (Standard Kern), in Spaltenform gepackt. */
   function fuerClient(ktx, bereiche) {
+    return ansicht(function () { return fuerClientRoh(ktx, bereiche); });
+  }
+
+  /** Messwerk: Abschnitt „ansicht“ (Rollenschnitt, Packen, Write-through). */
+  function ansicht(fn) {
+    return (typeof Messung !== 'undefined' && Messung.abschnitt ? Messung.abschnitt : function (n, f) { return f(); })('ansicht', fn);
+  }
+
+  function fuerClientRoh(ktx, bereiche) {
     var b = (bereiche || ['kern']).filter(function (x) { return x === 'kern' || SnapshotKern.BEREICHE[x]; });
     return { bereiche: b, listen: SnapshotKern.packe(SnapshotKern.nurBereiche(fuer(ktx), b)) };
   }
@@ -71,6 +80,10 @@ var Snapshot = (function () {
    * Liefert die Antwort für den Browser { aktualisiert, entfernt }. Nur innerhalb DB.mitSperre.
    */
   function schreibe(ktx, aenderungen) {
+    return ansicht(function () { return schreibeRoh(ktx, aenderungen); });
+  }
+
+  function schreibeRoh(ktx, aenderungen) {
     var b = Cache.lade(SCHLUESSEL);
     if (!b) {
       b = baueAusTabelle();   // liest frisch (unter der Sperre) – enthält die Änderung bereits

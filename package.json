@@ -10,6 +10,7 @@
     "push": "npm run check && npm test && npm run test:ui && clasp push",
     "deploy:hinweis": "echo 'Deployment nur über bestehende Deployment-ID: clasp deploy -i <ID> -d \"Beschreibung\" (siehe docs/BETRIEB.md)'",
     "vorschau": "node tools/vorschau.js",
+    "messen:lokal": "node tools/messen-lokal.js --markdown",
     "test:ui": "node --test --test-concurrency=1 \"test/ui/**/*.ui.test.js\"",
     "push:backup": "npm run check && cd backup && clasp push"
   },

@@ -60,6 +60,11 @@ Rolle mit `messung_lesen` (Vorstand, Mitgliederverwalter) sieht in der Oberfläc
 Median und P90 je Server-Funktion (Server-ms, Tabellenzugriffe) und die im Browser gemessene Gesamtzeit.
 Rohdaten im Tab `_Messung` (keine Personendaten).
 
+Einzelaufrufe mit Aufschlüsselung (Sperre, Lesen, Schreiben, Log, Ansicht …): dort „Messmodus ein“ bzw. in der
+Browser-Konsole `App.messen(true)` / `App.messbericht()`; Erstaufruf mit `?messen=1` an der WebApp-URL. Sonden zum
+Apps-Script-Verhalten laufen im Editor nur gegen eine Kopie der Datenbank (Script Property `SONDE_DB_ID`).
+Anleitung und Ergebnisse: `docs/LEISTUNG.md`.
+
 ## 5. Bekannte Grenzen (C4) – zu prüfen, Stand meines Wissens
 
 | Grenze | Wert | Bedeutung hier |

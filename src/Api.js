@@ -10,6 +10,8 @@
  *   - Antwortformat: { ok: true, daten, messung } oder { ok: false, fehler: { art, meldung, nr, felder? }, messung }.
  *   - Interne Fehler bekommen eine kurze Fehler-Nr.; Details (Stacktrace) stehen nur im Server-Log
  *     (console.error → Ausführungsprotokoll), nie in der Antwort.
+ *   - Messwerk: Prüfkette, Handler und Ansicht (JSON) sind Abschnitte der Messung. Hat der Aufruf den Bericht angefordert
+ *     (apiMessen, doGet?messen=1) und die Rolle messung_lesen, hängt _mess an der Antwort (docs/LEISTUNG.md).
  *   - Die Antwort wird JSON-sauber gemacht (google.script.run verträgt keine Date-Objekte und kein undefined
  *     in Arrays).
  */
@@ -26,13 +28,16 @@ var Api = (function () {
   }
 
   function ausfuehren(name, aktion, fn) {
-    var h = null, ktx = null, antwort, ok = false;
+    var h = null, ktx = null, antwort, ok = false, diagnose = false;
+    try { diagnose = Messung.diagnoseUebernehmen ? Messung.diagnoseUebernehmen() : false; } catch (e) { diagnose = false; }
     try { h = Messung.start(name); } catch (e) { h = null; }
+    var abschnitt = (Messung.abschnitt || function (n, f) { return f(); });
     try {
       if (typeof DB !== 'undefined' && DB.zaehlerZuruecksetzen) DB.zaehlerZuruecksetzen();
       if (typeof DB !== 'undefined' && DB.vorratLeeren) DB.vorratLeeren();
-      ktx = Zugriff.pruefe(aktion);
-      antwort = { ok: true, daten: sauber(fn(ktx)) };
+      ktx = abschnitt('pruefkette', function () { return Zugriff.pruefe(aktion); });
+      var roh = abschnitt('handler', function () { return fn(ktx); });
+      antwort = { ok: true, daten: abschnitt('ansicht', function () { return sauber(roh); }) };
       ok = true;
     } catch (e) {
       var art = Fehler.artVon(e);
@@ -53,6 +58,11 @@ var Api = (function () {
         messung = Messung.ende(h, { ok: ok, rollen: ktx ? ktx.rollen : null, cache: cache });
       } catch (e2) { messung = null; }
       if (antwort) antwort.messung = messung;
+      // Messwerk-Bericht nur auf ausdrückliche Anforderung UND nur für Rollen mit messung_lesen (Admin-Bereich).
+      // Abgewiesene oder nicht identifizierte Aufrufer (ktx null) bekommen ihn nie.
+      try {
+        if (antwort && diagnose && ktx && Rechte.darf(ktx, 'messung_lesen') && Messung.bericht) antwort._mess = Messung.bericht();
+      } catch (e3) { /* Messen darf nichts stören */ }
     }
     return antwort;
   }
