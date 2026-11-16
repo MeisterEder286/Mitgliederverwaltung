@@ -249,7 +249,11 @@ test('Finanzen: Rechnungen (nur Nicht-Lastschrift), Jahresübersicht alle Jahre,
   const xsd = path.join(__dirname, 'xsd', 'pain.008.001.08.xsd');
   const datei = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sepa-')), x.dateiname);
   fs.writeFileSync(datei, x.xml);
-  try { execFileSync('xmllint', ['--noout', '--schema', xsd, datei], { stdio: 'pipe' }); } catch (e) { assert.fail('XSD: ' + e.stderr); }
+  try { execFileSync('xmllint', ['--noout', '--schema', xsd, datei], { stdio: 'pipe' }); } catch (e) {
+    // xmllint nicht installiert (z. B. Windows) → XSD-Prüfung überspringen statt scheitern
+    if (e.code === 'ENOENT') console.warn('xmllint nicht gefunden – XSD-Validierung übersprungen');
+    else assert.fail('XSD: ' + (e.stderr ? e.stderr.toString() : e.message));
+  }
   // Nachzügler: ein Konto bekommt nachträglich eine neue Sollstellung (Konto ohne Sollstellung 2027 simulieren)
   const sKopf = kas.f.daten('Sollstellung')[0];
   const zeilen = kas.f.daten('Sollstellung');
