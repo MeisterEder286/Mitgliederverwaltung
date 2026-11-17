@@ -25,7 +25,7 @@ var Rechte = (function () {
     'qualifikation_erfassen', 'konto_lesen', 'konto_bearbeiten', 'iban_aufdecken', 'sollstellung_bearbeiten',
     'sepa_lauf', 'ehrung_bearbeiten', 'export', 'protokoll_lesen', 'benutzer_verwalten', 'konfig_aendern',
     'messung_lesen', 'datenschutz_bearbeiten', 'stammdaten_bearbeiten', 'anschreiben_erstellen', 'dokumente_verwalten',
-    'mail_senden', 'notiz_lesen', 'notiz_schreiben'
+    'mail_senden', 'notiz_lesen', 'notiz_schreiben', 'dashboard_lesen'
   ];
 
   // Rangfolge der Zeilensicht: die weiteste Sicht gewinnt bei Mehrfachrollen.
@@ -40,7 +40,7 @@ var Rechte = (function () {
       // OFFEN: kein konto_bearbeiten – Kassier ändert keine IBAN (Datenmodell/Mockup). Bestätigung ausstehend.
       aktionen: ['start', 'mitglied_lesen', 'konto_lesen', 'iban_aufdecken', 'sollstellung_bearbeiten',
         'sepa_lauf', 'export', 'protokoll_lesen', 'anschreiben_erstellen', 'dokumente_verwalten',
-        'mail_senden', 'notiz_lesen', 'notiz_schreiben'],
+        'mail_senden', 'notiz_lesen', 'notiz_schreiben', 'dashboard_lesen'],
       zeilen: 'alle'
     },
     Jugendleiter: {

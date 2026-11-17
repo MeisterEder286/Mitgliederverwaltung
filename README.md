@@ -7,6 +7,7 @@ keine externen Schriften oder Bibliotheken. Mobil bedienbar, Rollen- und Feldrec
 
 | Bereich | Funktionen |
 |---|---|
+| **Dashboard** | Vereinsüberblick für Vorstand, Mitgliederverwaltung, Kasse: Kennzahlen, Mitgliederverlauf je Monat mit Vorjahreslinie, Ein-/Austritte, Einnahmen je Monat und Soll/Ist je Beitragsjahr, Ehrungs-Vorschau der nächsten 6 Jahre, Altersstruktur, Abteilungen, Austrittsgründe |
 | **Start** | Kennzahlen je Rolle, Schnellsuche, „Zu erledigen“, Geburtstage der Woche |
 | **Mitglieder** | Liste mit Suche/Filter/Sortierung (lokal im Browser), Detail mit Reitern, Bearbeiten mit Versionsprüfung, Neuaufnahme mit Dublettenprüfung und automatischer Nummer, Austritt mit Konto-Guard (Waisen), Wiedereintritt, Sterbefall, Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck |
 | **Abteilungsleitung** | „Meine Abteilung“, Zuordnen per Exaktsuche (zwei Merkmale, Einmal-Token), Funktionen der eigenen Abteilung, FZ-Ampel und Einsicht erfassen |
