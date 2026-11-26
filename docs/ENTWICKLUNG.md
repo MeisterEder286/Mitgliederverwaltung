@@ -91,8 +91,8 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 - `sperre()` → Nummer der gerade gehaltenen Sperre oder 0 (Snapshot erkennt damit „unter dieser Sperre geladen“)
 - Beschleunigungen beim Einzelschreiben: Blatt und Kopfzeile je Ausführung gemerkt (bewusst nicht länger – Spalten
   können im Sheet verschoben werden); Zeilenposition je ID im Script-Cache (`zeilen:<Tab>`), vor dem Schreiben wird die
-  ID in der gelesenen Zeile geprüft, sonst neu gesucht; Eindeutigkeit gegen die Snapshot-Basis im Cache plus die in
-  derselben Sperre geschriebenen Datensätze (ohne Basis im Cache: Lesen des Tabs wie bisher).
+  ID in der gelesenen Zeile geprüft, sonst neu gesucht; Eindeutigkeit liest nur die Schlüsselspalten (ein `batchGet`)
+  plus die in derselben Sperre geschriebenen Datensätze – bewusst nie aus einem Cache.
 - `zaehler()` → `{ sheets: n }` Zahl der Tabellenzugriffe seit Ausführungsbeginn; `zaehlerZuruecksetzen()`; `zaehle(n)` für Module mit eigenem Blattzugriff
 - `blatt(tab)` → Sheet-Objekt; `anhaengen(blatt, zeilen, letzte?)` – ein `setValues` unter die letzte Zeile, vergrößert das Raster bei Bedarf (neue Tabs haben nur 1000 Zeilen)
 - **Massenschreiben** (nur in `mitSperre`, feste Zahl an Tabellenzugriffen – gemessen 16 für `einfuegenViele` und 6 für
@@ -178,7 +178,9 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
   Abgeleitet werden dabei nur die betroffenen Zeilen (`SnapshotKern.fuer(basis, ktx, heute, nur)`), und eine unter
   derselben Sperre schon geladene Basis wird weiterverwendet (kein zweites Entpacken).
 - `Snapshot.warmhalten()` (Trigger `snapshotWarmhalten`, stündlich, bei `cache_warmhalten = ja`): Konfig-Cache
-  auffrischen, Basis unter der Sperre neu bauen, wenn sie fehlt oder älter als 4 h ist.
+  auffrischen, Basis unter der Sperre neu bauen, wenn sie fehlt oder ihr letzter Neubau aus der Tabelle
+  (`aus_tabelle_am`, wird beim write-through NICHT erneuert) älter als 4 h ist. Scheitert das Ablegen im Cache,
+  wird der alte Eintrag verworfen.
 - `Snapshot.pruefeMitglied(ktx, mitgliedId)` wirft `Fehler.keinZugriff()`, wenn die Person für ktx nicht sichtbar ist
   (Zeilenschutz bei Schreibzugriffen, z. B. Abteilungsleiter).
 - `Snapshot.verwerfen()` – Cache ungültig machen (z. B. nach Setup, Massenänderung).

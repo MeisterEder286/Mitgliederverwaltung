@@ -40,8 +40,14 @@ var Snapshot = (function () {
     var d = DB.lese(leseTabs());
     var basis = SnapshotKern.basisAusTabs(d, konfigAus(d._Konfig));
     basis.gebaut_am = DB.jetzt();
-    Cache.speichere(SCHLUESSEL, basis, DAUER_S);
+    basis.aus_tabelle_am = basis.gebaut_am;   // nur hier gesetzt – Maß für warmhalten (write-through ändert es nicht)
+    ablegen(basis);
     return basis;
+  }
+
+  /** Im Cache ablegen; scheitert das, den alten Eintrag verwerfen – sonst bliebe ein veralteter Stand gültig. */
+  function ablegen(b) {
+    if (!Cache.speichere(SCHLUESSEL, b, DAUER_S)) Cache.verwerfe(SCHLUESSEL);
   }
 
   /** Basis der laufenden Ausführung (Speicher → Cache → Tabelle). */
@@ -84,9 +90,11 @@ var Snapshot = (function () {
     if (!b) {
       b = baueAusTabelle();   // liest frisch (unter der Sperre) – enthält die Änderung bereits
     } else {
-      b = SnapshotKern.aenderungAnwenden(b, aenderungen);
+      var alt = b;
+      b = SnapshotKern.aenderungAnwenden(alt, aenderungen);
       b.gebaut_am = DB.jetzt();
-      Cache.speichere(SCHLUESSEL, b, DAUER_S);
+      b.aus_tabelle_am = alt.aus_tabelle_am;
+      ablegen(b);
     }
     merkeBasis(b);
     return SnapshotKern.antwortFuer(b, ktx, heute(), aenderungen);
@@ -95,22 +103,6 @@ var Snapshot = (function () {
   /** Wirft Fehler.keinZugriff(), wenn die Person für ktx nicht sichtbar ist. */
   function pruefeMitglied(ktx, id) {
     if (!SnapshotKern.mitgliedSichtbar(basis(), ktx, heute(), id)) throw Fehler.keinZugriff();
-  }
-
-  /**
-   * Für die Eindeutigkeitsprüfung in DB: Zeilen eines Basis-Tabs, wenn die Basis unter der laufenden Sperre im
-   * Cache liegt (sonst null → DB liest die Tabelle). Baut bei fehlendem Cache bewusst NICHT neu (das wäre teurer
-   * als das Lesen des einen Tabs).
-   */
-  function bestandImCache(tab) {
-    var sperre = DB.sperre();
-    if (!sperre || !SnapshotKern.LISTEN[tab]) return null;
-    if (!(basisSpeicher && basisSperre === sperre)) {
-      var b = Cache.lade(SCHLUESSEL);
-      if (!b) return null;
-      merkeBasis(b);
-    }
-    return basisSpeicher.tabs[tab] || [];
   }
 
   /** Cache ungültig machen (nach Setup, Massenänderungen, direkten Eingriffen in die Tabelle). */
@@ -137,7 +129,7 @@ var Snapshot = (function () {
   }
 
   function alterMs(b) {
-    var gebaut = Date.parse(b && b.gebaut_am);
+    var gebaut = Date.parse(b && b.aus_tabelle_am);
     return isFinite(gebaut) ? Date.parse(DB.jetzt()) - gebaut : Infinity;
   }
 
@@ -146,7 +138,6 @@ var Snapshot = (function () {
   return {
     fuerClient: fuerClient,
     basis: basis, fuer: fuer, schreibe: schreibe, pruefeMitglied: pruefeMitglied, verwerfen: verwerfen,
-    bestandImCache: bestandImCache,
     warmhalten: warmhalten, mitlesen: mitlesen, letzterCache: letzterCache
   };
 })();

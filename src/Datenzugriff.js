@@ -18,8 +18,8 @@
  *    Version mit, die er gesehen hat. Passt sie nicht mehr, gibt es Fehler.konflikt mit dem aktuellen Stand.
  *  - Massenschreiben (einfuegenViele, aktualisiereViele) mit fester Zahl an Tabellenzugriffen, unabhängig von
  *    der Zahl der Datensätze; entfernen nur für Löschkonzept und technische Bereinigung.
- *  - Eindeutigkeitsprüfung beim Einzelschreiben aus der Snapshot-Basis im Cache plus den in derselben Sperre
- *    geschriebenen Datensätzen (kein Lesen des ganzen Tabs); ohne Basis im Cache wie bisher aus der Tabelle.
+ *  - Eindeutigkeitsprüfung beim Einzelschreiben liest nur die Schlüsselspalten (ein batchGet) und ergänzt die in
+ *    derselben Sperre geschriebenen Datensätze – bewusst nie aus einem Cache.
  *  - Der Zähler sheets zählt jeden Aufruf an SpreadsheetApp bzw. die Sheets-API (Messung, Auftragspunkt 8).
  */
 var DB = (function () {
@@ -184,19 +184,47 @@ var DB = (function () {
   }
 
   /**
-   * Bestand für die Eindeutigkeitsprüfung. Unter der Sperre und mit Basis im Cache (Snapshot.bestandImCache)
-   * ohne Tabellenzugriff: Basis plus die in DIESER Sperre geschriebenen Datensätze (die Basis wird erst am Ende
-   * per write-through aktualisiert). Sonst – oder für Tabs außerhalb der Basis – wie bisher aus der Tabelle.
+   * Bestand für die Eindeutigkeitsprüfung: nur die Schlüsselspalten (und die ID) des Tabs mit EINEM batchGet –
+   * immer aus der Tabelle, nie aus einem Cache (Dubletten z. B. bei Mandatsreferenzen dürfen nicht durchrutschen).
+   * Dazu die in DIESER Sperre geschriebenen Datensätze: Die Sheets-API sieht noch nicht übertragene Schreibvorgänge
+   * von SpreadsheetApp nicht zuverlässig.
    */
-  function bestandFuerPruefung(tab) {
+  function bestandFuerPruefung(tab, gruppen) {
     var t = tabSchema(tab);
-    var quelle = t.idSpalte && typeof Snapshot !== 'undefined' && Snapshot.bestandImCache ? Snapshot.bestandImCache(tab) : null;
-    if (!quelle) return lese([tab])[tab];
-    var eig = eigene.sperre === sperrNr && gesperrt ? (eigene.tabs[tab] || {}) : {};
+    var felder = t.idSpalte ? [t.idSpalte] : [];
+    gruppen.forEach(function (g) { g.forEach(function (f) { if (felder.indexOf(f) < 0) felder.push(f); }); });
+    var kopf = kopfLesen(blatt(tab));
+    var bestand;
+    if (felder.some(function (f) { return kopf.indexOf(f) < 0; })) {
+      bestand = lese([tab])[tab];
+    } else {
+      var name = "'" + tab.replace(/'/g, "''") + "'!";
+      var antwort = Sheets.Spreadsheets.Values.batchGet(dbId(), {
+        ranges: felder.map(function (f) { var s = spaltenBuchstabe(kopf.indexOf(f) + 1); return name + s + ':' + s; }),
+        majorDimension: 'COLUMNS',
+        valueRenderOption: 'UNFORMATTED_VALUE',
+        dateTimeRenderOption: 'SERIAL_NUMBER'
+      });
+      sheetsAufrufe++;
+      var spalten = ((antwort && antwort.valueRanges) || []).map(function (r) { return ((r.values || [])[0] || []).slice(1); });
+      var n = spalten.reduce(function (m, s) { return Math.max(m, s.length); }, 0);
+      bestand = [];
+      for (var i = 0; i < n; i++) {
+        var zeile = spalten.map(function (s) { return s[i] === undefined ? '' : s[i]; });
+        if (!zeileLeer(zeile)) bestand.push(Werte.zeileZuObjekt(felder, zeile, tab));
+      }
+    }
+    var eig = t.idSpalte && gesperrt && eigene.sperre === sperrNr ? (eigene.tabs[tab] || {}) : {};
     var ids = Object.keys(eig);
-    if (!ids.length) return quelle;
-    return quelle.filter(function (z) { return !Object.prototype.hasOwnProperty.call(eig, String(z[t.idSpalte])); })
+    if (!ids.length) return bestand;
+    return bestand.filter(function (z) { return !Object.prototype.hasOwnProperty.call(eig, String(z[t.idSpalte])); })
       .concat(ids.map(function (k) { return eig[k]; }).filter(Boolean));
+  }
+
+  function spaltenBuchstabe(n) {
+    var s = '';
+    while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+    return s;
   }
 
   // In der laufenden Sperre geschriebene Datensätze je Tab: { id: objekt } bzw. { id: null } für entfernte.
@@ -217,7 +245,7 @@ var DB = (function () {
       return !nurGruppenMit || g.some(function (f) { return nurGruppenMit.indexOf(f) >= 0; });
     });
     if (!gruppen.length) return;
-    var bestand = bestandFuerPruefung(tab);
+    var bestand = bestandFuerPruefung(tab, gruppen);
     gruppen.forEach(function (g) {
       // Sind ALLE Schlüsselfelder des neuen Datensatzes leer (z. B. Überweisungskonto ohne Mandatsreferenz),
       // gibt es nichts zu vergleichen. Bei teilweise leeren Gruppen (Benutzer ohne abteilung_id) gilt leer = leer.
