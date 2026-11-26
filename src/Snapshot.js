@@ -23,6 +23,7 @@ var Snapshot = (function () {
   var DAUER_S = 21600;
   var WARM_NEU_AB_MS = 4 * 3600 * 1000;   // stündlicher Trigger → spätestens nach ~5 h neu gebaut, vor Ablauf (6 h)
   var basisSpeicher = null;     // je Ausführung
+  var basisSperre = 0;          // DB.sperre() beim Laden von basisSpeicher (0 = außerhalb einer Sperre geladen)
   var cacheErgebnis = null;
 
   function heute() { return DB.jetzt().slice(0, 10); }
@@ -47,10 +48,14 @@ var Snapshot = (function () {
   function basis() {
     if (basisSpeicher) return basisSpeicher;
     var b = Cache.lade(SCHLUESSEL);
-    if (b) { cacheErgebnis = 'treffer'; basisSpeicher = b; return b; }
-    cacheErgebnis = 'fehlgriff';
-    basisSpeicher = baueAusTabelle();
+    cacheErgebnis = b ? 'treffer' : 'fehlgriff';
+    merkeBasis(b || baueAusTabelle());
     return basisSpeicher;
+  }
+
+  function merkeBasis(b) {
+    basisSpeicher = b;
+    basisSperre = DB.sperre();
   }
 
   /** Für die Zugriffsprüfung: zu lesende Tabs um die Basis-Tabs ergänzen, wenn die Basis nicht im Cache liegt. */
@@ -70,9 +75,12 @@ var Snapshot = (function () {
   /**
    * Write-through: aenderungen = [{ tab, neu } | { tab, entfernt }] nach erfolgreichem DB-Schreiben.
    * Liefert die Antwort für den Browser { aktualisiert, entfernt }. Nur innerhalb DB.mitSperre.
+   * Wurde die Basis schon unter DERSELBEN Sperre geladen (z. B. von pruefeMitglied), ist sie aktuell und wird
+   * weiterverwendet – sonst frisch aus dem Cache (eine ältere Kopie könnte fremde Speicherungen überschreiben).
    */
   function schreibe(ktx, aenderungen) {
-    var b = Cache.lade(SCHLUESSEL);
+    var sperre = DB.sperre();
+    var b = basisSpeicher && sperre && basisSperre === sperre ? basisSpeicher : Cache.lade(SCHLUESSEL);
     if (!b) {
       b = baueAusTabelle();   // liest frisch (unter der Sperre) – enthält die Änderung bereits
     } else {
@@ -80,7 +88,7 @@ var Snapshot = (function () {
       b.gebaut_am = DB.jetzt();
       Cache.speichere(SCHLUESSEL, b, DAUER_S);
     }
-    basisSpeicher = b;
+    merkeBasis(b);
     return SnapshotKern.antwortFuer(b, ktx, heute(), aenderungen);
   }
 
@@ -107,7 +115,7 @@ var Snapshot = (function () {
     var b = Cache.lade(SCHLUESSEL);
     if (b && alterMs(b) < WARM_NEU_AB_MS) return 'aktuell';
     return DB.mitSperre(function () {
-      basisSpeicher = baueAusTabelle();
+      merkeBasis(baueAusTabelle());
       return 'neu gebaut';
     });
   }

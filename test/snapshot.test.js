@@ -127,6 +127,40 @@ test('aenderungAnwenden ist rein und antwortFuer liefert Zeile + neu abgeleitete
   assert.ok(!JSON.stringify(b3).includes('DE89370400440532013000'));
 });
 
+test('antwortFuer leitet nur Betroffene ab und liefert dasselbe wie die vollständige Sicht', () => {
+  const mitglied = Object.assign({}, roh.Mitglied.find(m => m.mitglied_id === 4), { ort: 'Landshut' });
+  const zug = Object.assign({}, roh.Abteilungszugehoerigkeit.find(a => a.zugehoerigkeit_id === 2), { austrittsdatum: '2026-10-01' });
+  const konto = roh.Beitragskonto[0];
+  const aenderungen = [{ tab: 'Mitglied', neu: mitglied }, { tab: 'Abteilungszugehoerigkeit', neu: zug },
+    { tab: 'Beitragskonto', neu: konto }, { tab: 'Funktion', entfernt: 999 }, { tab: 'Benutzer', neu: { benutzer_id: 1 } }];
+  const b2 = g.SnapshotKern.aenderungAnwenden(basis, aenderungen);
+  const L = g.SnapshotKern.LISTEN;
+  [ktx('Mitgliederverwalter'), ktx('Kassier'), ktx('Abteilungsleiter', [1]), ktx('Jugendleiter')].forEach(k => {
+    // Erwartung nach dem bisherigen Verfahren: ganze Sicht ableiten, dann heraussuchen
+    const voll = rein(g.SnapshotKern.fuer(b2, k, HEUTE));
+    const erwartet = { aktualisiert: {}, entfernt: {} };
+    const merke = (l, z) => (erwartet.aktualisiert[l] = erwartet.aktualisiert[l] || []).push(z);
+    const weg = (l, id) => (erwartet.entfernt[l] = erwartet.entfernt[l] || []).push(id);
+    const betroffen = new Set([4, zug.mitglied_id]);
+    b2.tabs.Mitglied.forEach(m => { if (m.beitragskonto_id === konto.beitragskonto_id) betroffen.add(m.mitglied_id); });
+    aenderungen.filter(a => L[a.tab] && a.tab !== 'Mitglied').forEach(a => {
+      const feld = g.Schema.TABELLEN[a.tab].idSpalte;
+      if (!voll[L[a.tab]]) return;
+      const id = a.neu ? a.neu[feld] : a.entfernt;
+      const z = voll[L[a.tab]].find(x => String(x[feld]) === String(id));
+      if (z) merke(L[a.tab], z); else weg(L[a.tab], id);
+    });
+    [...betroffen].forEach(id => {
+      const m = voll.mitglieder.find(x => x.mitglied_id === id);
+      if (m) merke('mitglieder', m); else weg('mitglieder', id);
+    });
+    const ist = rein(g.SnapshotKern.antwortFuer(b2, k, HEUTE, aenderungen));
+    ist.aktualisiert.mitglieder.sort((a, b) => a.mitglied_id - b.mitglied_id);
+    erwartet.aktualisiert.mitglieder.sort((a, b) => a.mitglied_id - b.mitglied_id);
+    assert.deepStrictEqual(ist, rein(erwartet), k.rollen.join(','));
+  });
+});
+
 test('Rechte.erlaubteSchreibfelder: keine ID, keine technischen/auto-Felder, nur sichtbare Klassen', () => {
   const w = { mitglied_id: 99, version: 7, status: 'aktiv', loeschbar_ab: '2030-01-01', ort: 'X', beitragskonto_id: 3, vorname: 'Y' };
   assert.deepStrictEqual(rein(g.Rechte.erlaubteSchreibfelder(ktx('Abteilungsleiter', [1]), 'Mitglied', w)), { vorname: 'Y', ort: 'X' });
@@ -176,6 +210,32 @@ test('write-through: Änderung steht ohne erneutes Lesen im nächsten Snapshot; 
   const kAl = s3.Zugriff.pruefe('start');
   assert.throws(() => s3.Snapshot.pruefeMitglied(kAl, 7), e => e.art === 'zugriff');
   s3.Snapshot.pruefeMitglied(kAl, 12);
+});
+
+test('write-through: unter derselben Sperre wird die Basis nur EINMAL aus dem Cache geladen', () => {
+  const { f, g: s } = aufbau();
+  s.apiStart();   // Cache füllen
+  const f2 = erzeugeFakes({ tabs: beispielTabs(TABS), email: 'verwaltung@tsv-ergoldsbach.de' });
+  let kopfLesen = 0;
+  f2.globale.CacheService = { getScriptCache() {
+    const c = f.globale.CacheService.getScriptCache();
+    return Object.assign({}, c, { get(k) { if (k === 'snapshot:basis:kopf') kopfLesen++; return c.get(k); } });
+  } };
+  const s2 = ladeProjekt(f2.globale);
+  const k = s2.Zugriff.pruefe('mitglied_bearbeiten');
+  const antwort = rein(s2.DB.mitSperre(() => {
+    s2.Snapshot.pruefeMitglied(k, 7);
+    const r = s2.DB.aktualisieren('Mitglied', 7, { ort: 'Landshut' }, 0, k);
+    return s2.Snapshot.schreibe(k, [{ tab: 'Mitglied', neu: r.neu }]);
+  }));
+  assert.strictEqual(antwort.aktualisiert.mitglieder[0].ort, 'Landshut');
+  assert.strictEqual(kopfLesen, 1);
+  // Eine Basis von VOR der Sperre wird nicht weiterverwendet (sie könnte fremde Speicherungen überschreiben)
+  s2.DB.mitSperre(() => {
+    const r = s2.DB.aktualisieren('Mitglied', 7, { ort: 'Ergoldsbach' }, 1, k);
+    s2.Snapshot.schreibe(k, [{ tab: 'Mitglied', neu: r.neu }]);
+  });
+  assert.strictEqual(kopfLesen, 2);
 });
 
 test('warmhalten: fehlende Basis wird unter der Sperre neu gebaut, frische Basis bleibt (nur Konfig wird gelesen)', () => {

@@ -24,6 +24,7 @@ var DB = (function () {
   var datei_ = null;
   var sheetsAufrufe = 0;
   var gesperrt = false;
+  var sperrNr = 0;   // zählt jedes Betreten von mitSperre; erkennt „unter DIESER Sperre gelesen“ (Snapshot)
 
   function intern(meldung) { return new Error('DB: ' + meldung); }
 
@@ -295,6 +296,7 @@ var DB = (function () {
       throw Fehler.fachlich('Gerade speichert jemand anderes. Bitte in einigen Sekunden erneut versuchen.');
     }
     gesperrt = true;
+    sperrNr++;
     try {
       return fn();
     } finally {
@@ -566,6 +568,8 @@ var DB = (function () {
     lese: lese,
     vorratLeeren: vorratLeeren,
     mitSperre: mitSperre,
+    /** Nummer der gerade gehaltenen Sperre oder 0 (außerhalb von mitSperre). */
+    sperre: function () { return gesperrt ? sperrNr : 0; },
     // Nach jedem Schreibzugriff ist der Vorrat veraltet → leeren (auch im Fehlerfall).
     einfuegen: function (tab, obj, ktx) { try { return einfuegen(tab, obj, ktx); } finally { vorratLeeren(); } },
     aktualisieren: function (tab, id, a, v, ktx) { try { return aktualisieren(tab, id, a, v, ktx); } finally { vorratLeeren(); } },
