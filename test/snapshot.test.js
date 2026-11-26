@@ -280,19 +280,41 @@ test('warmhalten: fehlende Basis wird unter der Sperre neu gebaut, frische Basis
 test('warmhalten: maßgeblich ist der letzte Neubau aus der Tabelle – Speichern (write-through) verjüngt ihn nicht', () => {
   const { f, g: s } = aufbau();
   s.apiStart();
-  const b = s.Cache.lade('snapshot:basis');
-  b.aus_tabelle_am = '2000-01-01T00:00:00';
-  s.Cache.speichere('snapshot:basis', b, 21600);
+  const r0 = s.Cache.ladeMehrteilig('snapshot:basis');
+  r0.daten.aus_tabelle_am = '2000-01-01T00:00:00';
+  s.Cache.speichereMehrteilig('snapshot:basis', r0.daten, r0.eintraege, null, null, 21600);
   const s2 = ladeProjekt(f.globale);
   const k = s2.Zugriff.pruefe('mitglied_bearbeiten');
   s2.DB.mitSperre(() => {
     const r = s2.DB.aktualisieren('Mitglied', 7, { ort: 'Landshut' }, 0, k);
     s2.Snapshot.schreibe(k, [{ tab: 'Mitglied', neu: r.neu }]);
   });
-  const nachher = s2.Cache.lade('snapshot:basis');
+  const nachher = s2.Cache.ladeMehrteilig('snapshot:basis').daten;
   assert.strictEqual(nachher.aus_tabelle_am, '2000-01-01T00:00:00');
   assert.notStrictEqual(nachher.gebaut_am, '2000-01-01T00:00:00');
   assert.strictEqual(ladeProjekt(f.globale).Snapshot.warmhalten(), 'neu gebaut');
+});
+
+test('write-through packt nur die geänderten Tabs neu; der nächste Aufruf sieht den vollständigen Stand', () => {
+  const { f, g: s } = aufbau();
+  s.apiStart();
+  const vorher = s.Cache.ladeMehrteilig('snapshot:basis').kopf.eintraege;
+  const s2 = ladeProjekt(f.globale);
+  const k = s2.Zugriff.pruefe('mitglied_bearbeiten');
+  s2.DB.mitSperre(() => {
+    const r = s2.DB.aktualisieren('Mitglied', 7, { ort: 'Landshut' }, 0, k);
+    s2.Snapshot.schreibe(k, [{ tab: 'Mitglied', neu: r.neu }]);
+  });
+  const nachher = s2.Cache.ladeMehrteilig('snapshot:basis');
+  Object.keys(vorher).forEach(t => {
+    if (t === 'Mitglied') assert.notStrictEqual(nachher.kopf.eintraege[t].generation, vorher[t].generation, t);
+    else assert.deepStrictEqual(rein(nachher.kopf.eintraege[t]), rein(vorher[t]), t + ' unnötig neu gepackt');
+  });
+  const s3 = ladeProjekt(f.globale);
+  const b = s3.Snapshot.basis();
+  assert.strictEqual(b.tabs.Mitglied.find(m => m.mitglied_id === 7).ort, 'Landshut');
+  assert.strictEqual(b.tabs.Abteilung.length, s.Snapshot.basis().tabs.Abteilung.length);
+  assert.ok(b.konfig.beitragsjahr);
 });
 
 test('Lasttest 1200 Personen: Größe und Laufzeit', () => {

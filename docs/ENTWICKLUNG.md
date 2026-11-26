@@ -158,7 +158,8 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 `volleMonate`, `volleJahre`, `plusMonate`, `plusTage`.
 
 ### Snapshot (`src/lib/snapshot.js` rein, `src/Snapshot.js`, `src/Cache.js`)
-- **Basis** (nur Server, im CacheService, gzip + Teilstücke ≤ 100 KB, Generationszähler): Rohzeilen der Tabs
+- **Basis** (nur Server, im CacheService, gzip + Teilstücke ≤ 100 KB, Generationszähler, **je Tab ein Eintrag** unter
+  einem gemeinsamen Kopf – `Cache.speichereMehrteilig`: beim write-through werden nur die geänderten Tabs neu gepackt): Rohzeilen der Tabs
   `Mitglied, Mitgliedschaftszeitraum, Abteilung, Abteilungszugehoerigkeit, Funktionsart, Funktion, Beitragsart,
   Beitragsgemeinschaft, Beitragskonto, Sollstellung, Qualifikationsart, Qualifikation, Ehrungsregel, Ehrung, Einwilligung`
   plus benötigte `_Konfig`-Werte. **Ohne** IBAN/BIC im Klartext (nur `iban_maskiert`, `iban_ok`). Nicht in der Basis:
