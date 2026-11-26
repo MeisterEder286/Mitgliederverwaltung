@@ -9,7 +9,12 @@ const assert = require('node:assert');
 const { starteOberflaeche } = require('./harness');
 
 async function navigiere(ui, text) {
-  await ui.page.locator('#navigation button', { hasText: text }).first().click();
+  // Gruppe der Hauptnavigation, sonst Unterreiter, sonst die Ansicht mit diesem Titel direkt (z. B. aus einem Detail)
+  const knopf = ui.page.locator('#navigation button:visible, .unterreiter button', { hasText: text });
+  if (await knopf.count()) { await knopf.first().click(); return; }
+  const k = await ui.page.evaluate(t => App.sichtbareAnsichten().find(s => App.titelVon(s) === t), text);
+  assert.ok(k, 'Ansicht „' + text + '“ für diese Rolle nicht erreichbar');
+  await ui.oeffne(k);
 }
 async function keinUeberlauf(ui) {
   const breite = await ui.page.evaluate(() => document.documentElement.scrollWidth);
@@ -28,8 +33,8 @@ test('Mitgliederverwalter: suchen, Detail, bearbeiten und speichern', async () =
     assert.match(await ui.page.textContent('.mv-kopf h1'), new RegExp(ziel.nachname));
     await keinUeberlauf(ui);
     // Reiter durchklicken (lädt historie/finanzen nach)
-    for (const r of ['Mitgliedschaft', 'Abteilungen', 'Funktionen', 'Beitrag', 'Nachweise', 'Ehrungen', 'Einwilligungen', 'Stammdaten']) {
-      await ui.page.locator('.reiter button', { hasText: r }).click();
+    for (const r of ['Mitgliedschaft & Abteilungen', 'Beitrag & Zahlungen', 'Nachweise & Ehrungen', 'Einwilligungen', 'Dokumente & Notizen', 'Stammdaten']) {
+      await ui.page.getByRole('tab', { name: r, exact: true }).click();
       await ui.page.waitForTimeout(150);
     }
     await ui.page.locator('button', { hasText: 'Bearbeiten' }).first().click();
@@ -141,6 +146,50 @@ test('Abteilungsleiter: Meine Abteilung, Exaktsuche + Zuordnen, Funktion eintrag
   } finally { await ui.schliessen(); }
 });
 
+test('Mitglied-Detail: sechs zusammengefasste Reiter, Abschnitte, alte Reiter-Schlüssel', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', breite: 1000 });
+  try {
+    const p = ui.page;
+    const m = ui.objekte('Mitglied').find(x => x.status === 'aktiv' && x.beitragskonto_id);
+    await p.evaluate(id => App.zeige('mitglied', { id }), m.mitglied_id);
+    await p.waitForSelector('.mv-kopf');
+    const reiter = await p.$$eval('[role=tab]', b => b.map(x => x.textContent));
+    assert.deepStrictEqual(reiter, ['Stammdaten', 'Mitgliedschaft & Abteilungen', 'Beitrag & Zahlungen', 'Nachweise & Ehrungen', 'Einwilligungen', 'Dokumente & Notizen']);
+    await p.getByRole('tab', { name: 'Mitgliedschaft & Abteilungen' }).click();
+    assert.strictEqual(await p.getByRole('tab', { name: 'Mitgliedschaft & Abteilungen' }).getAttribute('aria-selected'), 'true');
+    const abschnitte = await p.$$eval('[role=tabpanel] .mv-teil > h2', h => h.map(x => x.textContent));
+    assert.deepStrictEqual(abschnitte, ['Mitgliedschaft', 'Abteilungen', 'Funktionen']);
+    await p.waitForFunction(() => !document.querySelector('[role=tabpanel] .laedt'));
+    // alter Schlüssel 'zahlungen' → „Beitrag & Zahlungen“, Abschnitt vorhanden
+    await p.evaluate(id => App.zeige('mitglied', { id, reiter: 'zahlungen' }), m.mitglied_id);
+    await p.waitForSelector('#mitglied-teil-zahlungen');
+    assert.strictEqual(await p.getByRole('tab', { name: 'Beitrag & Zahlungen' }).getAttribute('aria-selected'), 'true');
+    assert.deepStrictEqual(await p.$$eval('[role=tabpanel] .mv-teil > h2', h => h.map(x => x.textContent)), ['Beitrag', 'Zahlungen']);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
+test('Mitglied-Detail als Abteilungsleiter: weniger Reiter, alle ohne Fehler', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Abteilungsleiter', breite: 1000 });
+  try {
+    const p = ui.page;
+    await p.waitForSelector('#navigation button');
+    const id = await p.evaluate(() => App.daten.liste('mitglieder')[0].mitglied_id);
+    await p.evaluate(x => App.zeige('mitglied', { id: x, reiter: 'zahlungen' }), id);
+    await p.waitForSelector('.mv-kopf');
+    const reiter = await p.$$eval('[role=tab]', b => b.map(x => x.textContent));
+    assert.ok(reiter.length < 6 && reiter.includes('Stammdaten') && reiter.includes('Mitgliedschaft & Abteilungen'), reiter.join(', '));
+    assert.ok(!reiter.includes('Beitrag & Zahlungen'));
+    assert.strictEqual(await p.locator('[role=tab][aria-selected=true]').textContent(), 'Stammdaten', 'unsichtbarer Teil → erster Reiter');
+    for (const r of reiter) {
+      await p.getByRole('tab', { name: r, exact: true }).click();
+      await p.waitForFunction(() => !document.querySelector('[role=tabpanel] .laedt'));
+    }
+    assert.strictEqual(await p.locator('text=Konnte nicht angezeigt werden.').count(), 0);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
 test('Kassier: Liste lesen ja, Bearbeiten nein (Knopf fehlt, Server weist ab)', async () => {
   const ui = await starteOberflaeche({ rolle: 'Kassier' });
   try {
@@ -153,6 +202,21 @@ test('Kassier: Liste lesen ja, Bearbeiten nein (Knopf fehlt, Server weist ab)', 
       return App.rufe('apiMitgliedSpeichern', m.mitglied_id, m.version, { ort: 'X' }, App.still).then(() => 'ok', e => e.art);
     });
     assert.strictEqual(art, 'zugriff');
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
+test('Alter Reiter-Schlüssel „notizen“: springt zum Abschnitt, auch wenn Abschnitte darüber nachladen', async () => {
+  const ui = await starteOberflaeche({ breite: 1000, verzoegerungMs: 300 });
+  try {
+    const p = ui.page;
+    const id = await p.evaluate(() => App.daten.liste('mitglieder').filter(function (m) { return m.status_abgeleitet === 'aktiv'; })[0].mitglied_id);
+    await p.evaluate(i => App.zeige('mitglied', { id: i, reiter: 'notizen' }), id);
+    await p.waitForTimeout(1800);   // Dokumente darüber laden verzögert nach
+    assert.strictEqual(await p.getByRole('tab', { selected: true }).textContent(), 'Dokumente & Notizen');
+    const [oben, y, max] = await p.evaluate(() => [document.getElementById('mitglied-teil-notizen').getBoundingClientRect().top, scrollY, document.documentElement.scrollHeight - innerHeight]);
+    // ganz oben – oder so weit unten wie möglich, wenn die Seite dafür zu kurz ist
+    assert.ok(Math.abs(oben) < 40 || (max > 0 && y >= max - 2), 'Abschnitt Notizen nicht angesprungen: top ' + oben + ', scrollY ' + y + '/' + max);
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });

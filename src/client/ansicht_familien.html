@@ -4,7 +4,7 @@
   Zweck:      Familienübersicht (Access „FamilienF“), wer aus dem Familienbeitrag herausfällt (Altersgrenze,
               Ende von Schule/Studium/Ausbildung – mit prognostiziertem Ende), Umstellung auf Einzelbeitrag als
               Sammelaktion, Nachweise anfordern, Prognose der nächsten Jahre. Außerdem über Erweiterungspunkte:
-              Reiter „Zahlungen“ im Mitglied-Detail (Bezahlhistorie aller Jahre + Ausbildung erfassen) und Abschnitt
+              Teil „Zahlungen“ (Reiter „Beitrag & Zahlungen“) im Mitglied-Detail (Bezahlhistorie aller Jahre + Ausbildung erfassen) und Abschnitt
               „Zahlungshistorie (alle Jahre)“ im Konto-Detail.
   Datenquelle: apiFamilie… (Server rechnet mit src/lib/familie.js), App.daten für Namen/Navigation.
   Wer darf:   Lesen konto_lesen (Vorstand, Mitgliederverwaltung, Kasse); Umstellen/Ausbildung mitglied_bearbeiten;
@@ -301,7 +301,7 @@
     return A.el('div', null, { className: 'fam-balken' }, [svg]);
   }
 
-  // ------------------------------------------------------------------ Mitglied-Detail: Reiter „Zahlungen“
+  // ------------------------------------------------------------------ Mitglied-Detail: Teil „Zahlungen“ (Reiter „Beitrag & Zahlungen“)
 
   function historieTabelle(d, mitAnteil) {
     var spalten = [
@@ -352,7 +352,7 @@
     id: 'zahlungen', titel: 'Zahlungen', sicht: 'finanz', aktion: 'konto_lesen',
     zeichne: function (z, m) {
       if (m.beitragsgemeinschaft_id || m.ausbildung_bis || m.ausbildung_art) {
-        z.appendChild(A.el('h2', 'Familienbeitrag und Ausbildung'));
+        z.appendChild(A.el('h3', 'Familienbeitrag und Ausbildung'));
         z.appendChild(A.details([
           ['Gemeinschaft', m.beitragsgemeinschaft_id ? 'ja (Nr. ' + m.beitragsgemeinschaft_id + ')' : 'nein'],
           ['Schule/Studium/Ausbildung', m.ausbildung_art || '–'],
@@ -364,13 +364,13 @@
         var auf = A.knopf('Schule/Studium/Ausbildung erfassen', function () { auf.remove(); ausbildungFormular(z, m); }, 'zweit');
         z.appendChild(auf);
       }
-      z.appendChild(A.el('h2', 'Zahlungshistorie (alle Jahre)'));
+      z.appendChild(A.el('h3', 'Zahlungshistorie (alle Jahre)'));
       var bereich = A.el('div'); z.appendChild(bereich); laedt(bereich);
       A.rufe('apiFamilieBezahlhistorie', m.mitglied_id).then(function (d) {
         A.leere(bereich);
         if (d.konten.length > 1) bereich.appendChild(A.el('p', 'Konten: ' + d.konten.map(function (k) { return k.beitragskonto_id + ' (' + k.bezug + ')'; }).join(', '), { className: 'leise' }));
         bereich.appendChild(jahresTabelle(d.jahre));
-        bereich.appendChild(A.el('h3', 'Einzelne Sollstellungen'));
+        bereich.appendChild(A.el('h4', 'Einzelne Sollstellungen'));
         bereich.appendChild(historieTabelle(d, true));
         bereich.appendChild(A.el('p', d.hinweis, { className: 'leise' }));
       }, function () { nichtGeladen(bereich, 'Die Zahlungshistorie konnte nicht geladen werden.'); });

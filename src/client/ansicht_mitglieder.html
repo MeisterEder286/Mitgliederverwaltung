@@ -2,8 +2,8 @@
   ansicht_mitglieder – Mitgliederliste, Detail, Bearbeiten, Neues Mitglied, Austritt, Listen & Export.
 
   Zweck:      Mitglieder suchen, filtern und sortieren (alles im Browser auf App.daten), Detail mit Reitern
-              (Stammdaten, Mitgliedschaft, Abteilungen, Funktionen, Beitrag, Nachweise, Ehrungen, Einwilligungen),
-              Bearbeiten, Anlegen (mit Dublettenprüfung), Austritt (mit Konto-Guard), Wiedereintritt, Sterbefall,
+              (Stammdaten · Mitgliedschaft & Abteilungen · Beitrag & Zahlungen · Nachweise & Ehrungen · Einwilligungen ·
+              Dokumente & Notizen), Bearbeiten, Anlegen (mit Dublettenprüfung), Austritt (mit Konto-Guard), Wiedereintritt, Sterbefall,
               Abteilungszugehörigkeiten, Exaktsuche „Mitglied der Abteilung zuordnen“ für Abteilungsleiter,
               Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck.
   Datenquelle: App.daten (Snapshot, Bereich kern; Mitgliedschaft/Einwilligungen → 'historie', Beitrag → 'finanzen')
@@ -15,6 +15,11 @@
     - Abteilungsleiter sehen nur Personen ihrer Abteilung (serverseitig geschnitten); der Titel lautet dann
       „Meine Abteilung“. Die Exaktsuche liefert höchstens einen Treffer und nie eine Trefferliste.
     - „Zuletzt angesehen“ liegt nur im sessionStorage dieses Browsers (keine Personendaten, nur IDs).
+    - Detail-Reiter: Teile (REITER + Erweiterungen 'mitglied.reiter', je mit sicht/aktion) werden über
+      REITER_GRUPPEN zu sechs Reitern zusammengefasst; jeder sichtbare Teil steht als eigener Abschnitt
+      (h2 mit altem Titel, id „mitglied-teil-<id>“) untereinander. Eine Erweiterung, deren id in keiner Gruppe
+      steht, wird ein eigener Reiter am Ende. param.reiter darf ein Reiter- oder Teil-Schlüssel sein
+      (z. B. 'zahlungen', 'funktionen', 'notizen'): dann wird der passende Reiter gewählt und zum Abschnitt gescrollt.
     - Exporte werden vor dem Herunterladen/Drucken auf dem Server protokolliert (ohne Personendaten).
 -->
 <style>
@@ -35,6 +40,8 @@
   .mv-listen select { min-height: 44px; }
   .mv-filter { margin: 0 0 12px; }
   .mv-filter summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+  .mv-teil { scroll-margin-top: 64px; }
+  .mv-teil + .mv-teil { margin-top: 20px; }
 </style>
 <script>
 (function () {
@@ -432,6 +439,17 @@
     { id: 'einwilligungen', titel: 'Einwilligungen', sicht: 'kontakt' }
   ];
 
+  // Zusammengefasste Reiter: Teile (eigene Reiter oder Erweiterungen) erscheinen untereinander mit Überschrift.
+  // Die Reiter-id ist zugleich die id des ersten Teils, damit alte Sprungziele (param.reiter) weiter passen.
+  var REITER_GRUPPEN = [
+    { id: 'stamm', titel: 'Stammdaten', teile: ['stamm'] },
+    { id: 'mitgliedschaft', titel: 'Mitgliedschaft & Abteilungen', teile: ['mitgliedschaft', 'abteilungen', 'funktionen'] },
+    { id: 'beitrag', titel: 'Beitrag & Zahlungen', teile: ['beitrag', 'zahlungen'] },
+    { id: 'nachweise', titel: 'Nachweise & Ehrungen', teile: ['nachweise', 'ehrungen'] },
+    { id: 'einwilligungen', titel: 'Einwilligungen', teile: ['einwilligungen'] },
+    { id: 'dokumente', titel: 'Dokumente & Notizen', teile: ['dokumente', 'notizen'] }
+  ];
+
   function zeichneDetail(ziel, param) {
     var m = mitglied(param && param.id);
     if (!m) {
@@ -469,26 +487,76 @@
 
     var reiterLeiste = A.el('div', null, { className: 'reiter', role: 'tablist' });
     var inhalt = A.el('div', null, { role: 'tabpanel' });
-    var aktiv = (param && param.reiter) || 'stamm';
-    // eigene Reiter + Reiter aus anderen Ansichtsdateien (App.erweitere('mitglied.reiter', …))
-    var zusatz = {};
-    A.erweiterungenFuer('mitglied.reiter').forEach(function (r) { zusatz[r.id] = r; });
-    var reiter = REITER.concat(A.erweiterungenFuer('mitglied.reiter'))
-      .filter(function (r) { return (!r.sicht || A.sieht(r.sicht)) && (!r.aktion || A.darf(r.aktion)); });
-    function waehle(id) {
-      aktiv = id;
-      Array.prototype.forEach.call(reiterLeiste.children, function (b) { b.setAttribute('aria-selected', b.dataset.id === id ? 'true' : 'false'); });
+    var reiter = detailReiter();
+    var gewuenscht = (param && param.reiter) || 'stamm';
+    // alter Teil-Schlüssel (z. B. 'zahlungen') → zusammengefasster Reiter + Abschnitt, zu dem gescrollt wird
+    var aktiv = reiter.filter(function (r) { return r.id === gewuenscht || r.teile.some(function (t) { return t.id === gewuenscht; }); })[0] || reiter[0];
+    function waehle(r, abschnitt) {
+      Array.prototype.forEach.call(reiterLeiste.children, function (b) { b.setAttribute('aria-selected', b.dataset.id === r.id ? 'true' : 'false'); });
       A.leere(inhalt);
-      try { (REITER_ZEICHNEN[id] || zusatz[id].zeichne)(inhalt, m); } catch (e) { console.error(e); inhalt.appendChild(A.el('p', 'Konnte nicht angezeigt werden.', { className: 'leise' })); }
+      var mitUeberschrift = r.teile.length > 1, sprungziel = null;
+      r.teile.forEach(function (t) {
+        // jeder Teil in eigenem Behälter: Lädt-Anzeige oder Ladefehler eines Teils stört die anderen nicht
+        var teil = A.el('section', null, { id: 'mitglied-teil-' + t.id, className: 'mv-teil' });
+        if (mitUeberschrift) teil.appendChild(A.el('h2', t.titel));
+        var koerper = teil.appendChild(A.el('div'));
+        inhalt.appendChild(teil);
+        if (t.id === abschnitt && r.teile[0] !== t) sprungziel = teil;
+        try { (REITER_ZEICHNEN[t.id] || t.zeichne)(koerper, m); } catch (e) { console.error(e); koerper.appendChild(A.el('p', 'Konnte nicht angezeigt werden.', { className: 'leise' })); }
+      });
+      if (sprungziel) springeZu(sprungziel, inhalt);
     }
     reiter.forEach(function (r) {
-      var b = A.el('button', r.titel, { type: 'button', role: 'tab', dataset: { id: r.id } });
-      b.addEventListener('click', function () { waehle(r.id); });
+      var b = A.el('button', r.teile.length > 1 ? r.titel : r.teile[0].titel, { type: 'button', role: 'tab', dataset: { id: r.id } });
+      b.addEventListener('click', function () { waehle(r); });
       reiterLeiste.appendChild(b);
     });
     ziel.appendChild(reiterLeiste);
     ziel.appendChild(inhalt);
-    waehle(aktiv);
+    waehle(aktiv, gewuenscht);
+  }
+
+  /**
+   * Zum Abschnitt springen. Abschnitte darüber laden oft nach und schieben ihn nach unten – deshalb bis zu 3 s
+   * bei jeder Größenänderung nachführen, bis der Benutzer selbst scrollt/klickt. Kommt die Ansicht aus dem
+   * Browser-Verlauf mit gespeicherter Scrollstelle (scrollY > 0), bleibt diese.
+   */
+  function springeZu(ziel, rahmen) {
+    setTimeout(function () {
+      if (window.scrollY > 0 || !document.body.contains(ziel) || !ziel.scrollIntoView) return;
+      var stopp = function () {
+        clearTimeout(ende);
+        if (beobachter) beobachter.disconnect();
+        ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function (e) { window.removeEventListener(e, stopp, true); });
+      };
+      var hin = function () { if (document.body.contains(ziel)) ziel.scrollIntoView({ block: 'start' }); else stopp(); };
+      var beobachter = window.ResizeObserver ? new ResizeObserver(hin) : null;
+      if (beobachter) beobachter.observe(rahmen);
+      ['wheel', 'touchstart', 'keydown', 'pointerdown'].forEach(function (e) { window.addEventListener(e, stopp, true); });
+      var ende = setTimeout(stopp, 3000);
+      hin();
+    }, 0);
+  }
+
+  /**
+   * Sichtbare Reiter des Mitglied-Details: [{ id, titel, teile: [teil, …] }]. Teile = eigene REITER und
+   * Erweiterungen 'mitglied.reiter', gefiltert nach sicht/aktion, gruppiert nach REITER_GRUPPEN.
+   * Reiter ohne sichtbaren Teil entfallen; unbekannte Erweiterungen werden eigene Reiter am Ende.
+   */
+  function detailReiter() {
+    var teile = {}, vergeben = {};
+    REITER.concat(A.erweiterungenFuer('mitglied.reiter'))
+      .filter(function (r) { return (!r.sicht || A.sieht(r.sicht)) && (!r.aktion || A.darf(r.aktion)); })
+      .forEach(function (r) { if (!teile[r.id]) teile[r.id] = r; });
+    var liste = [];
+    REITER_GRUPPEN.forEach(function (g) {
+      var sichtbar = g.teile.filter(function (id) { vergeben[id] = true; return teile[id]; }).map(function (id) { return teile[id]; });
+      if (sichtbar.length) liste.push({ id: g.id, titel: g.titel, teile: sichtbar });
+    });
+    Object.keys(teile).forEach(function (id) {
+      if (!vergeben[id]) liste.push({ id: id, titel: teile[id].titel, teile: [teile[id]] });
+    });
+    return liste;
   }
 
   function laedt(ziel, bereich, weiter) {
@@ -933,18 +1001,8 @@
   A.registriere('mitglied_bearbeiten', { titel: 'Mitglied bearbeiten', aktion: 'mitglied_bearbeiten', versteckt: true, gehoertZu: 'mitglieder', zeichne: zeichneBearbeiten });
   A.registriere('mitglied_neu', { titel: 'Neues Mitglied', aktion: 'mitglied_anlegen', versteckt: true, gehoertZu: 'mitglieder', zeichne: zeichneNeu });
 
-  // Navigationstitel für Abteilungsleiter: „Meine Abteilung“ (sobald die Startdaten da sind)
-  A.daten.beobachte(function () {
-    if (!istAL()) return;
-    var b = document.querySelector('#navigation button[data-ansicht="mitglieder"]');
-    if (b) b.textContent = 'Meine Abteilung';
-  });
-  setTimeout(function warte() {
-    if (!A.startdaten) { setTimeout(warte, 100); return; }
-    if (!istAL()) return;
-    var b = document.querySelector('#navigation button[data-ansicht="mitglieder"]');
-    if (b) b.textContent = 'Meine Abteilung'; else setTimeout(warte, 100);
-  }, 0);
+  // Navigationstitel für Abteilungsleiter: „Meine Abteilung“ (dynamischer Titel, ausgewertet von client/kern)
+  A.ansichten.mitglieder.titel = function () { return istAL() ? 'Meine Abteilung' : 'Mitglieder'; };
 
   /** Für client/ansicht_funktionen. */
   A.MitgliederHilfe = {

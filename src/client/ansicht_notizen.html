@@ -3,7 +3,7 @@
 
   Zweck:      Notizen je Person/Konto mit Leserkreis anlegen, bearbeiten, erledigen; offene Rückfragen (z. B. „Von
               welchem Konto soll künftig abgebucht werden?“) beantworten; fällige Wiedervorlagen abarbeiten.
-              Hängt sich außerdem als Reiter „Notizen“ ins Mitglied-Detail, als Knopf „Notizen (n)“ in dessen Kopf
+              Hängt sich außerdem als Teil „Notizen“ (Reiter „Dokumente & Notizen“) ins Mitglied-Detail, als Knopf „Notizen (n)“ in dessen Kopf
               und als Abschnitt ins Konto-Detail (Erweiterungspunkte aus client/kern).
   Datenquelle: App.daten.liste('notizen') (Snapshot, Bereich Kern – der Server liefert nur Notizen, deren
               Leserkreis die Rolle umfasst und deren Person/Konto sie sieht); Schreiben über apiNotiz….
@@ -82,7 +82,7 @@
     return n.sichtbar_fuer || '';
   }
 
-  /** Neu zeichnen – im Mitglied-Detail auf dem Reiter „Notizen“ bleiben. */
+  /** Neu zeichnen – im Mitglied-Detail beim Abschnitt „Notizen“ bleiben. */
   function neuZeichnen() {
     var a = A.aktuell();
     if (a.schluessel === 'mitglied') A.zeige('mitglied', Object.assign({}, a.param || {}, { reiter: 'notizen' }), true);
@@ -219,7 +219,7 @@
     zeichne: function (z, m) {
       var knoepfe = [];
       if (A.darf('notiz_schreiben') && kreise().length) knoepfe.push(A.knopf('Notiz hinzufügen', function () { formularDialog({ mitglied_id: m.mitglied_id }); }, 'zweit klein'));
-      z.appendChild(A.abschnitt('Notizen', knoepfe, 'h2'));
+      if (knoepfe.length) z.appendChild(A.el('div', null, { className: 'knopfleiste' }, knoepfe));   // Überschrift 
       liste(z, notizenZu(function (n) { return n.mitglied_id === m.mitglied_id; }), false, 'Keine Notizen zu dieser Person.');
     }
   });

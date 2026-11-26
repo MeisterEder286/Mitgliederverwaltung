@@ -13,7 +13,7 @@ test('Nachweise als Abteilungsleiter: Einsicht erfassen mit Feldfehler und Erfol
   const ui = await starteOberflaeche({ rolle: 'Abteilungsleiter' });
   const p = ui.page;
   try {
-    await p.getByRole('button', { name: 'Nachweise', exact: true }).click();
+    await ui.oeffne('nachweise');
     await p.waitForSelector('.kacheln');
     const vorher = ui.objekte('Qualifikation').length;
     await p.getByRole('button', { name: 'Einsichtnahme erfassen' }).click();
@@ -39,7 +39,7 @@ test('Nachweise als Mitgliederverwalter: Lizenz erfassen, Reiter, Löschen, CSV'
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   const p = ui.page;
   try {
-    await p.getByRole('button', { name: 'Nachweise', exact: true }).click();
+    await ui.oeffne('nachweise');
     await p.waitForSelector('.kacheln');
     await p.getByRole('button', { name: 'Lizenz / Kurs erfassen' }).click();
     const wert = await p.$eval('#nw-person optgroup option', o => o.value);
@@ -69,7 +69,7 @@ test('Nachweise als Mitgliederverwalter: Lizenz erfassen, Reiter, Löschen, CSV'
 test('Nachweise: Kassier ohne Menüpunkt', async () => {
   const ui = await starteOberflaeche({ rolle: 'Kassier' });
   try {
-    const nav = await ui.page.$$eval('#navigation button', b => b.map(x => x.textContent));
+    const nav = await ui.navAnsichten();
     assert.ok(!nav.includes('Nachweise'));
   } finally { await ui.schliessen(); }
 });

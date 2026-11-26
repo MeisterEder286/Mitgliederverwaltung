@@ -114,7 +114,7 @@ test('Abteilungsleiter: keine Finanzen in der Navigation, Server verweigert', as
   const ui = await starteOberflaeche({ rolle: 'Abteilungsleiter' });
   const { page } = ui;
   try {
-    const nav = await page.$$eval('#navigation button', b => b.map(x => x.textContent));
+    const nav = await ui.navAnsichten();
     assert.ok(!nav.includes('Finanzen'));
     const art = await page.evaluate(() => App.rufe('apiFinanzenUebersicht', 2026, App.still).then(() => 'ok', e => e.art));
     assert.strictEqual(art, 'zugriff');

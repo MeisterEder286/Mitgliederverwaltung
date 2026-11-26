@@ -31,7 +31,7 @@ test('Familien: Übersicht, Ausscheider umstellen, Ausbildung, Prognose (Mitglie
   const { tabs, kindId } = vereinMitAusscheider();
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', tabs });
   try {
-    await ui.page.locator('#navigation button', { hasText: 'Familien' }).click();
+    await ui.oeffne('familien');
     await ui.page.waitForSelector('.fam-karte');
     await breiteOk(ui);
     await ui.page.getByRole('tab', { name: 'Fallen heraus' }).click();
@@ -91,7 +91,7 @@ test('Finanzen: Rechnungen und Jahresübersicht (Kasse); Abteilungsleiter sieht 
     await ui.page.waitForSelector('text=Summen aller Beitragsjahre');
     await breiteOk(ui);
     // Kasse darf nicht umstellen: Knopf fehlt
-    await ui.page.locator('#navigation button', { hasText: 'Familien' }).click();
+    await ui.oeffne('familien');
     await ui.page.getByRole('tab', { name: 'Fallen heraus' }).click();
     await ui.page.waitForSelector('text=aus dem Familienbeitrag heraus');
     assert.strictEqual(await ui.page.locator('button', { hasText: 'Auf Einzelbeitrag umstellen' }).count(), 0);
@@ -99,7 +99,7 @@ test('Finanzen: Rechnungen und Jahresübersicht (Kasse); Abteilungsleiter sieht 
   } finally { await ui.schliessen(); }
   const al = await starteOberflaeche({ rolle: 'Abteilungsleiter' });
   try {
-    const nav = await al.page.$$eval('#navigation button', b => b.map(x => x.textContent));
+    const nav = await al.navAnsichten();
     assert.ok(!nav.includes('Familien'));
     const a = await al.page.evaluate(() => new Promise(r => google.script.run.withSuccessHandler(r).apiFamilieBezahlhistorie(1)));
     assert.strictEqual(a.ok, false);

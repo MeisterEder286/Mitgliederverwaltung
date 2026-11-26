@@ -11,7 +11,7 @@ test('Einwilligung erfassen und Anfrage mit Auskunft', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   try {
     const p = ui.page;
-    await p.getByRole('button', { name: 'Datenschutz' }).click();
+    await ui.oeffne('datenschutz');
     await p.getByText('Übersicht je Art').waitFor();
     const m = await p.evaluate(() => App.daten.liste('mitglieder').find(x => x.status_abgeleitet === 'aktiv' && x.nachname));
     const vorher = ui.objekte('Einwilligung').length;
@@ -69,7 +69,8 @@ test('Kassier sieht nur das (gefilterte) Protokoll, Abteilungsleiter gar nichts'
   const ui = await starteOberflaeche({ rolle: 'Kassier' });
   try {
     const p = ui.page;
-    await p.getByRole('button', { name: 'Datenschutz' }).click();
+    assert.ok((await ui.navAnsichten()).includes('Datenschutz'), 'Datenschutz fehlt in der Navigation des Kassiers');
+    await ui.oeffne('datenschutz');
     await p.getByRole('heading', { name: 'Änderungsprotokoll' }).waitFor();
     assert.strictEqual(await p.getByRole('tab', { name: 'Einwilligungen' }).count(), 0);
     await p.getByText(/Seite 1 von/).waitFor();
@@ -77,7 +78,7 @@ test('Kassier sieht nur das (gefilterte) Protokoll, Abteilungsleiter gar nichts'
   } finally { await ui.schliessen(); }
   const al = await starteOberflaeche({ rolle: 'Abteilungsleiter' });
   try {
-    assert.strictEqual(await al.page.getByRole('button', { name: 'Datenschutz' }).count(), 0);
+    assert.ok(!(await al.navAnsichten()).includes('Datenschutz'));
     const r = await al.page.evaluate(() => App.rufe('apiDatenschutzLoeschliste', App.still).then(() => 'ok', e => e.art));
     assert.strictEqual(r, 'zugriff');
   } finally { await al.schliessen(); }

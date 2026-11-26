@@ -58,26 +58,64 @@
   .jahr { font-weight: 400; font-size: 0.9rem; }
   .kopf-benutzer { font-size: 0.85rem; }
 
+  /* Hauptnavigation – mobil (< 720 px) als Leiste unten, ab 720 px oben (siehe @media unten) */
   .navigation {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 20;
     display: flex;
-    gap: 4px;
-    padding: 8px var(--abstand);
     background: var(--flaeche);
-    border-bottom: 1px solid var(--rand);
-    overflow-x: auto;
+    border-top: 1px solid var(--rand);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .navigation button {
-    min-height: 44px;
-    padding: 8px 14px;
-    border: 1px solid transparent;
-    border-radius: var(--radius);
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 56px;
+    padding: 6px 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: 0;
+    border-radius: 0;
     background: transparent;
     color: var(--text);
     font: inherit;
+    font-size: 0.75rem;
+    line-height: 1.15;
+    text-align: center;
+    overflow-wrap: anywhere;
     cursor: pointer;
-    white-space: nowrap;
   }
-  .navigation button[aria-current="page"] { background: var(--grund); border-color: var(--rand); font-weight: 600; }
+  .nav-symbol { font-size: 1.25rem; line-height: 1; }
+  .navigation button[aria-current="page"], .navigation .nav-mehr.aktiv {
+    color: var(--akzent); font-weight: 700; box-shadow: inset 0 3px 0 var(--akzent); background: var(--grund);
+  }
+  .navigation .nav-ueberzaehlig { display: none; }
+  .navigation ~ .fuss { padding-bottom: calc(12px + 57px + env(safe-area-inset-bottom, 0px)); }
+  .kopf .verein, .kopf .kopf-benutzer { display: none; }
+  .mehr-liste {
+    position: fixed; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 21;
+    display: flex; flex-direction: column; min-width: 200px; max-width: calc(100vw - 16px);
+    background: var(--grund); border: 1px solid var(--rand); border-radius: var(--radius);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2); padding: 4px;
+  }
+  .mehr-liste[hidden] { display: none; }
+  .mehr-liste button {
+    min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; text-align: left;
+    border: 0; border-radius: var(--radius); background: transparent; color: var(--text); font: inherit; cursor: pointer;
+  }
+  .mehr-liste button[aria-current="page"] { color: var(--akzent); font-weight: 700; box-shadow: inset 3px 0 0 var(--akzent); }
+
+  /* Unterreiter: Ansichten der aktuellen Gruppe als Pillen über der Liste */
+  .unterreiter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .unterreiter button {
+    min-height: 44px; padding: 6px 14px; border: 1px solid var(--rand); border-radius: 999px;
+    background: var(--grund); color: var(--text); font: inherit; cursor: pointer;
+  }
+  .unterreiter button[aria-current="page"] { background: var(--akzent); border-color: var(--akzent); color: var(--akzent-text); font-weight: 600; }
 
   .inhalt { flex: 1; padding: var(--abstand); max-width: 1100px; width: 100%; margin: 0 auto; }
   .inhalt:focus { outline: none; }
@@ -175,9 +213,23 @@
   .reiter { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; border-bottom: 1px solid var(--rand); margin: 0 0 12px; }
   .reiter button { min-height: 44px; white-space: nowrap; flex: 0 0 auto; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0; background: none; font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; }
   .reiter button[aria-selected="true"] { font-weight: 600; color: var(--akzent); box-shadow: inset 0 -3px 0 var(--akzent); }
-  @media print { .kopf, .navigation, .fuss, .knopfleiste, .filterleiste, .meldung { display: none !important; } }
+  @media print { .kopf, .navigation, .mehr-liste, .unterreiter, .fuss, .knopfleiste, .filterleiste, .meldung { display: none !important; } }
 
   @media (min-width: 720px) {
+    .navigation {
+      position: static; gap: 4px; padding: 8px var(--abstand); overflow-x: auto;
+      border-top: 0; border-bottom: 1px solid var(--rand);
+    }
+    .navigation button {
+      flex: 0 0 auto; min-height: 44px; padding: 8px 14px; display: block; font-size: 1rem; line-height: inherit;
+      white-space: nowrap; border: 1px solid transparent; border-radius: var(--radius);
+    }
+    .navigation .nav-symbol, .navigation .nav-mehr, .mehr-liste { display: none; }
+    .navigation .nav-ueberzaehlig { display: block; }
+    .navigation button[aria-current="page"] { color: var(--text); background: var(--grund); border-color: var(--rand); box-shadow: none; }
+    .navigation ~ .fuss { padding-bottom: 12px; }
+    .kopf .verein { display: inline; }
+    .kopf .kopf-benutzer { display: block; }
     .formular { grid-template-columns: 1fr 1fr; }
     .feld.breit { grid-column: 1 / -1; }
     .kopf { align-items: center; }

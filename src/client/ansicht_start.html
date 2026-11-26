@@ -34,7 +34,6 @@
 
   function jahr() { return String((A.startdaten && A.startdaten.beitragsjahr) || A.heute().slice(0, 4)); }
   function heute() { return (A.startdaten && A.startdaten.heute) || A.heute(); }
-  function rollen() { return ((A.startdaten && A.startdaten.benutzer && A.startdaten.benutzer.rollen) || []); }
   function nurAbteilung() {
     var b = (A.startdaten && A.startdaten.benutzer) || {};
     return !A.sieht('verwaltung') && !A.sieht('finanz') && (b.abteilungen || []).length > 0;
@@ -134,7 +133,6 @@
     zeichne: function (ziel) {
       var b = A.startdaten.benutzer || {};
       ziel.appendChild(A.el('h1', 'Willkommen' + (b.name ? ', ' + b.name : '')));
-      ziel.appendChild(A.el('p', 'Angemeldet als ' + (b.email || '') + ' · ' + (rollen().join(', ') || '–'), { className: 'leise' }));
 
       if (A.darf('mitglied_lesen')) schnellsuche(ziel);
 

@@ -4,7 +4,7 @@
   Zweck:      Briefe aus Vorlagen erstellen und drucken (einzeln oder als Serienbrief: Aufnahme- und Austritts-
               bestätigung, Rechnung, Mahnung, SEPA-Vorabinformation, Umstellung auf Einzelbeitrag …), erstellte Schreiben
               ansehen/nachdrucken, Vorlagen pflegen, Serienbrief-Export für Word. Dazu Links auf Aufnahmeantrag und
-              SEPA-Mandat: als Reiter „Dokumente & Schreiben“ im Mitglied-Detail und als Abschnitt im Konto-Detail
+              SEPA-Mandat: als Teil „Dokumente & Schreiben“ (Reiter „Dokumente & Notizen“) im Mitglied-Detail und als Abschnitt im Konto-Detail
               (über die Erweiterungspunkte App.erweitere, ohne die anderen Ansichtsdateien zu ändern).
   Datenquelle: App.daten (Kern: vorlagen ohne Text; Bereich „korrespondenz“: dokumente, anschreiben ohne Inhalt) und
               apiKorrespondenz…-Funktionen (src/api/Korrespondenz.js).
@@ -71,7 +71,7 @@
     var a = A.el('a', text, { href: url, target: '_blank', rel: 'noopener noreferrer' });
     return a;
   }
-  /** Nach dem Speichern neu zeichnen – im Mitglied-Detail auf dem Reiter „Dokumente & Schreiben“ bleiben. */
+  /** Nach dem Speichern neu zeichnen – im Mitglied-Detail beim Abschnitt „Dokumente & Schreiben“ bleiben. */
   function neuZeichnen() {
     var a = A.aktuell();
     if (a.schluessel === 'mitglied') A.zeige('mitglied', Object.assign({}, a.param || {}, { reiter: 'dokumente' }), true);
@@ -660,7 +660,7 @@
         });
         var knoepfe = [];
         if (A.darf('dokumente_verwalten')) knoepfe.push(A.knopf('Dokument verknüpfen', function () { dokumentDialog({ mitglied_id: m.mitglied_id, art: 'Aufnahmeantrag' }); }, 'zweit klein'));
-        z.appendChild(A.abschnitt('Dokumente', knoepfe));
+        z.appendChild(A.abschnitt('Dokumente', knoepfe, 'h3'));
         if (doks.length) z.appendChild(dokumentListe(doks));
         else z.appendChild(A.el('p', 'Keine Dokumente verknüpft (z. B. unterschriebener Aufnahmeantrag, SEPA-Mandat).', { className: 'leise' }));
         var archiv = A.el('div');
@@ -674,7 +674,7 @@
         var briefe = A.daten.liste('anschreiben').filter(function (a) { return a.mitglied_id === m.mitglied_id; });
         var k2 = [];
         if (A.darf('anschreiben_erstellen')) k2.push(A.knopf('Neues Schreiben', function () { A.zeige('korrespondenz', { mitglied_ids: [m.mitglied_id], anlass: anlassVorschlag(m) }); }, 'zweit klein'));
-        z.appendChild(A.abschnitt('Anschreiben', k2));
+        z.appendChild(A.abschnitt('Anschreiben', k2, 'h3'));
         z.appendChild(anschreibenTabelle(briefe, true));
       });
     }

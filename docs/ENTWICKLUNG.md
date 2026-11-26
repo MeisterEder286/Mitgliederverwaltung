@@ -136,6 +136,25 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 `rufe(name, ...args)` → Promise, misst die Zeit je Aufruf (Auftragspunkt 8).
 
 Bausteine in `client/kern` (Auszug):
+- Navigation: `App.registriere(schluessel, { titel, aktion, reihenfolge, versteckt, gehoertZu, zeichne })`; `titel` darf
+  eine Funktion sein (`App.titelVon(k)`, z. B. „Meine Abteilung“ für Abteilungsleiter). Die Tabelle `GRUPPEN` fasst
+  Ansichten zu Hauptmenü-Gruppen zusammen:
+
+  | Gruppe | Ansichten |
+  |---|---|
+  | Start | `start` |
+  | Mitglieder | `mitglieder`, `familien`, `funktionen`, `nachweise`, `ehrungen` |
+  | Finanzen | `finanzen` |
+  | Schreiben | `korrespondenz`, `notizen` |
+  | Berichte | `berichte`, `auswertungen` |
+  | Verwaltung | `verwaltung`, `datenschutz`, `messwerte` |
+
+  Nicht eingetragene Ansichten bilden eine eigene Gruppe. Es zählen nur für die Rolle sichtbare Ansichten; Gruppen
+  ohne sichtbare Ansicht fallen weg, Gruppen mit genau einer tragen deren Titel; Reihenfolge = kleinste `reihenfolge`.
+  Klick auf die Gruppe öffnet ihre erste Ansicht; bei mehreren erscheinen über Listenansichten (nicht über
+  `versteckt`-Detailansichten) Unterreiter (`nav.unterreiter`). `aria-current` beachtet `gehoertZu`. Unter 720 px
+  ist `#navigation` eine Leiste unten (erste 4 Gruppen + „Mehr“ bei mehr als 5 Gruppen).
+  `App.sichtbareAnsichten()` liefert alle erreichbaren Ansichten (Tests: `ui.navAnsichten()`, `ui.oeffne(k)`).
 - `App.zeige(ansicht, param, ersetzen)` – jede Ansicht ist ein Eintrag im Browser-Verlauf (`google.script.history`,
   außerhalb von Apps Script `window.history`), Anker `#ansicht/id` bzw. `#ansicht/<JSON>`; `param` muss daher
   JSON-fähig sein. `ersetzen = true` für Reiterwechsel und „nach dem Speichern“. `App.zurueck()` = Browser-Zurück.
@@ -234,7 +253,7 @@ Ansichten können sich in andere Ansichten einhängen, ohne deren Datei zu ände
 
 | Ort | Erwartet | Wirkung |
 |---|---|---|
-| `mitglied.reiter` | `{ id, titel, sicht?, aktion?, zeichne(ziel, mitglied) }` | zusätzlicher Reiter im Mitglied-Detail |
+| `mitglied.reiter` | `{ id, titel, sicht?, aktion?, zeichne(ziel, mitglied) }` | zusätzlicher Teil im Mitglied-Detail: steht seine `id` in `REITER_GRUPPEN` (client/ansicht_mitglieder), erscheint er als Abschnitt eines zusammengefassten Reiters, sonst als eigener Reiter am Ende |
 | `mitglied.knoepfe` | `function (mitglied) → Node\|null` | zusätzliche Knöpfe im Kopf des Mitglied-Details |
 | `mitglied.formular` | `function (formular, ziel, modus, mitglied)` | läuft nach Aufbau des Formulars „Bearbeiten“ (`modus = 'bearbeiten'`) bzw. „Neues Mitglied“ (`'neu'`) |
 | `konto.abschnitt` | `function (ziel, konto)` | zusätzlicher Abschnitt am Ende des Konto-Details |

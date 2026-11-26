@@ -8,7 +8,9 @@
  *
  *   const { starteOberflaeche } = require('./harness');
  *   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
- *   await ui.page.getByRole('button', { name: 'Mitglieder' }).click();
+ *   await ui.page.getByRole('button', { name: 'Mitglieder' }).click();   // Gruppe der Hauptnavigation
+ *   await ui.oeffne('nachweise')    // Ansicht direkt öffnen (auch wenn sie mobil unter „Mehr“/Unterreiter liegt)
+ *   await ui.navAnsichten()         // Titel aller für die Rolle erreichbaren Ansichten
  *   ui.daten('Mitglied')          // rohe Zeilen der Fake-Tabelle
  *   ui.fehler                     // JavaScript-Fehler der Seite (sollte leer bleiben)
  *   ui.downloads                  // [{ name, pfad }] – pfad erst nach await ui.downloadsFertig()
@@ -92,6 +94,13 @@ async function starteOberflaeche(opt) {
     /** Zeilen eines Fake-Tabs als Objekte (Spaltennamen aus der Kopfzeile, Rohwerte). */
     objekte: tab => { const d = f.daten(tab); return d.slice(1).map(z => Object.fromEntries(d[0].map((k, i) => [k, z[i]]))); },
     downloadsFertig: () => Promise.all(offeneDownloads),
+    /** Ansicht direkt öffnen (wie ein Klick in Navigation/Unterreiter, unabhängig von Breite und „Mehr“). */
+    oeffne: async (schluessel, param) => {
+      await page.evaluate(([k, p]) => App.zeige(k, p), [schluessel, param || null]);
+      await page.waitForFunction(k => App.aktuell().schluessel === k, schluessel);
+    },
+    /** Titel aller Ansichten, die die Rolle über Navigation und Unterreiter erreicht. */
+    navAnsichten: () => page.evaluate(() => App.sichtbareAnsichten().map(App.titelVon)),
     schliessen: async () => { await Promise.all(offeneDownloads); await browser.close(); }
   };
 }
