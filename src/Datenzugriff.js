@@ -18,6 +18,8 @@
  *    Version mit, die er gesehen hat. Passt sie nicht mehr, gibt es Fehler.konflikt mit dem aktuellen Stand.
  *  - Massenschreiben (einfuegenViele, aktualisiereViele) mit fester Zahl an Tabellenzugriffen, unabhängig von
  *    der Zahl der Datensätze; entfernen nur für Löschkonzept und technische Bereinigung.
+ *  - Eindeutigkeitsprüfung beim Einzelschreiben aus der Snapshot-Basis im Cache plus den in derselben Sperre
+ *    geschriebenen Datensätzen (kein Lesen des ganzen Tabs); ohne Basis im Cache wie bisher aus der Tabelle.
  *  - Der Zähler sheets zählt jeden Aufruf an SpreadsheetApp bzw. die Sheets-API (Messung, Auftragspunkt 8).
  */
 var DB = (function () {
@@ -142,6 +144,33 @@ var DB = (function () {
     return -1;
   }
 
+  /**
+   * Bestand für die Eindeutigkeitsprüfung. Unter der Sperre und mit Basis im Cache (Snapshot.bestandImCache)
+   * ohne Tabellenzugriff: Basis plus die in DIESER Sperre geschriebenen Datensätze (die Basis wird erst am Ende
+   * per write-through aktualisiert). Sonst – oder für Tabs außerhalb der Basis – wie bisher aus der Tabelle.
+   */
+  function bestandFuerPruefung(tab) {
+    var t = tabSchema(tab);
+    var quelle = t.idSpalte && typeof Snapshot !== 'undefined' && Snapshot.bestandImCache ? Snapshot.bestandImCache(tab) : null;
+    if (!quelle) return lese([tab])[tab];
+    var eig = eigene.sperre === sperrNr && gesperrt ? (eigene.tabs[tab] || {}) : {};
+    var ids = Object.keys(eig);
+    if (!ids.length) return quelle;
+    return quelle.filter(function (z) { return !Object.prototype.hasOwnProperty.call(eig, String(z[t.idSpalte])); })
+      .concat(ids.map(function (k) { return eig[k]; }).filter(Boolean));
+  }
+
+  // In der laufenden Sperre geschriebene Datensätze je Tab: { id: objekt } bzw. { id: null } für entfernte.
+  var eigene = { sperre: 0, tabs: {} };
+  function merkeEigene(tab, objekte, entfernteIds) {
+    var idSpalte = tabSchema(tab).idSpalte;
+    if (!idSpalte || !gesperrt) return;
+    if (eigene.sperre !== sperrNr) eigene = { sperre: sperrNr, tabs: {} };
+    var m = eigene.tabs[tab] = eigene.tabs[tab] || {};
+    (objekte || []).forEach(function (o) { m[String(o[idSpalte])] = o; });
+    (entfernteIds || []).forEach(function (id) { m[String(id)] = null; });
+  }
+
   /** Wirft einen fachlichen Fehler, wenn obj eine Eindeutigkeitsregel des Tabs verletzt. */
   function pruefeEindeutig(tab, obj, nurGruppenMit) {
     var t = tabSchema(tab);
@@ -149,7 +178,7 @@ var DB = (function () {
       return !nurGruppenMit || g.some(function (f) { return nurGruppenMit.indexOf(f) >= 0; });
     });
     if (!gruppen.length) return;
-    var bestand = lese([tab])[tab];
+    var bestand = bestandFuerPruefung(tab);
     gruppen.forEach(function (g) {
       // Sind ALLE Schlüsselfelder des neuen Datensatzes leer (z. B. Überweisungskonto ohne Mandatsreferenz),
       // gibt es nichts zu vergleichen. Bei teilweise leeren Gruppen (Benutzer ohne abteilung_id) gilt leer = leer.
@@ -580,13 +609,23 @@ var DB = (function () {
     mitSperre: mitSperre,
     /** Nummer der gerade gehaltenen Sperre oder 0 (außerhalb von mitSperre). */
     sperre: function () { return gesperrt ? sperrNr : 0; },
-    // Nach jedem Schreibzugriff ist der Vorrat veraltet → leeren (auch im Fehlerfall).
-    einfuegen: function (tab, obj, ktx) { try { return einfuegen(tab, obj, ktx); } finally { vorratLeeren(); } },
-    aktualisieren: function (tab, id, a, v, ktx) { try { return aktualisieren(tab, id, a, v, ktx); } finally { vorratLeeren(); } },
+    // Nach jedem Schreibzugriff ist der Vorrat veraltet → leeren (auch im Fehlerfall). Geschriebenes merken (Eindeutigkeit).
+    einfuegen: function (tab, obj, ktx) {
+      try { var neu = einfuegen(tab, obj, ktx); merkeEigene(tab, [neu]); return neu; } finally { vorratLeeren(); }
+    },
+    aktualisieren: function (tab, id, a, v, ktx) {
+      try { var r = aktualisieren(tab, id, a, v, ktx); merkeEigene(tab, [r.neu]); return r; } finally { vorratLeeren(); }
+    },
     neueId: function (tab) { try { return neueId(tab); } finally { vorratLeeren(); } },
-    einfuegenViele: function (tab, o, ktx) { try { return einfuegenViele(tab, o, ktx); } finally { vorratLeeren(); } },
-    aktualisiereViele: function (tab, l, ktx) { try { return aktualisiereViele(tab, l, ktx); } finally { vorratLeeren(); } },
-    entfernen: function (tab, ids) { try { return entfernen(tab, ids); } finally { vorratLeeren(); } },
+    einfuegenViele: function (tab, o, ktx) {
+      try { var neu = einfuegenViele(tab, o, ktx); merkeEigene(tab, neu); return neu; } finally { vorratLeeren(); }
+    },
+    aktualisiereViele: function (tab, l, ktx) {
+      try { var r = aktualisiereViele(tab, l, ktx); merkeEigene(tab, r.map(function (x) { return x.neu; })); return r; } finally { vorratLeeren(); }
+    },
+    entfernen: function (tab, ids) {
+      try { var n = entfernen(tab, ids); merkeEigene(tab, [], Array.isArray(ids) ? ids : [ids]); return n; } finally { vorratLeeren(); }
+    },
     zeilenEntfernen: function (b, zeilen) { nurInSperre('zeilenEntfernen'); try { return zeilenEntfernen(b, zeilen); } finally { vorratLeeren(); } },
     zaehler: zaehler,
     zaehlerZuruecksetzen: zaehlerZuruecksetzen,

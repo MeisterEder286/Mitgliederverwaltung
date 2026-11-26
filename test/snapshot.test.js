@@ -238,6 +238,31 @@ test('write-through: unter derselben Sperre wird die Basis nur EINMAL aus dem Ca
   assert.strictEqual(kopfLesen, 2);
 });
 
+test('Eindeutigkeit unter der Sperre aus der Basis im Cache: ohne Tabellenlesen, inkl. eigener Schreibvorgänge', () => {
+  const { f, g: s } = aufbau();
+  s.apiStart();   // Basis im Cache
+  const f2 = erzeugeFakes({ tabs: beispielTabs(TABS), email: 'verwaltung@tsv-ergoldsbach.de' });
+  f2.globale.CacheService = f.globale.CacheService;
+  const s2 = ladeProjekt(f2.globale);
+  const k = { email: 'verwaltung@tsv-ergoldsbach.de' };
+  const fachlich = (fn) => assert.throws(fn, e => e.art === 'fachlich' && /gibt es bereits/.test(e.meldung));
+  s2.DB.mitSperre(() => {
+    fachlich(() => s2.DB.einfuegen('Abteilungszugehoerigkeit', { mitglied_id: 1, abteilung_id: 1, status: 'aktiv' }, k));
+    const neu = s2.DB.einfuegen('Abteilungszugehoerigkeit', { mitglied_id: 1, abteilung_id: 2, status: 'aktiv' }, k);
+    fachlich(() => s2.DB.einfuegen('Abteilungszugehoerigkeit', { mitglied_id: 1, abteilung_id: 2, status: 'aktiv' }, k));
+    // Änderung auf ein in dieser Sperre neu belegtes Paar
+    const andere = s2.Snapshot.basis().tabs.Abteilungszugehoerigkeit.find(z => z.mitglied_id !== 1);
+    fachlich(() => s2.DB.aktualisieren('Abteilungszugehoerigkeit', andere.zugehoerigkeit_id, { mitglied_id: 1, abteilung_id: 2 }, andere.version || 0, k));
+    s2.DB.entfernen('Abteilungszugehoerigkeit', neu.zugehoerigkeit_id);
+    s2.DB.einfuegen('Abteilungszugehoerigkeit', { mitglied_id: 1, abteilung_id: 2, status: 'aktiv' }, k);
+  });
+  assert.strictEqual(f2.zaehler.batchGet || 0, 0, 'kein Lesen der Tabelle');
+  // Ohne Basis im Cache wird wie bisher gelesen
+  const { f: f3, g: s3 } = aufbau();
+  s3.DB.mitSperre(() => fachlich(() => s3.DB.einfuegen('Abteilungszugehoerigkeit', { mitglied_id: 1, abteilung_id: 1, status: 'aktiv' }, k)));
+  assert.ok(f3.zaehler.batchGet >= 1);
+});
+
 test('warmhalten: fehlende Basis wird unter der Sperre neu gebaut, frische Basis bleibt (nur Konfig wird gelesen)', () => {
   const { f, g: s } = aufbau();
   assert.strictEqual(s.Snapshot.warmhalten(), 'neu gebaut');

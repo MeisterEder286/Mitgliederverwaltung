@@ -97,6 +97,22 @@ var Snapshot = (function () {
     if (!SnapshotKern.mitgliedSichtbar(basis(), ktx, heute(), id)) throw Fehler.keinZugriff();
   }
 
+  /**
+   * Für die Eindeutigkeitsprüfung in DB: Zeilen eines Basis-Tabs, wenn die Basis unter der laufenden Sperre im
+   * Cache liegt (sonst null → DB liest die Tabelle). Baut bei fehlendem Cache bewusst NICHT neu (das wäre teurer
+   * als das Lesen des einen Tabs).
+   */
+  function bestandImCache(tab) {
+    var sperre = DB.sperre();
+    if (!sperre || !SnapshotKern.LISTEN[tab]) return null;
+    if (!(basisSpeicher && basisSperre === sperre)) {
+      var b = Cache.lade(SCHLUESSEL);
+      if (!b) return null;
+      merkeBasis(b);
+    }
+    return basisSpeicher.tabs[tab] || [];
+  }
+
   /** Cache ungültig machen (nach Setup, Massenänderungen, direkten Eingriffen in die Tabelle). */
   function verwerfen() {
     basisSpeicher = null;
@@ -130,6 +146,7 @@ var Snapshot = (function () {
   return {
     fuerClient: fuerClient,
     basis: basis, fuer: fuer, schreibe: schreibe, pruefeMitglied: pruefeMitglied, verwerfen: verwerfen,
+    bestandImCache: bestandImCache,
     warmhalten: warmhalten, mitlesen: mitlesen, letzterCache: letzterCache
   };
 })();
