@@ -4,7 +4,7 @@
  * Zweck:       Beitragsjahr, Fristen, Schalter wie snapshot_einbetten usw. an einer Stelle bereitstellen
  *              ("Konfiguration als Daten" statt fest im Code).
  * Datenquelle: Tab _Konfig über DB.lese; zwischengespeichert im Script-Cache (Schlüssel konfig:v1,
- *              10 Minuten) und für die Dauer einer Ausführung im Speicher.
+ *              1 Stunde) und für die Dauer einer Ausführung im Speicher.
  * Wer darf:    Lesen ist eine interne Hilfe ohne Rollenprüfung – die Werte gehen nie gesammelt an den
  *              Client. Ändern darf nur, wer die Aktion konfig_aendern hat (Sicherheitsregel A8); wer
  *              ändert, ruft danach Konfig.vergessen() auf.
@@ -13,7 +13,7 @@
  */
 var Konfig = (function () {
   var SCHLUESSEL = 'konfig:v1';
-  var DAUER_S = 600;
+  var DAUER_S = 3600;   // Änderungen über die App leeren den Cache sofort (vergessen); direkte Eingriffe: Verwaltung → System → „Snapshot neu aufbauen“
   var speicher = null;
 
   function alle() {
