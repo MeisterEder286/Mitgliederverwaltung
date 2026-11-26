@@ -167,7 +167,7 @@ var Verwaltung = (function () {
   var ZAHLEN = ['beitragsjahr', 'mandat_verfall_monate', 'fz_wiedervorlage_monate', 'antrag_erinnerung_tage', 'loeschantwort_frist_tage',
     'jugend_bis_alter', 'messung_puffer_max', 'sperre_wartezeit_ms', 'snapshot_sollstellung_jahre'];
   var JANEIN = ['beitrag_anteilig', 'antrag_doppelte_bestaetigung', 'mitgliedsnummer_wiederverwendung', 'tarifwechsel_automatisch',
-    'snapshot_einbetten', 'cache_warmhalten'];
+    'snapshot_einbetten', 'cache_warmhalten', 'protokoll_nachgelagert'];
   var AUSWAHL = {
     ehrung_zaehlweise: ['letzter_eintritt', 'gesamt'],
     ehrung_stichtag: ['kalenderjahr', 'exakter_tag'],

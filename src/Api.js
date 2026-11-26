@@ -53,6 +53,8 @@ var Api = (function () {
         messung = Messung.ende(h, { ok: ok, rollen: ktx ? ktx.rollen : null, cache: cache });
       } catch (e2) { messung = null; }
       if (antwort) antwort.messung = messung;
+      // Protokolleinträge warten → der Browser stößt apiNachlauf an (Übertragung ins Blatt, ohne dass jemand wartet)
+      try { if (antwort && typeof Protokoll !== 'undefined' && Protokoll.wartet && Protokoll.wartet()) antwort.nachlauf = true; } catch (e3) { /* egal */ }
     }
     return antwort;
   }

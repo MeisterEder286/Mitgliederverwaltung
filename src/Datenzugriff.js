@@ -96,6 +96,13 @@ var DB = (function () {
   function lese(tabs) {
     tabs.forEach(tabSchema);
     if (!tabs.length) return {};
+    // Wartende Protokolleinträge (Protokoll.schreibe, nachgelagert) erst übertragen – Leser sehen das vollständige Protokoll.
+    // Nur kurz auf die Sperre warten: Ein reines Lesen darf nicht an einer langen fremden Speicherung scheitern; dann
+    // wird der aktuelle Blattstand gelesen (die wartenden Einträge bleiben erhalten und folgen später).
+    if (tabs.indexOf('_Protokoll') >= 0 && !Object.prototype.hasOwnProperty.call(vorrat, '_Protokoll') &&
+      typeof Protokoll !== 'undefined' && Protokoll.nachtragen) {
+      try { Protokoll.nachtragen(2000); } catch (e) { console.warn('DB.lese: Protokoll-Nachtrag übersprungen – ' + (e && (e.meldung || e.message))); }
+    }
     var fehlend = tabs.filter(function (t) { return !Object.prototype.hasOwnProperty.call(vorrat, t); });
     if (fehlend.length) {
       var neu = leseVomSheet(fehlend);
@@ -419,12 +426,12 @@ var DB = (function () {
     return { alt: alt, neu: Werte.zeileZuObjekt(kopf, zeile, tab), diff: aenderung };
   }
 
-  /** Führt fn unter der Skriptsperre aus (wiedereintrittsfähig). Liefert das Ergebnis von fn. */
-  function mitSperre(fn) {
+  /** Führt fn unter der Skriptsperre aus (wiedereintrittsfähig). Liefert das Ergebnis von fn. wartezeitMs optional (sonst _Konfig). */
+  function mitSperre(fn, wartezeitMs) {
     if (gesperrt) return fn();
     vorratLeeren();
     var wartezeit = 10000;
-    try { wartezeit = Number(Konfig.wert('sperre_wartezeit_ms')) || 10000; } catch (e) { /* Standardwert */ }
+    try { wartezeit = Number(wartezeitMs) || Number(Konfig.wert('sperre_wartezeit_ms')) || 10000; } catch (e) { /* Standardwert */ }
     var sperre = LockService.getScriptLock();
     try {
       sperre.waitLock(wartezeit);

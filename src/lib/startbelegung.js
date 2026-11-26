@@ -163,6 +163,7 @@ var Startbelegung = {
       ["jugend_bis_alter","17","Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). OFFEN: bestätigen"],
       ["snapshot_einbetten","ja","ja = Startdaten direkt in die Seite einbetten (spart einen Aufruf), nein = nachladen. Für Messvergleich."],
       ["cache_warmhalten","ja","ja = stündlicher Trigger hält Benutzer, Einstellungen und Snapshot im Cache warm (kein langsamer Kaltstart). nein = aus."],
+      ["protokoll_nachgelagert","ja","ja = Protokolleinträge werden dauerhaft vorgemerkt und direkt nach dem Speichern im Hintergrund ins Protokoll übertragen (Speichern schneller). nein = sofort beim Speichern."],
       ["messung_puffer_max","500","Wie viele Messwerte maximal im Cache gepuffert werden, bevor sie nach _Messung geschrieben werden."],
       ["sperre_wartezeit_ms","10000","Wie lange ein Schreibvorgang höchstens auf die Sperre wartet."],
       ["impressum_url","https://www.tsv-ergoldsbach.de/impressum","Link in der Fußzeile (D1). PRÜFEN"],

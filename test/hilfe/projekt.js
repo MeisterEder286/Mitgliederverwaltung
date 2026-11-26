@@ -29,6 +29,17 @@ function ladeProjekt(globale) {
   dateien(SRC).forEach(p => {
     new vm.Script(fs.readFileSync(p, 'utf8'), { filename: path.relative(SRC, p) }).runInContext(ctx);
   });
+  // Protokoll wird nachgelagert geschrieben (Warteschlange in den Script Properties, Übertragung per apiNachlauf aus
+  // dem Browser). Für die Fachtests wird sofort übertragen – wie der Nachlauf direkt nach der Antwort.
+  // Den echten Ablauf testet man mit globale.__protokollNachgelagert = true.
+  if (ctx.Protokoll && ctx.PropertiesService && !(globale && globale.__protokollNachgelagert)) {
+    const schreibe = ctx.Protokoll.schreibe;
+    ctx.Protokoll.schreibe = function (ktx, eintraege) {
+      const n = schreibe(ktx, eintraege);
+      ctx.Protokoll.nachtragen();
+      return n;
+    };
+  }
   return ctx;
 }
 

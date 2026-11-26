@@ -393,6 +393,7 @@ function erzeugeFakes(opt) {
         timeBased() { t.art = 'zeit'; return b; },
         everyHours(n) { t.stunden = n; return b; },
         everyMinutes(n) { t.minuten = n; return b; },
+        everyMinutes(n) { t.minuten = n; return b; },
         everyDays(n) { t.tage = n; return b; },
         atHour(h) { t.stunde = h; return b; },
         nearMinute(m) { t.minute = m; return b; },

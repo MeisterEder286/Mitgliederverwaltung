@@ -129,14 +129,19 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 ### `Protokoll` (`src/Protokoll.js`)
 `schreibe(ktx, eintraege)` – `eintraege = [{ aktion, tabelle, datensatz_id, feld?, alt_wert?, neu_wert?, kommentar? }]`,
 ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)` → Einträge.
+Nachgelagert (Standard): Einträge warten in den Script Properties (`protwarte:*`), `nachtragen()` überträgt sie unter der
+Sperre (aufgerufen von `apiNachlauf`, Trigger `protokollNachtragen`, `DB.lese` mit `_Protokoll`); `wartet()` → die
+Antwort trägt `nachlauf: true`, und der Browser (`App.nachlauf` in `client/start`) ruft still `apiNachlauf` auf.
+`_Konfig.protokoll_nachgelagert = nein` schreibt wie früher sofort. Tests übertragen standardmäßig sofort
+(`test/hilfe/projekt.js`); den echten Ablauf mit `globale.__protokollNachgelagert = true`.
 
 ### `Messung` (`src/Messung.js`)
 `start(name)` → Handle; `ende(handle, {ok, cache, rollen})` → `{ server_ms, sheets }` und Puffer im Cache;
 `schreibePuffer()` (Trigger, stündlich) → `_Messung`; `auswertung()` → Median/P90 je Funktion.
 
 ### Öffentliche Funktionen (`src/Einstieg.js`)
-`doGet(e)`, `apiStart()`, `apiPing()`, `apiMessungen()`, `apiClientMessungen(liste)`; für den Eigentümer im Editor:
-`setup()`, `triggerEinrichten()`; Trigger: `messungSchreiben()`.
+`doGet(e)`, `apiStart()`, `apiPing()`, `apiNachlauf()`, `apiMessungen()`, `apiClientMessungen(liste)`; für den Eigentümer im Editor:
+`setup()`, `triggerEinrichten()`; Trigger: `messungSchreiben()`, `protokollNachtragen()`, `snapshotWarmhalten()`.
 
 ### Client (`src/client/`)
 `index.html` (Gerüst), `stil.html`, `app.html`. Startdaten kommen als `<script type="application/json" id="startdaten">`.

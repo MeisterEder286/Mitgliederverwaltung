@@ -35,6 +35,10 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
      Einstellungs-Cache auf und baut den Snapshot neu aus der Tabelle, wenn er fehlt oder sein letzter Neubau aus der
      Tabelle älter als 4 Stunden ist – so trifft niemand auf einen langsamen Kaltstart, und direkte Eingriffe in die
      Tabelle sind spätestens nach rund 5 Stunden im Snapshot.
+   - `protokollNachtragen` – alle 5 Minuten: überträgt Protokolleinträge, die noch in den Script Properties warten
+     (`protwarte:*`). Normalerweise erledigt das der Browser direkt nach dem Speichern (`apiNachlauf`); der Trigger
+     ist das Sicherheitsnetz. Diese Properties nicht von Hand löschen. Mit `_Konfig.protokoll_nachgelagert = nein`
+     wird wie früher sofort beim Speichern ins Protokoll geschrieben.
    Ergebnis jedes Wartungslaufs: ein Eintrag im `_Protokoll` (Tabelle „Wartung“), Details im Ausführungsprotokoll.
    `cache_warmhalten` kann jederzeit umgeschaltet werden, ohne `triggerEinrichten` erneut auszuführen.
 10. **Deployment:** Bereitstellen → Neue Bereitstellung → Web-App, „Ausführen als: **Ich**“, „Zugriff:

@@ -305,3 +305,63 @@ test('entfernen: Zeilen über ID löschen, zusammenhängende in einem Schritt; a
   assert.strictEqual(g.DB.mitSperre(() => g.DB.entfernen('Einwilligung', ids)), ids.length);
   assert.strictEqual(f.daten('Einwilligung').length, 1, 'nur die Kopfzeile bleibt');
 });
+
+// ---------------------------------------------------------------- Protokoll nachgelagert (echter Ablauf)
+
+function nachgelagert() {
+  const f = erzeugeFakes({ tabs: beispielTabs(['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
+    'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation', 'Ehrungsregel', 'Ehrung',
+    'Einwilligung', 'Vorlage', 'Dokument', 'Anschreiben', 'Notiz', '_Konfig', 'Benutzer', '_Protokoll', '_Messung']), email: 'verwaltung@tsv-ergoldsbach.de' });
+  f.globale.__protokollNachgelagert = true;
+  return { f, g: ladeProjekt(f.globale) };
+}
+const warteKeys = (f) => Object.keys(f.globale.PropertiesService.getScriptProperties().getProperties()).filter(k => k.startsWith('protwarte:'));
+
+test('Protokoll nachgelagert: Antwort meldet nachlauf, Blatt erst nach apiNachlauf, Warteschlange danach leer', () => {
+  const { f, g } = nachgelagert();
+  const vorher = f.daten('_Protokoll').length;
+  const a = g.Api.ausfuehren('apiTest', 'start', (ktx) => { g.Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: 'Mitglied', datensatz_id: 7, feld: 'ort', alt_wert: 'A', neu_wert: '=B' }]); return 1; });
+  assert.strictEqual(a.nachlauf, true);
+  assert.strictEqual(f.daten('_Protokoll').length, vorher, 'noch nicht im Blatt');
+  assert.strictEqual(warteKeys(f).length, 1);
+  const n = ladeProjekt(f.globale).apiNachlauf();
+  assert.strictEqual(n.daten.eintraege, 1);
+  assert.ok(!n.nachlauf, 'Nachlauf meldet keinen weiteren Nachlauf');
+  const d = f.daten('_Protokoll'), kopf = d[0], z = d[d.length - 1];
+  assert.strictEqual(d.length, vorher + 1);
+  assert.strictEqual(z[kopf.indexOf('protokoll_id')], vorher);
+  assert.strictEqual(z[kopf.indexOf('neu_wert')], "'=B", 'Formelschutz bleibt');
+  assert.strictEqual(z[kopf.indexOf('benutzer_email')], 'verwaltung@tsv-ergoldsbach.de');
+  assert.strictEqual(warteKeys(f).length, 0);
+});
+
+test('Protokoll nachgelagert: Lesen von _Protokoll überträgt zuerst; sofortiges Schreiben hält die Reihenfolge', () => {
+  const { f, g } = nachgelagert();
+  const ktx = { email: 'mv@tsv.de' };
+  g.Protokoll.schreibe(ktx, [{ aktion: 'eingesehen', tabelle: 'Mitglied', datensatz_id: 1 }]);
+  const prot = g.DB.lese(['_Protokoll'])._Protokoll;
+  assert.strictEqual(prot[prot.length - 1].aktion, 'eingesehen');
+  assert.strictEqual(warteKeys(f).length, 0);
+  // wartender Eintrag + danach ein zu großer (sofort geschrieben) → der wartende bekommt die kleinere ID
+  g.Protokoll.schreibe(ktx, [{ aktion: 'angelegt', tabelle: 'Mitglied', datensatz_id: 2 }]);
+  const gross = Array.from({ length: 30 }, (_, i) => ({ aktion: 'geändert', tabelle: 'Mitglied', datensatz_id: 3, kommentar: 'x'.repeat(400) + i }));
+  g.Protokoll.schreibe(ktx, gross);
+  const d = f.daten('_Protokoll'), kopf = d[0];
+  const ids = d.slice(-31).map(z => [z[kopf.indexOf('protokoll_id')], z[kopf.indexOf('datensatz_id')]]);
+  assert.deepStrictEqual(ids.map(x => String(x[1])), ['2'].concat(Array(30).fill('3')));
+  ids.forEach((x, i) => { if (i) assert.strictEqual(x[0], ids[i - 1][0] + 1); });
+  assert.strictEqual(warteKeys(f).length, 0);
+});
+
+test('Protokoll nachgelagert: Lesen scheitert nicht an einer belegten Sperre – wartende Einträge bleiben erhalten', () => {
+  const { f, g } = nachgelagert();
+  g.Protokoll.schreibe({ email: 'mv@tsv.de' }, [{ aktion: 'eingesehen', tabelle: 'Mitglied', datensatz_id: 1 }]);
+  const vorher = f.daten('_Protokoll').length;
+  const lock = f.globale.LockService.getScriptLock();
+  f.globale.LockService = { getScriptLock: () => Object.assign({}, lock, { waitLock() { throw new Error('Lock timeout'); } }) };
+  const orig = console.warn; console.warn = () => {};
+  let prot;
+  try { prot = ladeProjekt(f.globale).DB.lese(['_Protokoll'])._Protokoll; } finally { console.warn = orig; }
+  assert.strictEqual(prot.length, vorher - 1, 'aktueller Blattstand gelesen');
+  assert.strictEqual(warteKeys(f).length, 1, 'Eintrag wartet weiter');
+});

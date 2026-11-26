@@ -143,6 +143,7 @@
       var runner = google.script.run
         .withSuccessHandler(function (antwort) {
           merke(name, performance.now() - t0, antwort);
+          if (antwort && antwort.nachlauf && name !== 'apiNachlauf' && App.nachlauf) App.nachlauf();
           if (antwort && antwort.ok) { resolve(antwort.daten); return; }
           var f = (antwort && antwort.fehler) || { art: 'intern', meldung: 'Unerwartete Antwort vom Server.' };
           if (!still) {
