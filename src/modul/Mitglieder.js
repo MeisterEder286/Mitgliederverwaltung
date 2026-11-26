@@ -233,7 +233,8 @@ var Mitglieder = (function () {
       (eingabe.abteilungen || []).forEach(function (a) { pruefeAbteilung(ktx, a.abteilung_id); });
 
       felder.mitgliedsnummer = naechsteMitgliedsnummer();
-      felder.status = 'aktiv';
+      // Status gleich richtig schreiben (statt Einfügen + zweitem Änderungslauf an derselben Zeile)
+      felder.status = Mitgliedschaft.status(felder, [{ eintrittsdatum: eingabe.eintrittsdatum, austrittsdatum: null }], heute());
       if (leer(felder.land)) felder.land = 'DE';
       var m = DB.einfuegen('Mitglied', felder, ktx);
       var z = DB.einfuegen('Mitgliedschaftszeitraum', { mitglied_id: m.mitglied_id, eintrittsdatum: eingabe.eintrittsdatum, antrag_am: eingabe.antrag_am || null, aufnahme_beschluss_am: eingabe.aufnahme_beschluss_am || null }, ktx);
@@ -249,7 +250,6 @@ var Mitglieder = (function () {
         aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: zug });
         protokoll.push({ aktion: 'angelegt', tabelle: 'Abteilungszugehoerigkeit', datensatz_id: zug.zugehoerigkeit_id });
       });
-      statusNachziehen(ktx, m, [z], aenderungen, protokoll);
       var hinweise = p.warnungen.slice();
       if (!m.beitragsart_id && !m.beitragsgemeinschaft_id && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragsart_id') >= 0) {
         hinweise.push('Noch keine Beitragsart und keine Beitragsgemeinschaft – bitte ergänzen (sonst Klärliste).');

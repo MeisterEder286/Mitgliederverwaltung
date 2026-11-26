@@ -61,6 +61,15 @@ test('Anlegen: Mitglied + Zeitraum + Abteilung in einem Aufruf, Nummer aus _Konf
   assert.strictEqual(new Set(nummern).size, nummern.length);
 });
 
+test('Anlegen: Status wird direkt richtig geschrieben – kein zweiter Änderungslauf an der neuen Zeile', () => {
+  const u = als(MV);
+  const d = ok(u.g.apiMitgliedAnlegen({ mitglied: { vorname: 'Zukunft', nachname: 'Später' }, eintrittsdatum: '2099-01-01' }));
+  const m = u.obj('Mitglied').find(x => x.mitglied_id === d.mitglied_id);
+  assert.strictEqual(m.status, u.g.Mitgliedschaft.status(m, [{ eintrittsdatum: '2099-01-01' }], u.g.DB.jetzt().slice(0, 10)));
+  assert.strictEqual(m.version, 1);
+  assert.ok(!u.obj('_Protokoll').some(p => p.tabelle === 'Mitglied' && p.feld === 'status' && String(p.datensatz_id) === String(m.mitglied_id)));
+});
+
 test('Anlegen: Feldfehler am Feld, Dublette nur mit Bestätigung', () => {
   const u = als(MV);
   const f = fehler(u.g.apiMitgliedAnlegen({ mitglied: { vorname: 'Ohne', plz: '123', email: 'kein-at' }, eintrittsdatum: null }), 'fachlich');
