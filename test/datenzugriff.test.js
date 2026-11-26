@@ -133,6 +133,21 @@ test('aktualisieren: ohne Änderung kein Schreiben, unbekannte ID fachlich', () 
   wirft(() => g.DB.mitSperre(() => g.DB.aktualisieren('Abteilung', 4711, { bemerkung: 'x' }, 0, KTX)), 'fachlich');
 });
 
+test('Blatt und Kopfzeile werden je Ausführung nur einmal gelesen', () => {
+  const { f, g } = aufbau();
+  g.DB.mitSperre(() => {
+    g.DB.aktualisieren('Abteilung', 2, { bemerkung: 'A' }, 0, KTX);
+    g.DB.aktualisieren('Abteilung', 3, { bemerkung: 'B' }, 0, KTX);
+    g.DB.einfuegen('Abteilung', { bezeichnung: 'Boule', meldepflichtig: false, aktiv: true }, KTX);
+  });
+  assert.strictEqual(f.zaehler.getSheetByName, 2, 'Abteilung + _Konfig');
+  assert.strictEqual(f.zaehler.getLastColumn, 2, 'je Blatt eine Kopfzeile');
+  // neue Ausführung liest wieder frisch (Spalten könnten im Sheet verschoben worden sein)
+  const g2 = ladeProjekt(f.globale);
+  g2.DB.mitSperre(() => g2.DB.aktualisieren('Abteilung', 2, { bemerkung: 'C' }, 1, KTX));
+  assert.strictEqual(f.zaehler.getLastColumn, 3);
+});
+
 test('aktualisieren: Eindeutigkeit auch bei Änderung', () => {
   const { g } = aufbau();
   // Zugehörigkeit 1 (Mitglied 1, Abt. 1) auf Abt. 4 ändern – Mitglied 1 ist dort schon (Zugehörigkeit 2)

@@ -61,8 +61,8 @@ var Protokoll = (function () {
   function schreibeGesperrt(ktx, eintraege) {
     var sh = blatt();
     var letzte = sh.getLastRow();
-    var kopf = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
-    zaehle(2);
+    zaehle(1);
+    var kopf = DB.kopf(sh);   // je Ausführung gemerkt, zählt selbst
     var zeit = jetztSerial();
     var email = text(ktx && ktx.email);
     var zeilen = eintraege.map(function (e, i) {

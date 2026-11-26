@@ -48,21 +48,31 @@ var DB = (function () {
     return t;
   }
 
+  // Blätter und Kopfzeilen werden je Ausführung gemerkt (nicht über Ausführungen hinweg: wer im Sheet Spalten
+  // verschiebt, muss beim nächsten Aufruf sofort wirken, sonst landeten Werte in falschen Spalten).
+  var blattMerker = {};
+  var kopfMerker = [];   // [{ blatt, kopf }] – Zuordnung über die Objektidentität des Blatts
+
   function blatt(tab) {
     tabSchema(tab);
+    if (blattMerker[tab]) return blattMerker[tab];
     var b = datei().getSheetByName(tab);
     sheetsAufrufe++;
     if (!b) throw intern('Tab fehlt in der Datenbank: ' + tab + ' (setup() ausführen)');
+    blattMerker[tab] = b;
     return b;
   }
 
+  /** Kopfzeile (getrimmte Spaltennamen) – je Ausführung einmal gelesen. Liefert eine Kopie. */
   function kopfLesen(b) {
+    for (var i = 0; i < kopfMerker.length; i++) if (kopfMerker[i].blatt === b) return kopfMerker[i].kopf.slice();
     var spalten = b.getLastColumn();
     sheetsAufrufe++;
     if (spalten < 1) throw intern('Kopfzeile fehlt in ' + b.getName());
     var kopf = b.getRange(1, 1, 1, spalten).getValues()[0].map(function (k) { return String(k).trim(); });
     sheetsAufrufe++;
-    return kopf;
+    kopfMerker.push({ blatt: b, kopf: kopf });
+    return kopf.slice();
   }
 
   function nurInSperre(wer) {
@@ -582,6 +592,7 @@ var DB = (function () {
     zaehlerZuruecksetzen: zaehlerZuruecksetzen,
     zaehle: zaehle,
     blatt: blatt,
+    kopf: kopfLesen,
     anhaengen: anhaengen,
     jetzt: jetzt
   };
