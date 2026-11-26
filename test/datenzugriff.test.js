@@ -100,6 +100,17 @@ test('neueId: fehlender Zähler wird aus dem Bestand angelegt', () => {
   assert.strictEqual(g.DB.mitSperre(() => g.DB.neueId('Funktion')), 17);
 });
 
+test('neueId: _Konfig wird je Sperre nur einmal gelesen, Konfig.setze dazwischen wird beachtet', () => {
+  const { f, g } = aufbau();
+  const ids = g.DB.mitSperre(() => [g.DB.neueId('Funktion'), g.DB.neueId('Abteilung'), g.DB.neueId('Funktion')]);
+  assert.deepStrictEqual(ids, [16, 6, 17]);
+  assert.strictEqual(f.zaehler.getLastRow, 1, 'einmal gelesen');
+  assert.strictEqual(f.daten('_Konfig').find(z => z[0] === 'next_id_Funktion')[1], '18');
+  const id = g.DB.mitSperre(() => { g.Konfig.setze('next_id_Funktion', '100'); return g.DB.neueId('Funktion'); });
+  assert.strictEqual(id, 100);
+  assert.strictEqual(g.DB.mitSperre(() => g.DB.neueId('Funktion')), 101, 'neue Sperre liest frisch');
+});
+
 test('aktualisieren: Version, Diff, Schutz technischer Felder', () => {
   const { f, g } = aufbau();
   const vorher = g.DB.lese(['Abteilung']).Abteilung.find(a => a.abteilung_id === 3);

@@ -44,6 +44,7 @@ var Konfig = (function () {
    * Liefert den alten Wert (oder null). Leert danach den Konfig-Cache.
    */
   function setze(schluessel, wert, beschreibung) {
+    if (DB.konfigVergessen) DB.konfigVergessen();   // _Konfig wird hier an DB.zaehlerSetzen vorbei geschrieben
     var b = DB.blatt('_Konfig');
     var letzte = b.getLastRow(), spalten = b.getLastColumn();
     var daten = b.getRange(1, 1, Math.max(letzte, 1), spalten).getValues();

@@ -221,30 +221,68 @@ var DB = (function () {
     return tabSchema(tab).spalten.some(function (sp) { return sp.name === name; });
   }
 
+  // _Konfig-Zeilen, gelesen unter der laufenden Sperre: Weitere Zähler derselben Sperre (z. B. Mitglied, Zeitraum,
+  // Zugehörigkeit beim Anlegen) kommen ohne erneutes Lesen aus. Wer _Konfig an diesen Hilfen vorbei schreibt
+  // (Konfig.setze, Einstellungen), ruft konfigVergessen().
+  var konfigStand = null;   // { sperre, b, kopf, iS, iW, zeilen }
+
+  function konfigUnterSperre() {
+    if (konfigStand && gesperrt && konfigStand.sperre === sperrNr) return konfigStand;
+    var k = blatt('_Konfig');
+    var kopf = kopfLesen(k);
+    var letzte = k.getLastRow();
+    sheetsAufrufe++;
+    var zeilen = [];
+    if (letzte >= 2) { zeilen = k.getRange(2, 1, letzte - 1, kopf.length).getValues(); sheetsAufrufe++; }
+    konfigStand = { sperre: sperrNr, b: k, kopf: kopf, iS: kopf.indexOf('schluessel'), iW: kopf.indexOf('wert'), zeilen: zeilen };
+    return konfigStand;
+  }
+
+  function konfigVergessen() { konfigStand = null; }
+
+  /** Wert eines skriptverwalteten Zählers in _Konfig (Rohwert) oder null. Nur in mitSperre. */
+  function zaehlerWert(schluessel) {
+    nurInSperre('zaehlerWert');
+    var k = konfigUnterSperre();
+    for (var i = 0; i < k.zeilen.length; i++) {
+      if (String(k.zeilen[i][k.iS]).trim() === schluessel) return k.zeilen[i][k.iW];
+    }
+    return null;
+  }
+
+  /** Setzt (bzw. legt an) einen skriptverwalteten Zähler in _Konfig – ein Schreibzugriff, kein Lesen. Nur in mitSperre. */
+  function zaehlerSetzen(schluessel, wert, beschreibung) {
+    nurInSperre('zaehlerSetzen');
+    var k = konfigUnterSperre();
+    for (var i = 0; i < k.zeilen.length; i++) {
+      if (String(k.zeilen[i][k.iS]).trim() === schluessel) {
+        k.b.getRange(i + 2, k.iW + 1).setValue(String(wert));
+        sheetsAufrufe++;
+        k.zeilen[i][k.iW] = String(wert);
+        return;
+      }
+    }
+    var neu = k.kopf.map(function (h) {
+      return h === 'schluessel' ? schluessel : h === 'wert' ? String(wert) : h === 'beschreibung' ? (beschreibung || '') : '';
+    });
+    k.b.appendRow(neu);
+    sheetsAufrufe++;
+    k.zeilen.push(neu);
+  }
+
   /** Nächste freie ID eines Tabs aus _Konfig (next_id_<Tab>). Nur in mitSperre. */
   function neueId(tab) {
     vorratLeeren();
     nurInSperre('neueId');
     var t = tabSchema(tab);
     if (!t.idSpalte) throw intern('Tab ' + tab + ' hat keine ID-Spalte');
-    var k = blatt('_Konfig');
-    var kopf = kopfLesen(k);
-    var sSchluessel = kopf.indexOf('schluessel'), sWert = kopf.indexOf('wert');
-    var letzte = k.getLastRow();
-    sheetsAufrufe++;
     var name = 'next_id_' + tab;
-    if (letzte >= 2) {
-      var zeilen = k.getRange(2, 1, letzte - 1, kopf.length).getValues();
-      sheetsAufrufe++;
-      for (var i = 0; i < zeilen.length; i++) {
-        if (String(zeilen[i][sSchluessel]).trim() === name) {
-          var id = Number(zeilen[i][sWert]);
-          if (!(id > 0) || Math.floor(id) !== id) throw intern('Zähler ' + name + ' ist keine ganze Zahl');
-          k.getRange(i + 2, sWert + 1).setValue(String(id + 1));
-          sheetsAufrufe++;
-          return id;
-        }
-      }
+    var roh = zaehlerWert(name);
+    if (roh !== null) {
+      var id = Number(roh);
+      if (!(id > 0) || Math.floor(id) !== id) throw intern('Zähler ' + name + ' ist keine ganze Zahl');
+      zaehlerSetzen(name, id + 1);
+      return id;
     }
     // Zähler fehlt: aus dem Bestand ableiten und anlegen
     var max = 0;
@@ -252,14 +290,7 @@ var DB = (function () {
       var v = Number(z[t.idSpalte]);
       if (v > max) max = v;
     });
-    var neu = kopf.map(function (h) {
-      if (h === 'schluessel') return name;
-      if (h === 'wert') return String(max + 2);
-      if (h === 'beschreibung') return 'ID-Zähler — nur vom Skript erhöhen';
-      return '';
-    });
-    k.appendRow(neu);
-    sheetsAufrufe++;
+    zaehlerSetzen(name, max + 2, 'ID-Zähler — nur vom Skript erhöhen');
     return max + 1;
   }
 
@@ -385,6 +416,7 @@ var DB = (function () {
 
   /** Reserviert `anzahl` fortlaufende IDs aus _Konfig.next_id_<Tab> (nie kleiner als größte vorhandene ID + 1). */
   function reserviereIds(tab, anzahl, bestand) {
+    konfigVergessen();   // liest und schreibt _Konfig selbst
     var idSpalte = tabSchema(tab).idSpalte;
     var maxBestand = 0;
     (bestand || []).forEach(function (z) { var v = Number(z[idSpalte]); if (v > maxBestand) maxBestand = v; });
@@ -617,6 +649,9 @@ var DB = (function () {
       try { var r = aktualisieren(tab, id, a, v, ktx); merkeEigene(tab, [r.neu]); return r; } finally { vorratLeeren(); }
     },
     neueId: function (tab) { try { return neueId(tab); } finally { vorratLeeren(); } },
+    zaehlerWert: zaehlerWert,
+    zaehlerSetzen: function (s, w, b) { try { return zaehlerSetzen(s, w, b); } finally { vorratLeeren(); } },
+    konfigVergessen: konfigVergessen,
     einfuegenViele: function (tab, o, ktx) {
       try { var neu = einfuegenViele(tab, o, ktx); merkeEigene(tab, neu); return neu; } finally { vorratLeeren(); }
     },

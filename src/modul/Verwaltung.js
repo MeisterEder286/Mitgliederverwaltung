@@ -259,6 +259,7 @@ var Verwaltung = (function () {
       // Formelschutz (Befund M1): Werte wie "=IMPORTXML(…)" würden sonst als Formel ausgeführt.
       b.getRange(nr, iW + 1).setValue(Werte.zelleSchreiben(String(neu), { typ: 'Text' }));
       DB.zaehle(1);
+      DB.konfigVergessen();
       DB.vorratLeeren();
       Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: '_Konfig', datensatz_id: s, feld: 'wert', alt_wert: alt, neu_wert: neu }]);
       Konfig.vergessen();
