@@ -178,6 +178,19 @@ test('write-through: Änderung steht ohne erneutes Lesen im nächsten Snapshot; 
   s3.Snapshot.pruefeMitglied(kAl, 12);
 });
 
+test('warmhalten: fehlende Basis wird unter der Sperre neu gebaut, frische Basis bleibt (nur Konfig wird gelesen)', () => {
+  const { f, g: s } = aufbau();
+  assert.strictEqual(s.Snapshot.warmhalten(), 'neu gebaut');
+  assert.strictEqual(f.zaehler.releaseLock, 1, 'Neubau unter der Sperre');
+  assert.ok(s.Cache.vorhanden('snapshot:basis'));
+  const f2 = erzeugeFakes({ tabs: beispielTabs(TABS), email: 'verwaltung@tsv-ergoldsbach.de' });
+  f2.globale.CacheService = f.globale.CacheService;
+  const s2 = ladeProjekt(f2.globale);
+  assert.strictEqual(s2.Snapshot.warmhalten(), 'aktuell');
+  assert.strictEqual(f2.zaehler.batchGet, 1, 'nur _Konfig');
+  assert.ok(!f2.zaehler.releaseLock, 'keine Sperre ohne Neubau');
+});
+
 test('Lasttest 1200 Personen: Größe und Laufzeit', () => {
   const { erzeugeVerein, alsObjekte } = require('./daten/generator');
   const { tabs } = erzeugeVerein({ seed: 7, mitglieder: 1200, stichtag: HEUTE });

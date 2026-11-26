@@ -165,11 +165,10 @@ function triggerEinrichten() {
   ScriptApp.newTrigger('messungSchreiben').timeBased().everyHours(1).create();
   // Nächtliche Pflege (Status-Cache, Fristen, Löschbarkeit, Protokoll-Bereinigung am Monatsersten, Messwerte, Snapshot)
   ScriptApp.newTrigger('wartungNachts').timeBased().everyDays(1).atHour(2).inTimezone('Europe/Berlin').create();
-  var text = 'Trigger eingerichtet: messungSchreiben (stündlich), wartungNachts (täglich gegen 02:00).';
-  if (Konfig.wert('cache_warmhalten') === 'ja') {
-    ScriptApp.newTrigger('snapshotWarmhalten').timeBased().everyHours(5).create();
-    text += ' snapshotWarmhalten (alle 5 Stunden).';
-  }
+  // Immer anlegen: snapshotWarmhalten prüft _Konfig.cache_warmhalten selbst – Umschalten braucht so kein neues triggerEinrichten.
+  ScriptApp.newTrigger('snapshotWarmhalten').timeBased().everyHours(1).create();
+  var text = 'Trigger eingerichtet: messungSchreiben (stündlich), wartungNachts (täglich gegen 02:00), ' +
+    'snapshotWarmhalten (stündlich, wirkt nur bei cache_warmhalten = ja).';
   console.log(text);
   return text;
 }

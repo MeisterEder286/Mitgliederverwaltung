@@ -21,6 +21,7 @@
 var Snapshot = (function () {
   var SCHLUESSEL = 'snapshot:basis';
   var DAUER_S = 21600;
+  var WARM_NEU_AB_MS = 4 * 3600 * 1000;   // stündlicher Trigger → spätestens nach ~5 h neu gebaut, vor Ablauf (6 h)
   var basisSpeicher = null;     // je Ausführung
   var cacheErgebnis = null;
 
@@ -94,13 +95,26 @@ var Snapshot = (function () {
     Cache.verwerfe(SCHLUESSEL);
   }
 
-  /** Für den optionalen Trigger: Basis neu bauen, bevor der Cache abläuft. */
+  /**
+   * Für den stündlichen Trigger: Konfig-Cache auffrischen und die Basis neu bauen, wenn sie im Cache fehlt oder
+   * älter als WARM_NEU_AB_MS ist. Der Neubau läuft unter der Sperre, damit er keine gleichzeitige Speicherung im
+   * Cache mit einem älteren Tabellenstand überschreibt.
+   */
   function warmhalten() {
     if (Konfig.wert('cache_warmhalten') !== 'ja') return false;
-    basisSpeicher = null;
-    DB.vorratLeeren();
-    basisSpeicher = baueAusTabelle();
-    return true;
+    Konfig.vergessen();
+    Konfig.alle();
+    var b = Cache.lade(SCHLUESSEL);
+    if (b && alterMs(b) < WARM_NEU_AB_MS) return 'aktuell';
+    return DB.mitSperre(function () {
+      basisSpeicher = baueAusTabelle();
+      return 'neu gebaut';
+    });
+  }
+
+  function alterMs(b) {
+    var gebaut = Date.parse(b && b.gebaut_am);
+    return isFinite(gebaut) ? Date.parse(DB.jetzt()) - gebaut : Infinity;
   }
 
   function letzterCache() { return cacheErgebnis; }

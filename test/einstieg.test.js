@@ -123,7 +123,7 @@ test('setup und triggerEinrichten nur für das Funktionskonto', () => {
   const eigen = lade();
   assert.strictEqual(eigen.g.setup(), 'Bericht');
   eigen.g.triggerEinrichten();
-  assert.deepStrictEqual(rein(eigen.protokoll.trigger), [['geloescht', 'alt'], ['neu', 'messungSchreiben', '1h'], ['neu', 'wartungNachts', '1d@2']]);
+  assert.deepStrictEqual(rein(eigen.protokoll.trigger), [['geloescht', 'alt'], ['neu', 'messungSchreiben', '1h'], ['neu', 'wartungNachts', '1d@2'], ['neu', 'snapshotWarmhalten', '1h']]);
 });
 
 test('messungSchreiben wirft nie (Trigger), auch ohne Berechtigung', () => {
