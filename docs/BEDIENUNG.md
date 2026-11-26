@@ -10,8 +10,12 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   Funktionen, Nachweise, Ehrungen), stehen sie als Knöpfe oben über der Liste. Auf dem Handy liegt die Navigation als
   Leiste am unteren Bildschirmrand; weitere Gruppen öffnen sich über „Mehr“. Die angemeldete E-Mail-Adresse zeigt der
   Name oben rechts beim Darüberfahren mit der Maus.
-- **Start:** Kennzahlen und „Zu erledigen“. Ein Klick auf eine Kachel führt zur passenden Liste.
+- **Start:** Kacheln in drei Gruppen: „Mitglieder“ (Bestand), „Zu erledigen“ (Führungszeugnisse, Ehrungen,
+  Datenqualität, DSGVO-Anfragen, Postausgang, Wiedervorlagen – grau gestrichelt mit 0 heißt „nichts zu tun“) und
+  „Finanzen“. Ein Klick auf eine Kachel führt zur passenden Liste.
 - **Suchen:** oben auf der Startseite oder in „Mitglieder“ – Name, Mitgliedsnummer, Ort. Umlaute egal (Müller = Mueller).
+  Auf der Startseite wählen die Pfeiltasten einen Vorschlag, Enter öffnet ihn, Escape schließt die Vorschläge.
+  In „Mitglieder“ setzt „Filter zurücksetzen“ Suche und Filter wieder auf den Grundzustand (Status „aktiv“).
 - **Listen drucken/exportieren:** jeweils über „Drucken“ (auch „Als PDF speichern“) oder „CSV“ (öffnet in Excel).
   Jeder Export wird mit Name, Zeit und Liste protokolliert. Kontaktlisten bitte nicht in Messenger-Gruppen weitergeben.
 - **„Der Datensatz wurde inzwischen geändert“:** Jemand anderes hat gleichzeitig gespeichert. Die aktuelle Fassung wird

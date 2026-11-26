@@ -138,3 +138,71 @@ test('Ungespeicherte Eingaben: Rückfrage bei Navigation und Browser-Zurück, na
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });
+
+test('Kartentabelle unter 600 px: Karten statt Spalten, Sortierauswahl ersetzt die Spaltenköpfe', async () => {
+  const ui = await starteOberflaeche({ breite: 360 });
+  const p = ui.page;
+  try {
+    await p.evaluate(() => {
+      var inhalt = App.leere(document.getElementById('inhalt'));
+      var zeilen = [{ name: 'Berta Beispiel-Langername', ort: 'Ergoldsbach', betrag: 12 }, { name: 'Anton', ort: 'Landshut', betrag: 30 }];
+      window.__geklickt = null;
+      inhalt.appendChild(App.tabelle([
+        { feld: 'name', titel: 'Name' }, { feld: 'ort', titel: 'Wohnort' }, { feld: 'betrag', titel: 'Betrag', zahl: true, wert: function (z) { return App.betrag(z.betrag); } }
+      ], zeilen, { karten: true, kartenTitel: 'name', sortiere: 'name', beiKlick: function (z) { window.__geklickt = z.name; } }));
+    });
+    const tabelle = p.locator('table.karten');
+    assert.strictEqual(await tabelle.locator('thead').isVisible(), false);
+    assert.strictEqual(await tabelle.locator('td').nth(1).getAttribute('data-titel'), 'Wohnort');
+    assert.strictEqual(await tabelle.locator('td').nth(1).evaluate(td => getComputedStyle(td, '::before').content), '"Wohnort"');
+    assert.strictEqual(await tabelle.locator('td.kartentitel').first().evaluate(td => getComputedStyle(td, '::before').content), 'none');
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'waagrechter Bildlauf');
+    assert.ok(await p.evaluate(() => { var r = document.querySelector('.tabelle-rahmen'); return r.scrollWidth <= r.clientWidth; }));
+    const namen = () => p.locator('td.kartentitel').allTextContents();
+    assert.deepStrictEqual(await namen(), ['Anton', 'Berta Beispiel-Langername']);
+    const wahl = p.getByLabel('Sortieren nach');
+    assert.strictEqual(await wahl.inputValue(), 'name|auf');
+    await wahl.selectOption('betrag|ab');
+    assert.deepStrictEqual(await namen(), ['Anton', 'Berta Beispiel-Langername']);
+    await wahl.selectOption('ort|ab');
+    assert.deepStrictEqual(await namen(), ['Anton', 'Berta Beispiel-Langername']);
+    await wahl.selectOption('ort|auf');
+    assert.deepStrictEqual(await namen(), ['Berta Beispiel-Langername', 'Anton']);
+    await p.locator('tr.klickbar').first().focus();
+    await p.keyboard.press('Enter');
+    assert.strictEqual(await p.evaluate(() => window.__geklickt), 'Berta Beispiel-Langername');
+    await p.setViewportSize({ width: 1280, height: 800 });
+    assert.strictEqual(await tabelle.locator('thead').isVisible(), true);
+    assert.strictEqual(await wahl.isVisible(), false);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
+test('Formular: Hinweis „* Pflichtfeld“ einmal, Datumseingaben werden vereinheitlicht', async () => {
+  const ui = await starteOberflaeche({ breite: 360 });
+  const p = ui.page;
+  try {
+    await p.evaluate(() => {
+      window.__formular = App.formular([
+        { name: 'a', titel: 'Name', pflicht: true }, { name: 'b', titel: 'Ort', pflicht: true },
+        { name: 'd', titel: 'Eintritt', typ: 'datum' }
+      ], {});
+      App.leere(document.getElementById('inhalt')).appendChild(window.__formular.element);
+    });
+    assert.strictEqual(await p.locator('form .pflichthinweis').count(), 1);
+    assert.strictEqual(await p.locator('form .pflichthinweis').textContent(), '* Pflichtfeld');
+    const datum = p.getByLabel('Eintritt');
+    await datum.pressSequentially('01012026');
+    assert.strictEqual(await datum.inputValue(), '01.01.2026');
+    const blur = async (text) => { await datum.fill(text); await datum.blur(); return datum.inputValue(); };
+    assert.strictEqual(await blur('1.1.2026'), '01.01.2026');
+    assert.strictEqual(await blur('3.4.1985'), '03.04.1985');
+    assert.strictEqual(await blur('1.1.26'), '1.1.26');   // zweistellige Jahre werden nicht geraten
+    assert.strictEqual(await blur('2026-02-03'), '03.02.2026');
+    assert.strictEqual(await blur('quatsch'), 'quatsch');
+    await datum.fill('5.6.2026');
+    assert.strictEqual(await p.evaluate(() => window.__formular.werte().d), '2026-06-05');
+    assert.strictEqual(await p.evaluate(() => App.formular([{ name: 'x', titel: 'X' }]).element.querySelector('.pflichthinweis')), null);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});

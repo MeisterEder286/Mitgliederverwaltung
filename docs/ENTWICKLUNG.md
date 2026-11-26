@@ -160,6 +160,13 @@ Bausteine in `client/kern` (Auszug):
   JSON-fähig sein. `ersetzen = true` für Reiterwechsel und „nach dem Speichern“. `App.zurueck()` = Browser-Zurück.
 - `App.formular(felder, werte, { schutz: true })` – fragt vor dem Verlassen mit ungespeicherten Eingaben; nach
   erfolgreichem Speichern `formular.gespeichert()` aufrufen (`App.speichere` tut das selbst).
+  Felder mit `pflicht` → Hinweis „* Pflichtfeld“ am Formularende. Datumsfelder (`typ: 'datum'`) setzen beim Tippen
+  reiner Ziffern die Punkte und vereinheitlichen beim Verlassen (`App.normalisiereDatum`: „1.1.2026“,
+  „01012026“, „2026-01-01“ → „01.01.2026“; zweistellige Jahre werden nicht geraten und bleiben unverändert).
+- `App.tabelle(spalten, zeilen, { karten: true, kartenTitel: 'feld' })` – unter 600 px jede Zeile als Karte
+  (nur CSS, Spaltentitel aus `td[data-titel]`, `kartenTitel`-Zelle als fette Überschrift); statt der Spaltenköpfe
+  erscheint dort die Auswahl „Sortieren nach“. Klickbare Zeilen bleiben per Tastatur bedienbar.
+- `#meldung` klebt oben im Sichtfeld (`position: sticky`), ist also auch weit unten in Listen sichtbar.
 - `App.knopf` – Doppelklick-Schutz: solange die von der Aktion gestarteten `App.rufe`-Aufrufe (oder ein
   zurückgegebenes Promise) laufen, ist der Knopf `aria-busy` und ignoriert weitere Klicks.
 - `App.dialog(titel, inhalt, knoepfe, { beiAbbruch })` – Meldungen erscheinen während des Dialogs in diesem;

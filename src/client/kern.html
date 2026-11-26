@@ -99,6 +99,19 @@
     if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
     return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
   };
+  /**
+   * Datumseingabe vereinheitlichen → 'TT.MM.JJJJ': '1.1.2026', '01012026', '2026-01-01'.
+   * Zweistellige Jahre bleiben bewusst unverändert (Geburtsdatum 1930 vs. Austritt 2030 wäre geraten) –
+   * der Server meldet sie dann als ungültig. Unbekanntes bleibt unverändert.
+   */
+  App.normalisiereDatum = function (text) {
+    var s = String(text || '').trim();
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (m) return App.datum(s);
+    m = /^(\d{1,2})[.\/ -](\d{1,2})[.\/ -](\d{4})$/.exec(s) || /^(\d{2})(\d{2})(\d{4})$/.exec(s);
+    if (!m || +m[1] < 1 || +m[1] > 31 || +m[2] < 1 || +m[2] > 12) return s;
+    return ('0' + m[1]).slice(-2) + '.' + ('0' + m[2]).slice(-2) + '.' + m[3];
+  };
   App.heute = function () {
     var d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
@@ -675,17 +688,40 @@
   /**
    * Tabelle mit sortierbaren Spalten und „mehr anzeigen“ (Paginierung in Blöcken, Auftragspunkt 6).
    * spalten: [{ feld, titel, zahl, wert(z) → Anzeige, sort(z) → Sortierwert, klasse(z) }]
-   * optionen: { beiKlick(z), block (Standard 50), leer: 'Text', sortiere: feld, absteigend }
+   * optionen: { beiKlick(z), block (Standard 50), leer: 'Text', sortiere: feld, absteigend, karten, kartenTitel }
+   *   karten: true – unter 600 px Breite wird jede Zeile zur Karte (nur CSS: Kopfzeile ausgeblendet, je Zelle
+   *     „Spaltentitel: Wert“ aus data-titel); statt der Spaltenköpfe erscheint dann eine Auswahl „Sortieren nach“.
+   *   kartenTitel: feld (oder [felder]) – diese Zelle(n) bilden die Kartenüberschrift (fett, ohne Titel),
+   *     z. B. App.tabelle(spalten, zeilen, { karten: true, kartenTitel: 'name', beiKlick: … }).
    */
   App.tabelle = function (spalten, zeilen, optionen) {
     optionen = optionen || {};
     var block = optionen.block || 50;
     var anzahl = block;
     var sort = { feld: optionen.sortiere || null, ab: !!optionen.absteigend };
+    var kartenTitel = [].concat(optionen.kartenTitel || []);
     var rahmen = App.el('div', null, { className: 'tabelle-rahmen' });
     var info = App.el('p', '', { className: 'leise tabelle-info' });
     var mehr = App.knopf('Mehr anzeigen', function () { anzahl += block; zeichne(); }, 'zweit');
-    var huelle = App.el('div', null, null, [rahmen, info, mehr]);
+    var sortierbare = spalten.filter(function (s) { return s.feld && s.sortierbar !== false; });
+    var sortWahl = null, sortLeiste = null;
+    // Kartenansicht: Ersatz für die ausgeblendeten Spaltenköpfe (nur unter 600 px sichtbar, siehe stil)
+    if (optionen.karten && sortierbare.length) {
+      var wahlId = 'sortierung-' + Math.random().toString(36).slice(2, 7);
+      sortWahl = App.el('select', null, { id: wahlId });
+      sortWahl.appendChild(App.el('option', '–', { value: '' }));
+      sortierbare.forEach(function (s) {
+        sortWahl.appendChild(App.el('option', s.titel + ' ▲ aufsteigend', { value: s.feld + '|auf' }));
+        sortWahl.appendChild(App.el('option', s.titel + ' ▼ absteigend', { value: s.feld + '|ab' }));
+      });
+      sortWahl.addEventListener('change', function () {
+        var teile = sortWahl.value.split('|');
+        sort.feld = teile[0] || null; sort.ab = teile[1] === 'ab';
+        zeichne();
+      });
+      sortLeiste = App.el('div', null, { className: 'kartensortierung' }, [App.el('label', 'Sortieren nach', { htmlFor: wahlId }), sortWahl]);
+    }
+    var huelle = App.el('div', null, null, [sortLeiste, rahmen, info, mehr]);
 
     function wertVon(s, z) { return s.wert ? s.wert(z) : z[s.feld]; }
     function sortWert(s, z) { var v = s.sort ? s.sort(z) : z[s.feld]; return typeof v === 'string' ? App.falte(v) : v; }
@@ -703,8 +739,12 @@
         });
       }
       App.leere(rahmen);
+      if (sortWahl) {
+        sortWahl.value = sort.feld ? sort.feld + '|' + (sort.ab ? 'ab' : 'auf') : '';
+        sortLeiste.hidden = !liste.length;
+      }
       if (!liste.length) { rahmen.appendChild(App.el('p', optionen.leer || 'Keine Einträge.', { className: 'leise' })); info.textContent = ''; mehr.hidden = true; return; }
-      var t = App.el('table');
+      var t = App.el('table', null, { className: optionen.karten ? 'karten' : '' });
       var kopf = App.el('tr');
       spalten.forEach(function (s) {
         var th = App.el('th', null, { className: s.zahl ? 'zahl' : '', scope: 'col' });
@@ -728,6 +768,10 @@
         spalten.forEach(function (s) {
           var v = wertVon(s, z);
           var td = App.el('td', null, { className: (s.zahl ? 'zahl ' : '') + (s.klasse ? s.klasse(z) || '' : '') });
+          if (optionen.karten) {
+            td.setAttribute('data-titel', s.titel || '');
+            if (s.feld && kartenTitel.indexOf(s.feld) >= 0) td.classList.add('kartentitel');
+          }
           if (v instanceof Node) td.appendChild(v); else td.textContent = v === null || v === undefined || v === '' ? '–' : v;
           tr.appendChild(td);
         });
@@ -761,6 +805,7 @@
    * Formular aus Felddefinitionen. felder: [{ name, titel, typ: 'text'|'datum'|'zahl'|'betrag'|'auswahl'|'janein'|
    * 'langtext'|'email'|'tel', liste: [werte] oder [{wert, text}], zahl (Auswahl liefert Zahl, z. B. für IDs),
    * pflicht, hilfe, nurLesen, breit }] – zusätzlich { gruppe: 'Überschrift' } als Zwischenüberschrift.
+   * Gibt es Pflichtfelder, steht am Ende der Hinweis „* Pflichtfeld“; Datumsfelder siehe datumshilfe.
    * werte: Startwerte. optionen: { beiAbsenden, schutz } – schutz: vor dem Verlassen der Seite mit
    * ungespeicherten Eingaben fragen (nur für Formulare direkt auf der Seite, nicht in Dialogen).
    * Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name), gespeichert() }.
@@ -798,7 +843,10 @@
       } else {
         var typ = { datum: 'text', zahl: 'number', betrag: 'text', email: 'email', tel: 'tel' }[f.typ] || 'text';
         eingabe = App.el('input', null, { id: id, type: typ });
-        if (f.typ === 'datum') { eingabe.placeholder = 'TT.MM.JJJJ'; eingabe.inputMode = 'numeric'; eingabe.value = v ? App.datum(v) : ''; }
+        if (f.typ === 'datum') {
+          eingabe.placeholder = 'TT.MM.JJJJ'; eingabe.inputMode = 'numeric'; eingabe.value = v ? App.datum(v) : '';
+          datumshilfe(eingabe);
+        }
         else if (f.typ === 'betrag') { eingabe.inputMode = 'decimal'; eingabe.value = v === null || v === undefined ? '' : String(v).replace('.', ','); }
         else eingabe.value = v === null || v === undefined ? '' : String(v);
       }
@@ -812,6 +860,9 @@
       form.appendChild(zeile);
       eingaben[f.name] = { def: f, eingabe: eingabe, fehler: fehler };
     });
+    if (felder.some(function (f) { return f.pflicht && !f.gruppe; })) {
+      form.appendChild(App.el('p', '* Pflichtfeld', { className: 'leise pflichthinweis' }));
+    }
     return {
       element: form,
       /** Nach erfolgreichem Speichern: Änderungsschutz aufheben. */
@@ -824,7 +875,7 @@
           if (e.def.nurLesen) return;
           if (e.def.typ === 'janein') o[n] = s === 'ja' ? true : s === 'nein' ? false : null;
           else if (e.def.typ === 'auswahl' && e.def.zahl) o[n] = s === '' ? null : Number(s);
-          else if (e.def.typ === 'datum') o[n] = s ? (App.isoDatum(s) || s) : null;
+          else if (e.def.typ === 'datum') o[n] = s ? (App.isoDatum(App.normalisiereDatum(s)) || s) : null;
           else if (e.def.typ === 'zahl') o[n] = s === '' ? null : Number(s);
           else if (e.def.typ === 'betrag') o[n] = s === '' ? null : Number(s.replace(/\./g, '').replace(',', '.'));
           else o[n] = s === '' ? null : s;
@@ -844,6 +895,25 @@
       }
     };
   };
+
+  /**
+   * Datumsfeld: Beim Tippen reiner Ziffern Punkte nach Tag und Monat einfügen ('0101' → '01.01'), beim
+   * Verlassen vereinheitlichen (App.normalisiereDatum). Eingefügte Texte (z. B. ISO-Datum) bleiben beim Tippen unberührt.
+   */
+  function datumshilfe(eingabe) {
+    var form = function (z) { return z.length <= 2 ? z : z.slice(0, 2) + '.' + z.slice(2, 4) + (z.length > 4 ? '.' + z.slice(4) : ''); };
+    eingabe.addEventListener('input', function (e) {
+      var s = eingabe.value, ziffern = s.replace(/\./g, '');
+      if (e.inputType !== 'insertText' || !/^\d$/.test(e.data || '') || eingabe.selectionStart !== s.length) return;
+      // nur weiterformatieren, solange die Eingabe aus reinen (ggf. schon gepunkteten) Ziffern besteht
+      if (!/^\d{1,8}$/.test(ziffern) || s.slice(0, -1) !== form(ziffern.slice(0, -1))) return;
+      eingabe.value = form(ziffern);
+    });
+    eingabe.addEventListener('blur', function () {
+      var neu = App.normalisiereDatum(eingabe.value);
+      if (neu !== eingabe.value) eingabe.value = neu;
+    });
+  }
 
   /**
    * Speichern-Ablauf für Formulare: ruft apiName(…args, werte) und zeigt Feldfehler (err.felder) am Formular.

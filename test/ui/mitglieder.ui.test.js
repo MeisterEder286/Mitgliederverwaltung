@@ -220,3 +220,26 @@ test('Alter Reiter-Schlüssel „notizen“: springt zum Abschnitt, auch wenn Ab
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });
+
+test('Mitgliederliste: Filter zurücksetzen, Status als Marke mit Symbol', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  try {
+    const p = ui.page;
+    await navigiere(ui, 'Mitglieder');
+    const reset = p.getByRole('button', { name: 'Filter zurücksetzen' });
+    assert.strictEqual(await reset.isVisible(), false, 'im Grundzustand kein Zurücksetzen');
+    // Status „aktiv“: „davon aktiv“ wäre gleich „angezeigt“ und entfällt
+    assert.strictEqual(await p.getByText('davon aktiv').count(), 0);
+    await p.locator('.marke.status-aktiv', { hasText: '● aktiv' }).first().waitFor();
+    if (!(await p.locator('details.mv-filter').evaluate(d => d.open))) await p.locator('details.mv-filter summary').click();
+    await p.selectOption('select[aria-label="Status"]', '');
+    await p.fill('.filterleiste input[type=search]', 'zzz-gibt-es-nicht');
+    await p.getByText('Keine Mitglieder für diese Auswahl.').waitFor();
+    await reset.click();
+    assert.strictEqual(await p.inputValue('.filterleiste input[type=search]'), '');
+    assert.strictEqual(await p.inputValue('select[aria-label="Status"]'), 'aktiv');
+    assert.strictEqual(await reset.isVisible(), false);
+    assert.strictEqual(await p.getByText('Keine Mitglieder für diese Auswahl.').count(), 0);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});

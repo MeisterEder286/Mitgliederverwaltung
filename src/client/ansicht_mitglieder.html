@@ -15,6 +15,9 @@
     - Abteilungsleiter sehen nur Personen ihrer Abteilung (serverseitig geschnitten); der Titel lautet dann
       „Meine Abteilung“. Die Exaktsuche liefert höchstens einen Treffer und nie eine Trefferliste.
     - „Zuletzt angesehen“ liegt nur im sessionStorage dieses Browsers (keine Personendaten, nur IDs).
+    - Liste: Suchfeld zuoberst, „Filter zurücksetzen“ nur bei Abweichung vom Grundzustand (Status „aktiv“);
+      Status als Marke mit Farbe + Symbol + Text (.marke.status-…). param.suche/status/jugend/gekuendigt belegen die
+      Filter vor (Sprung von der Startseite).
     - Detail-Reiter: Teile (REITER + Erweiterungen 'mitglied.reiter', je mit sicht/aktion) werden über
       REITER_GRUPPEN zu sechs Reitern zusammengefasst; jeder sichtbare Teil steht als eigener Abschnitt
       (h2 mit altem Titel, id „mitglied-teil-<id>“) untereinander. Eine Erweiterung, deren id in keiner Gruppe
@@ -32,8 +35,17 @@
   .mv-abteilungswahl { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
   .mv-abteilungswahl label { display: flex; gap: 10px; align-items: center; min-height: 44px; }
   .mv-abteilungswahl select { min-height: 40px; padding: 4px 8px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); }
-  .mv-kontakt { display: flex; flex-direction: column; gap: 2px; }
-  .mv-kontakt a { display: inline-flex; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+  .mv-kontakt { display: flex; flex-wrap: wrap; gap: 0 16px; margin: -10px 0; }
+  .mv-kontakt a { display: inline-flex; align-items: center; min-height: 44px; margin: 0; overflow-wrap: anywhere; }
+  .marke.status-aktiv { background: #e3f3e6; color: #17562a; border-color: #8cc79b; }
+  .marke.status-gekuendigt { background: #fff1cc; color: #5c4400; border-color: #d9b44a; }
+  .marke.status-ausgetreten { background: #eeeeee; color: #454545; border-color: #b5b5b5; }
+  .marke.status-verstorben { background: #e2e2e2; color: #1f1f1f; border-color: #8a8a8a; }
+  .marke.status-extern { background: #e8eef7; color: #24406b; border-color: #9fb3d3; }
+  .mv-suchzeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; }
+  .mv-suchzeile .filterleiste { flex: 1 1 260px; margin: 0; }
+  .mv-suchzeile [hidden] { display: none; }
+  .mv-briefanrede-knopf { margin-top: 4px; align-self: flex-start; }
   .mv-listen { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
   .mv-listen h3 { margin: 0 0 4px; font-size: 1rem; }
   .mv-listen p { margin: 0 0 8px; }
@@ -59,7 +71,11 @@
     vertreter_mitglied_id: 'Gesetzliche Vertretung (Mitglied)', vertreter_name: 'Gesetzliche Vertretung (Name)',
     vertreter_kontakt: 'Vertretung Kontakt', bemerkung: 'Bemerkung', abteilung_id: 'Abteilung', status: 'Status',
     passnummer: 'Passnummer', eintrittsdatum: 'Eintritt', austrittsdatum: 'Austritt', funktionsart_id: 'Funktion',
-    zusatz: 'Zusatz (Mannschaft/Gruppe)', von: 'Seit', bis: 'Bis', bestellt_am: 'Bestellt am', beendigungsgrund: 'Grund'
+    zusatz: 'Zusatz (Mannschaft/Gruppe)', von: 'Seit', bis: 'Bis', bestellt_am: 'Bestellt am', beendigungsgrund: 'Grund',
+    mitgliedsnummer: 'Mitgliedsnummer', sterbedatum: 'Sterbedatum', adresse_ungueltig: 'Adresse ungültig (Post kam zurück)',
+    adresse_ungueltig_am: 'Adresse ungültig seit', ausbildung_art: 'Ausbildung / Schule', ausbildung_bis: 'Ausbildung bis',
+    ausbildung_nachweis_am: 'Nachweis vorgelegt am', verarbeitung_eingeschraenkt: 'Verarbeitung eingeschränkt (Art. 18 DSGVO)',
+    sperre_grund: 'Grund der Sperre', loeschbar_ab: 'Löschbar ab', anonymisiert: 'Anonymisiert', anonymisiert_am: 'Anonymisiert am'
   };
   function titel(name) {
     if (TITEL[name]) return TITEL[name];
@@ -99,6 +115,16 @@
     if (s === 'gekündigt') return 'gekündigt zum ' + A.datum(m.gekuendigt_zum);
     if (s === 'extern') return 'Funktionsträger (kein Mitglied)';
     return s;
+  }
+  var STATUS_SYMBOL = { aktiv: '●', 'gekündigt': '◐', ausgetreten: '○', verstorben: '✝', extern: '◇' };
+  /** Status als Marke: Farbe plus Symbol plus Text (nie nur Farbe). */
+  function statusMarke(m) {
+    var s = statusVon(m);
+    var klasse = { aktiv: 'aktiv', 'gekündigt': 'gekuendigt', ausgetreten: 'ausgetreten', verstorben: 'verstorben', extern: 'extern' }[s];
+    var marke = A.el('span', null, { className: 'marke' + (klasse ? ' status-' + klasse : '') });
+    if (STATUS_SYMBOL[s]) marke.appendChild(A.el('span', STATUS_SYMBOL[s] + ' ', { aria: { hidden: 'true' } }));
+    marke.appendChild(document.createTextNode(statusText(m)));
+    return marke;
   }
   function laeuft(von, bis) { var h = heute(); return (!von || von <= h) && (!bis || bis >= h); }
   function zugehoerigkeitenVon(id) { return A.daten.liste('zugehoerigkeiten').filter(function (z) { return z.mitglied_id === id; }); }
@@ -237,7 +263,7 @@
       return (m.funktionen_laufend || []).map(function (id) { var a = funktionsart(id); return a ? a.bezeichnung : ''; }).join(', ');
     } });
     sp.push({ feld: 'mitglied_seit', titel: 'seit', wert: function (m) { return A.datum(m.mitglied_seit); } });
-    sp.push({ feld: 'status_abgeleitet', titel: 'Status', wert: statusText, sort: statusVon });
+    sp.push({ feld: 'status_abgeleitet', titel: 'Status', wert: statusMarke, sort: statusVon });
     if (A.sieht('hochsensibel')) sp.push({ feld: 'fz_ampel', titel: 'Nachweise', wert: function (m) { return ampelText(m.fz_ampel); } });
     return sp;
   }
@@ -248,6 +274,8 @@
     if (A.darf('mitglied_anlegen')) knoepfe.push(A.knopf('Neues Mitglied', function () { A.zeige('mitglied_neu'); }));
     if (A.darf('mitglied_anlegen') && A.darf('konto_bearbeiten')) knoepfe.push(A.knopf('Beitritte aus XML importieren', function () { A.zeige('beitritt'); }, 'zweit'));
     ziel.appendChild(A.abschnitt(titelText, knoepfe, 'h1'));
+    var suchzeile = A.el('div', null, { className: 'mv-suchzeile' });
+    ziel.appendChild(suchzeile);
 
     var zl = zuletzt().map(mitglied).filter(Boolean);
     if (zl.length) {
@@ -257,7 +285,6 @@
     }
 
     var kacheln = A.el('div', null, { className: 'kacheln' });
-    ziel.appendChild(kacheln);
 
     var abteilungen = A.daten.liste('abteilungen').filter(function (a) {
       return A.daten.liste('mitglieder').some(function (m) { return (m.abteilungen || []).indexOf(a.abteilung_id) >= 0; });
@@ -283,11 +310,27 @@
       var l = gefiltert(z);
       tabelle.aktualisiere(l);
       A.leere(kacheln);
+      var anzahlAktiv = l.filter(function (m) { return statusVon(m) === 'aktiv' || statusVon(m) === 'gekündigt'; }).length;
       kacheln.appendChild(A.kachel(A.zahl(l.length), 'angezeigt'));
-      kacheln.appendChild(A.kachel(A.zahl(l.filter(function (m) { return statusVon(m) === 'aktiv' || statusVon(m) === 'gekündigt'; }).length), 'davon aktiv'));
+      if (anzahlAktiv !== l.length) kacheln.appendChild(A.kachel(A.zahl(anzahlAktiv), 'davon aktiv'));
       if (sichtbar('Mitglied', 'geburtsdatum')) kacheln.appendChild(A.kachel(A.zahl(l.filter(function (m) { return m.alter !== undefined && m.alter < 18; }).length), 'unter 18'));
       if (A.sieht('hochsensibel')) kacheln.appendChild(A.kachel(A.zahl(l.filter(function (m) { return m.funktionen_laufend && m.funktionen_laufend.length; }).length), 'mit Funktion'));
+      zuruecksetzen.hidden = !filterAktiv(z);
     }
+    // Abweichung vom Grundzustand (Status „aktiv“, sonst alles leer)?
+    function filterAktiv(z) {
+      if (String(z.suche || '').trim()) return true;
+      return filter.some(function (f) { return String(z[f.name] || '') !== (f.name === 'status' ? 'aktiv' : ''); });
+    }
+    var zuruecksetzen = A.knopf('Filter zurücksetzen', function () {
+      suchfeld.value = '';
+      leiste.zustand.suche = '';
+      selects.forEach(function (sel, i) { var n = filter[i].name; sel.value = n === 'status' ? 'aktiv' : ''; leiste.zustand[n] = sel.value; });
+      zaehleFilter();
+      aktualisiere(leiste.zustand);
+      try { suchfeld.focus(); } catch (e) { /* egal */ }
+    }, 'zweit');
+    zuruecksetzen.hidden = true;
     var leiste = A.filterleiste(filter, aktualisiere, 'Name, Nummer, Ort, E-Mail …');
     var suchfeld = leiste.querySelector('input');
     if (listenZustand.suche) { suchfeld.value = listenZustand.suche; leiste.zustand.suche = listenZustand.suche; }
@@ -306,15 +349,17 @@
     selects.forEach(function (sel) { filterBox.appendChild(sel); sel.addEventListener('change', zaehleFilter); });
     auf.appendChild(filterBox);
     function zaehleFilter() {
-      var n = selects.filter(function (sel) { return sel.value; }).length;
+      var n = selects.filter(function (sel, i) { return sel.value !== (filter[i].name === 'status' ? 'aktiv' : ''); }).length;
       auf.firstChild.textContent = n ? 'Filter (' + n + ' aktiv)' : 'Filter';
     }
     zaehleFilter();
     if (window.matchMedia && window.matchMedia('(min-width: 720px)').matches) auf.open = true;
-    ziel.appendChild(leiste);
+    suchzeile.appendChild(leiste);
+    suchzeile.appendChild(zuruecksetzen);
     ziel.appendChild(auf);
+    ziel.appendChild(kacheln);
     tabelle = A.tabelle(listenSpalten(), [], {
-      sortiere: 'nachname', leer: 'Keine Mitglieder für diese Auswahl.',
+      sortiere: 'nachname', leer: 'Keine Mitglieder für diese Auswahl.', karten: true, kartenTitel: 'nachname',
       beiKlick: function (m) { A.zeige('mitglied', { id: m.mitglied_id }); }
     });
     ziel.appendChild(tabelle);
@@ -462,7 +507,7 @@
     var kopf = A.el('div', null, { className: 'mv-kopf' }, [
       A.el('h1', A.name(m)),
       A.el('span', 'Nr. ' + m.mitgliedsnummer, { className: 'marke' }),
-      A.el('span', statusText(m), { className: 'marke' })
+      statusMarke(m)
     ]);
     if (m.alter !== undefined && m.alter !== null) kopf.appendChild(A.el('span', m.alter + ' Jahre', { className: 'marke' }));
     if (m.ehrenmitglied === true) kopf.appendChild(A.el('span', 'Ehrenmitglied', { className: 'marke' }));
@@ -716,19 +761,42 @@
     });
   }
 
-  // Zwischenüberschriften für lange Mitglied-Formulare (erstes Feld einer Gruppe → Überschrift davor)
-  var GRUPPEN = { eintrittsdatum: 'Mitgliedschaft', anrede: 'Person', strasse: 'Anschrift', telefon: 'Kontakt',
-    beitragsart_id: 'Beitrag', vertreter_mitglied_id: 'Gesetzliche Vertretung', ehrenmitglied: 'Weitere Angaben', bemerkung: 'Bemerkung' };
+  // Zwischenüberschriften und Reihenfolge für lange Mitglied-Formulare. Felder ohne Eintrag landen unter „Weitere Angaben“.
+  var GRUPPEN = [
+    { titel: 'Mitgliedschaft', felder: ['eintrittsdatum'] },
+    { titel: 'Person', felder: ['anrede', 'titel', 'vorname', 'nachname', 'geburtsdatum', 'geschlecht', 'briefanrede'] },
+    { titel: 'Anschrift', felder: ['strasse', 'hausnummer', 'plz', 'ort', 'land'] },
+    { titel: 'Kontakt', felder: ['telefon', 'handy', 'email', 'versandart'] },
+    { titel: 'Beitrag', felder: ['beitragsart_id', 'beitragskonto_id', 'beitragsgemeinschaft_id', 'ausbildung_art', 'ausbildung_bis', 'ausbildung_nachweis_am'] },
+    { titel: 'Gesetzliche Vertretung', felder: ['vertreter_mitglied_id', 'vertreter_name', 'vertreter_kontakt'] },
+    { titel: 'Weitere Angaben', felder: ['ehrenmitglied', 'ehrenmitglied_seit', 'nur_funktionstraeger'] },
+    { titel: 'Bemerkung', felder: ['bemerkung'] }
+  ];
   function mitGruppen(defs) {
-    var aus = [], gesehen = {};
-    var reihenfolge = ['eintrittsdatum', 'anrede', 'strasse', 'telefon', 'beitragsart_id', 'vertreter_mitglied_id', 'ehrenmitglied', 'bemerkung'];
+    var weitere = 6, faecher = GRUPPEN.map(function () { return []; });
     defs.forEach(function (d) {
-      var g = GRUPPEN[d.name];
-      if (!g && d.name === 'vorname' && !gesehen.Person) g = 'Person';
-      if (g && !gesehen[g] && reihenfolge.indexOf(d.name) >= 0 || (g === 'Person' && !gesehen.Person)) { aus.push({ gruppe: g }); gesehen[g] = true; }
-      aus.push(d);
+      var gi = -1;
+      GRUPPEN.forEach(function (g, i) { if (g.felder.indexOf(d.name) >= 0) gi = i; });
+      faecher[gi < 0 ? weitere : gi].push(d);
+    });
+    var aus = [];
+    faecher.forEach(function (fach, i) {
+      if (!fach.length) return;
+      var reihe = GRUPPEN[i].felder;
+      // stabil sortieren: bekannte Felder in Gruppen-Reihenfolge, unbekannte dahinter in Katalogreihenfolge
+      fach = fach.map(function (d, n) { return { d: d, n: n, r: reihe.indexOf(d.name) < 0 ? 999 : reihe.indexOf(d.name) }; })
+        .sort(function (a, b) { return a.r - b.r || a.n - b.n; }).map(function (x) { return x.d; });
+      aus.push({ gruppe: GRUPPEN[i].titel });
+      aus = aus.concat(fach);
     });
     return aus;
+  }
+  /** „Briefanrede vorschlagen“ als Knopf direkt unter dem Feld Briefanrede. */
+  function briefanredeKnopf(f) {
+    var feld = f.feld('briefanrede');
+    if (!feld || !feld.parentNode) return;
+    var k = A.knopf('Briefanrede vorschlagen', function () { feld.value = briefanredeVorschlag(f.werte()); }, 'zweit mv-briefanrede-knopf');
+    feld.parentNode.insertBefore(k, feld.nextSibling);
   }
 
   function zeichneBearbeiten(ziel, param) {
@@ -750,10 +818,7 @@
       warnung.hidden = !hinweise.length;
     }
     f.element.addEventListener('change', pruefeHinweise);
-    var vorschlag = A.knopf('Briefanrede vorschlagen', function () {
-      var feld = f.feld('briefanrede');
-      if (feld) feld.value = briefanredeVorschlag(f.werte());
-    }, 'zweit');
+    briefanredeKnopf(f);
     var speichern = A.knopf('Speichern', function () {
       var w = zahlenFK(f.werte(), 'Mitglied');
       speichern.disabled = true;
@@ -768,7 +833,7 @@
         if (err.felder) f.setzeFehler(err.felder);
       });
     });
-    ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [speichern, sichtbar('Mitglied', 'briefanrede') ? vorschlag : null, A.knopf('Abbrechen', function () { A.zurueck(); }, 'zweit')]));
+    ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [speichern, A.knopf('Abbrechen', function () { A.zurueck(); }, 'zweit')]));
     pruefeHinweise();
   }
 
@@ -792,6 +857,7 @@
     var trotzLabel = A.el('label', null, { htmlFor: 'mv-trotz' }, [trotz, A.el('span', ' Es ist eine andere Person – trotzdem anlegen')]);
     ziel.appendChild(A.el('p', 'Die Mitgliedsnummer vergibt das System. Bankverbindung und Mandat werden im Bereich Finanzen erfasst (nie über Formulare im Internet).', { className: 'leise' }));
     ziel.appendChild(f.element);
+    briefanredeKnopf(f);
     A.rufeErweiterungen('mitglied.formular', f, ziel, 'neu', null);
 
     function pruefeDublette() {
@@ -992,8 +1058,16 @@
 
   A.registriere('mitglieder', {
     titel: 'Mitglieder', aktion: 'mitglied_lesen', reihenfolge: 10,
-    zeichne: function (ziel) {
-      // Titel der Navigation beim Abteilungsleiter anpassen (nach dem Start bekannt)
+    zeichne: function (ziel, param) {
+      // Sprung von der Startseite (Schnellsuche/Kacheln): Suchbegriff bzw. Filter vorbelegen. Danach den
+      // Verlaufseintrag ohne Parameter ersetzen – sonst überschriebe „Zurück“ die eigenen Filter wieder.
+      if (param && (param.suche || param.status || param.jugend || param.gekuendigt)) {
+        // Schnellsuche findet alle Status → Liste ebenfalls ohne Statusfilter
+        listenZustand = { suche: param.suche || '', status: param.gekuendigt ? 'gekündigt' : (param.status || (param.suche ? '' : 'aktiv')) };
+        if (param.jugend) listenZustand.merkmal = 'jugend';
+        A.zeige('mitglieder', null, true);
+        return;
+      }
       zeichneListe(ziel);
     }
   });

@@ -17,6 +17,8 @@
 <style>
   .fin-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
   .fin-zeile select, .fin-zeile input { min-height: 44px; padding: 6px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .fin-feld { display: inline-flex; flex-direction: column; gap: 2px; font-size: 0.9rem; font-weight: 600; }
+  .fin-feld input { font-weight: 400; }
   .fin-summe { font-weight: 600; margin: 6px 0 12px; }
   .fin-iban { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.02em; }
   .fin-hinweis { background: #fff6dc; color: #5c4400; border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px; }
@@ -730,8 +732,8 @@
   // ------------------------------------------------------------------ SEPA
 
   function zeigeSepa(ziel) {
-    var datum = A.el('input', null, { type: 'text', placeholder: 'Einzugsdatum TT.MM.JJJJ (leer = laut Sollstellung)', inputMode: 'numeric' });
-    datum.setAttribute('aria-label', 'Einzugsdatum');
+    var datum = A.el('input', null, { type: 'text', id: 'fin-sepa-datum', placeholder: 'TT.MM.JJJJ', inputMode: 'numeric' });
+    var datumFeld = A.el('label', null, { className: 'fin-feld', htmlFor: 'fin-sepa-datum' }, [A.el('span', 'Einzugsdatum (leer = laut Sollstellung)'), datum]);
     var ergebnis = A.el('div');
     // Umfang (aus Access: Jahresbeitragseinzug / „Laufender Einzug“ für Nachzügler)
     var umfang = A.el('select', null, { aria: { label: 'Umfang des Laufs' } });
@@ -740,7 +742,7 @@
     umfang.appendChild(A.el('option', 'Auch übermittelte erneut', { value: 'erneut' }));
     umfang.value = zustand.sepaUmfang || 'neu';
     umfang.addEventListener('change', function () { zustand.sepaUmfang = umfang.value; A.leere(ergebnis); });
-    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen), umfang, datum, A.knopf('Probelauf', probelauf)]));
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen), umfang, datumFeld, A.knopf('Probelauf', probelauf)]));
     ziel.appendChild(A.el('p', 'Standard: nur Sollstellungen, die noch in keiner SEPA-Datei waren – so kann derselbe Lauf später für Nachzügler (Neuaufnahmen) wiederholt werden, ohne doppelt einzuziehen.', { className: 'leise' }));
     ziel.appendChild(A.el('p', 'Format pain.008.001.08 mit strukturierten Adressen (Pflicht ab 15.11.2026). Vor dem ersten echten Einsatz eine Datei aus dem Testsystem bei der Hausbank als Test einreichen.', { className: 'fin-hinweis' }));
     ziel.appendChild(ergebnis);
