@@ -102,6 +102,7 @@
   }
   .knopf.zweit { background: var(--grund); color: var(--akzent); }
   .knopf:disabled { opacity: 0.6; cursor: default; }
+  .knopf[aria-busy="true"] { opacity: 0.6; cursor: progress; }
 
   .karte { border: 1px solid var(--rand); border-radius: var(--radius); padding: 12px; margin: 0 0 12px; background: var(--grund); }
   .liste { list-style: none; padding: 0; margin: 0; }
@@ -169,6 +170,7 @@
   .dialog > .knopfleiste { position: sticky; bottom: calc(-1 * var(--abstand)); background: var(--grund); padding: 10px 0 var(--abstand); margin-top: 8px; border-top: 1px solid var(--rand); }
   input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; accent-color: var(--akzent); }
   .dialog::backdrop { background: rgba(0,0,0,0.4); }
+  .dialog .dialog-meldung, .meldung.ladefehler { margin: 8px 0; }
   /* Reiter: eine Zeile, auf dem Handy waagrecht wischbar (statt mehrzeilig umzubrechen) */
   .reiter { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; border-bottom: 1px solid var(--rand); margin: 0 0 12px; }
   .reiter button { min-height: 44px; white-space: nowrap; flex: 0 0 auto; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0; background: none; font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; }

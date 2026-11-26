@@ -98,7 +98,7 @@
   }
 
   function laedt(ziel) { var p = A.el('p', 'Lädt …', { className: 'laedt' }); ziel.appendChild(p); return p; }
-  function fehlerText(ziel, text) { A.leere(ziel); ziel.appendChild(A.el('p', text || 'Konnte nicht geladen werden.', { className: 'leise' })); }
+  function fehlerText(ziel, text, nochmal) { A.leere(ziel); A.ladefehler(ziel, text, nochmal); }
 
   var heute = function () { return (A.startdaten && A.startdaten.heute) || A.heute(); };
 
@@ -122,7 +122,7 @@
       { text: 'Speichern', art: ' ', aktion: function (schliessen) {
         var w = form.werte();
         if (!vorhandene) w.mitglied_id = m.mitglied_id;
-        A.rufe('apiDatenschutzEinwilligungSpeichern', vorhandene ? vorhandene.einwilligung_id : null, vorhandene ? vorhandene.version : null, w, A.still)
+        return A.rufe('apiDatenschutzEinwilligungSpeichern', vorhandene ? vorhandene.einwilligung_id : null, vorhandene ? vorhandene.version : null, w, A.still)
           .then(function (antwort) { A.daten.uebernehme(antwort); A.meldung('Einwilligung gespeichert.', 'ok'); schliessen(); fertig(); },
             function (err) { if (err.felder) form.setzeFehler(err.felder); else A.fehler(err); });
       } }
@@ -146,9 +146,9 @@
         if (e.widerrufen_am) return '';
         return A.knopf('Widerrufen', function (ev) {
           ev.stopPropagation();
-          A.bestaetige('Widerruf erfassen', 'Widerruf der Einwilligung „' + e.art + '“ mit Datum ' + A.datum(heute()) + ' erfassen? Der Nachweis bleibt erhalten.', 'Widerruf erfassen').then(function (ja) {
+          return A.bestaetige('Widerruf erfassen', 'Widerruf der Einwilligung „' + e.art + '“ mit Datum ' + A.datum(heute()) + ' erfassen? Der Nachweis bleibt erhalten.', 'Widerruf erfassen').then(function (ja) {
             if (!ja) return;
-            A.rufe('apiDatenschutzEinwilligungWiderrufen', e.einwilligung_id, e.version, heute()).then(function (antwort) {
+            return A.rufe('apiDatenschutzEinwilligungWiderrufen', e.einwilligung_id, e.version, heute()).then(function (antwort) {
               A.daten.uebernehme(antwort); A.meldung('Widerruf gespeichert.', 'ok'); personEinwilligungen(m, ziel);
             }).catch(function () {});
           });
@@ -193,7 +193,9 @@
       var bereich = A.el('div');
       ziel.appendChild(personWahl(function (m) { personEinwilligungen(m, bereich); }, 'Person suchen'));
       ziel.appendChild(bereich);
-    }).catch(function () { fehlerText(ziel); });
+    }).catch(function () {
+      fehlerText(ziel, 'Die Einwilligungen konnten nicht geladen werden.', function () { A.leere(ziel); reiterEinwilligungen(ziel); });
+    });
   }
 
   // ================================================================== Betroffenenanfragen
@@ -262,7 +264,7 @@
     inhalt.appendChild(form.element);
     var knoepfe = [{ text: 'Abbrechen' }];
     if (a) knoepfe.push({ text: 'Auskunft erstellen', aktion: function () {
-      A.rufe('apiDatenschutzAuskunft', a.mitglied_id).then(auskunftZeigen).catch(function () {});
+      return A.rufe('apiDatenschutzAuskunft', a.mitglied_id).then(auskunftZeigen).catch(function () {});
     } });
     knoepfe.push({ text: 'Speichern', art: ' ', aktion: function (schliessen) {
       var w = form.werte();
@@ -270,7 +272,7 @@
         if (!person) { A.meldung('Bitte die betroffene Person wählen.', 'fehler'); return; }
         w.mitglied_id = person.mitglied_id;
       }
-      A.rufe('apiDatenschutzAnfrageSpeichern', a ? a.anfrage_id : null, a ? a.version : null, w, A.still).then(function () {
+      return A.rufe('apiDatenschutzAnfrageSpeichern', a ? a.anfrage_id : null, a ? a.version : null, w, A.still).then(function () {
         A.meldung('Anfrage gespeichert.', 'ok'); schliessen(); fertig();
       }, function (err) { if (err.felder) form.setzeFehler(err.felder); else A.fehler(err); });
     } });
@@ -293,7 +295,7 @@
         { feld: 'status', titel: 'Status' },
         { feld: 'frist', titel: 'Frist', wert: fristAnzeige }
       ], liste, { leer: 'Keine Anfragen erfasst.', sortiere: 'eingang_am', absteigend: true, beiKlick: function (a) { anfrageDialog(a, neu); } }));
-    }).catch(function () { fehlerText(bereich); });
+    }).catch(function () { fehlerText(bereich, 'Die Betroffenenanfragen konnten nicht geladen werden.', neu); });
   }
 
   // ================================================================== Löschliste
@@ -309,15 +311,20 @@
   function bestaetigungsDialog(titel, inhalt, wort, ausfuehren) {
     var feld = A.el('input', null, { type: 'text', autocomplete: 'off' });
     feld.setAttribute('aria-label', 'Bestätigungswort ' + wort);
+    var hinweis = A.el('p', '', { className: 'feldfehler', role: 'alert', hidden: true });
     var box = A.el('div', null, { className: 'ds-gefahr' }, [
-      A.el('strong', 'Unwiderruflich. '), A.el('span', 'Zur Bestätigung bitte ' + wort + ' eingeben:'), feld
+      A.el('strong', 'Unwiderruflich. '), A.el('span', 'Zur Bestätigung bitte ' + wort + ' eingeben:'), feld, hinweis
     ]);
     var wrap = A.el('div', null, null, [inhalt, box]);
     A.dialog(titel, wrap, [
       { text: 'Abbrechen' },
       { text: titel, art: 'gefahr', aktion: function (schliessen) {
-        if (feld.value.trim() !== wort) { A.meldung('Bitte genau ' + wort + ' eingeben.', 'fehler'); feld.focus(); return; }
-        ausfuehren(feld.value.trim(), schliessen);
+        if (feld.value.trim() !== wort) {
+          hinweis.textContent = 'Bitte genau ' + wort + ' eingeben.'; hinweis.hidden = false;
+          feld.setAttribute('aria-invalid', 'true'); feld.focus(); return;
+        }
+        hinweis.hidden = true; feld.removeAttribute('aria-invalid');
+        return ausfuehren(feld.value.trim(), schliessen);
       } }
     ]);
     setTimeout(function () { feld.focus(); }, 50);
@@ -326,16 +333,16 @@
   function aktionFuer(k, neuLaden) {
     if (k.stufe === 'sperren') return A.knopf('Sperren', function (ev) {
       ev.stopPropagation();
-      A.bestaetige('Datensatz sperren', A.name(A.daten.hole('mitglieder', k.mitglied_id)) + ' sperren? Der Satz verschwindet aus Listen und Exporten und bleibt nur für die Aufbewahrung erreichbar.', 'Sperren').then(function (ja) {
+      return A.bestaetige('Datensatz sperren', A.name(A.daten.hole('mitglieder', k.mitglied_id)) + ' sperren? Der Satz verschwindet aus Listen und Exporten und bleibt nur für die Aufbewahrung erreichbar.', 'Sperren', 'gefahr').then(function (ja) {
         if (!ja) return;
-        A.rufe('apiDatenschutzSperren', k.mitglied_id, k.version, true).then(function (antwort) {
+        return A.rufe('apiDatenschutzSperren', k.mitglied_id, k.version, true).then(function (antwort) {
           A.daten.uebernehme(antwort); A.meldung('Gesperrt.', 'ok'); neuLaden();
         }).catch(function () {});
       });
     }, 'zweit klein');
     if (k.stufe === 'anonymisieren') return A.knopf('Vorschau …', function (ev) {
       ev.stopPropagation();
-      A.rufe('apiDatenschutzAnonymisierungsplan', k.mitglied_id).then(function (plan) {
+      return A.rufe('apiDatenschutzAnonymisierungsplan', k.mitglied_id).then(function (plan) {
         var inhalt = A.el('div');
         inhalt.appendChild(A.el('p', plan.person + ' wird anonymisiert. Folgende Schritte werden ausgeführt:'));
         var ul = A.el('ul', null, { className: 'ds-schritte' });
@@ -348,7 +355,7 @@
         if (plan.sperre_grund) inhalt.appendChild(A.el('p', 'Buchungen bleiben gesperrt: ' + plan.sperre_grund, { className: 'leise' }));
         (plan.hinweise || []).forEach(function (h) { inhalt.appendChild(A.el('p', h, { className: 'leise' })); });
         bestaetigungsDialog('Anonymisieren', inhalt, 'ANONYMISIEREN', function (wort, schliessen) {
-          A.rufe('apiDatenschutzAnonymisieren', k.mitglied_id, wort).then(function (antwort) {
+          return A.rufe('apiDatenschutzAnonymisieren', k.mitglied_id, wort).then(function (antwort) {
             A.daten.uebernehme(antwort); schliessen();
             A.meldung('Anonymisiert: ' + antwort.bericht.geaendert + ' Datensätze überschrieben, ' + antwort.bericht.entfernt + ' entfernt.', 'ok');
             neuLaden();
@@ -359,16 +366,16 @@
     if (k.stufe === 'loeschen') return A.knopf('Löschen …', function (ev) {
       ev.stopPropagation();
       bestaetigungsDialog('Endgültig löschen', A.el('p', 'Der anonymisierte Datensatz ' + (k.person || k.id) + ' und alle zugehörigen Zeilen (Konto, Buchungen, Chronik) werden entfernt.'), 'LÖSCHEN', function (wort, schliessen) {
-        A.rufe('apiDatenschutzLoeschen', k.mitglied_id, wort).then(function (antwort) {
+        return A.rufe('apiDatenschutzLoeschen', k.mitglied_id, wort).then(function (antwort) {
           A.daten.uebernehme(antwort); schliessen(); A.meldung(antwort.bericht.entfernt + ' Zeilen gelöscht.', 'ok'); neuLaden();
         }).catch(function () {});
       });
     }, 'gefahr klein');
     if (k.stufe === 'konto_leeren') return A.knopf('Leeren', function (ev) {
       ev.stopPropagation();
-      A.bestaetige('IBAN und Mandat leeren', 'Bei Konto ' + k.id + ' (' + (k.person || '') + ') IBAN, BIC und Mandat endgültig leeren?', 'Leeren').then(function (ja) {
+      return A.bestaetige('IBAN und Mandat leeren', 'Bei Konto ' + k.id + ' (' + (k.person || '') + ') IBAN, BIC und Mandat endgültig leeren?', 'Leeren', 'gefahr').then(function (ja) {
         if (!ja) return;
-        A.rufe('apiDatenschutzKontoLeeren', k.id, k.version).then(function (antwort) {
+        return A.rufe('apiDatenschutzKontoLeeren', k.id, k.version).then(function (antwort) {
           A.daten.uebernehme(antwort); A.meldung('Konto geleert.', 'ok'); neuLaden();
         }).catch(function () {});
       });
@@ -391,9 +398,9 @@
       ziel.appendChild(kacheln);
       if (d.protokoll_bereinigen) {
         ziel.appendChild(A.abschnitt('Protokoll bereinigen', [A.knopf('Jetzt bereinigen', function () {
-          A.bestaetige('Protokoll bereinigen', 'Alte und neue Werte in ' + d.protokoll_bereinigen + ' Protokolleinträgen leeren? Zeitpunkt, Benutzer und Aktion bleiben erhalten.', 'Bereinigen').then(function (ja) {
+          return A.bestaetige('Protokoll bereinigen', 'Alte und neue Werte in ' + d.protokoll_bereinigen + ' Protokolleinträgen leeren? Zeitpunkt, Benutzer und Aktion bleiben erhalten.', 'Bereinigen', 'gefahr').then(function (ja) {
             if (!ja) return;
-            A.rufe('apiDatenschutzProtokollBereinigen').then(function (r) { A.meldung(r.anzahl + ' Einträge bereinigt.', 'ok'); neuLaden(); }).catch(function () {});
+            return A.rufe('apiDatenschutzProtokollBereinigen').then(function (r) { A.meldung(r.anzahl + ' Einträge bereinigt.', 'ok'); neuLaden(); }).catch(function () {});
           });
         }, 'zweit')]));
       }
@@ -410,7 +417,7 @@
         ], liste, { block: 25 }));
       });
       if (!d.kandidaten.length && !d.protokoll_bereinigen) ziel.appendChild(A.el('p', 'Derzeit ist nichts zu sperren, zu anonymisieren oder zu löschen.', { className: 'karte' }));
-    }).catch(function () { fehlerText(ziel); });
+    }).catch(function () { fehlerText(ziel, 'Die Löschliste konnte nicht geladen werden.', neuLaden); });
   }
 
   // ================================================================== Protokoll
@@ -472,7 +479,7 @@
         zurueck.disabled = d.seite <= 0;
         weiter.disabled = d.seite >= d.seiten - 1;
         bereich.appendChild(A.el('div', null, { className: 'ds-seiten' }, [zurueck, A.el('span', 'Seite ' + (d.seite + 1) + ' von ' + d.seiten + ' · ' + d.gesamt + ' Einträge', { className: 'leise' }), weiter]));
-      }).catch(function () { fehlerText(bereich); });
+      }).catch(function () { fehlerText(bereich, 'Das Protokoll konnte nicht geladen werden.', lade); });
     }
     kopfZeichnen();
     lade();

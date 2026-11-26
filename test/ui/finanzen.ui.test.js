@@ -103,6 +103,7 @@ test('Kassier: Jahreslauf anlegen, SEPA-Probelauf, Datei erzeugen; kein „Konto
     await page.waitForTimeout(300);
     assert.strictEqual(ui.downloads.length, 1);
     assert.match(ui.downloads[0].name, /^SEPA-Lastschrift_2027_.*\.xml$/);
+    await ui.downloadsFertig();
     assert.ok(fs.readFileSync(ui.downloads[0].pfad, 'utf8').includes('pain.008.001.08'));
     assert.ok(ui.objekte('Sollstellung').filter(s => s.jahr === 2027).some(s => s.sepa_sequenz === 'FRST' || s.sepa_sequenz === 'RCUR'));
     assert.deepStrictEqual(ui.fehler, []);

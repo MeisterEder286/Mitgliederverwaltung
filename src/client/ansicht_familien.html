@@ -45,6 +45,7 @@
   }
   function jahr() { return zustand.jahr || jahrStandard(); }
   function laedt(ziel) { ziel.appendChild(A.el('p', 'Lädt …', { className: 'laedt' })); }
+  function nichtGeladen(ziel, text, nochmal) { A.ladefehler(A.leere(ziel), text, nochmal || A.neuZeichnen); }
   function personLink(id, text) {
     return A.el('button', text, { type: 'button', className: 'fam-link', onclick: function (e) { e.stopPropagation(); A.zeige('mitglied', { id: id }); } });
   }
@@ -140,7 +141,7 @@
         if (g.hinweis && g.konto_id) karte.appendChild(A.el('p', g.hinweis, { className: 'fam-hinweis' }));
         inhalt.appendChild(karte);
       });
-    }, function () { A.leere(inhalt); inhalt.appendChild(A.el('p', 'Konnte nicht geladen werden.', { className: 'leise' })); });
+    }, function () { nichtGeladen(inhalt, 'Die Familienübersicht konnte nicht geladen werden.'); });
   }
 
   // ------------------------------------------------------------------ Fallen heraus (Umstellung)
@@ -183,7 +184,7 @@
         { feld: 'hinweise', titel: 'Hinweise', sortierbar: false, wert: function (e) { return (e.hinweise || []).join(' '); } }
       ]);
       var knoepfe = [];
-      if (darf) knoepfe.push(A.knopf('Auf Einzelbeitrag umstellen', function () { umstellen(raus, gewaehlt, artWahl, d); }));
+      if (darf) knoepfe.push(A.knopf('Auf Einzelbeitrag umstellen', function () { return umstellen(raus, gewaehlt, artWahl, d); }));
       if (A.darf('anschreiben_erstellen')) knoepfe.push(A.knopf('Anschreiben erstellen', function () {
         A.zeige('korrespondenz', { anlass: 'Umstellung Einzelbeitrag', mitglied_ids: raus.filter(function (e) { return gewaehlt[e.mitglied_id]; }).map(function (e) { return e.mitglied_id; }) });
       }, 'zweit'));
@@ -194,7 +195,7 @@
       ], raus));
       inhalt.appendChild(A.el('div', null, { className: 'fam-zeile' }, knoepfe));
       inhalt.appendChild(A.tabelle(spalten, raus, { sortiere: 'name', beiKlick: function (e) { A.zeige('mitglied', { id: e.mitglied_id }); } }));
-    }, function () { A.leere(inhalt); });
+    }, function () { nichtGeladen(inhalt, 'Die Ausscheider konnten nicht geladen werden.'); });
   }
 
   function umstellen(raus, gewaehlt, artWahl, d) {
@@ -202,9 +203,9 @@
       return { mitglied_id: e.mitglied_id, version: e.version, beitragsart_id: artWahl[e.mitglied_id] ? Number(artWahl[e.mitglied_id]) : null };
     });
     if (!liste.length) { A.meldung('Bitte mindestens eine Person auswählen.', 'fehler'); return; }
-    A.bestaetige('Auf Einzelbeitrag umstellen', liste.length + ' Person(en) zum ' + A.datum(d.stichtag) + ' aus der Familiengemeinschaft nehmen und den gewählten Einzelbeitrag setzen? Das Konto bleibt gleich.', 'Umstellen').then(function (ja) {
+    return A.bestaetige('Auf Einzelbeitrag umstellen', liste.length + ' Person(en) zum ' + A.datum(d.stichtag) + ' aus der Familiengemeinschaft nehmen und den gewählten Einzelbeitrag setzen? Das Konto bleibt gleich.', 'Umstellen', 'gefahr').then(function (ja) {
       if (!ja) return;
-      A.rufe('apiFamilieUmstellen', liste, d.stichtag).then(function (r) {
+      return A.rufe('apiFamilieUmstellen', liste, d.stichtag).then(function (r) {
         A.daten.uebernehme(r);
         A.neuZeichnen();
         A.meldung(r.anzahl + ' Person(en) umgestellt.' + (r.hinweise && r.hinweise.length ? ' ' + r.hinweise.join(' ') : '') +
@@ -245,7 +246,7 @@
         { feld: 'ausbildung_nachweis_am', titel: 'Nachweis vom', wert: function (e) { return A.datum(e.ausbildung_nachweis_am); } },
         { feld: 'ergebnis', titel: 'Stand', wert: ergebnis }
       ], verl, { sortiere: 'ausbildung_bis', leer: 'Keine Verlängerungen erfasst.', beiKlick: function (e) { A.zeige('mitglied', { id: e.mitglied_id, reiter: 'zahlungen' }); } }));
-    }, function () { A.leere(inhalt); });
+    }, function () { nichtGeladen(inhalt, 'Die Ausbildungsangaben konnten nicht geladen werden.'); });
   }
 
   // ------------------------------------------------------------------ Prognose
@@ -272,7 +273,7 @@
         { feld: 'gemeinschaft', titel: 'Familie' }, { feld: 'grund', titel: 'Grund' },
         { feld: 'ausbildung_bis', titel: 'Ende Ausbildung (prognostiziert)', wert: function (p) { return A.datum(p.ausbildung_bis); } }
       ], personen, { sortiere: 'jahr', leer: 'In den nächsten Jahren fällt niemand heraus.' }));
-    }, function () { A.leere(inhalt); });
+    }, function () { nichtGeladen(inhalt, 'Die Prognose konnte nicht geladen werden.'); });
   }
 
   /** Einfaches Balkendiagramm (SVG, ohne Bibliothek); die Tabelle darunter enthält dieselben Werte (barrierearm). */
@@ -339,7 +340,7 @@
     ], m);
     z.appendChild(f.element);
     var knopf = A.knopf('Ausbildung speichern', function () {
-      A.speichere(f, knopf, 'apiFamilieAusbildungSpeichern', [m.mitglied_id, m.version || 0]).then(function () {
+      return A.speichere(f, knopf, 'apiFamilieAusbildungSpeichern', [m.mitglied_id, m.version || 0]).then(function () {
         A.neuZeichnen();
         A.meldung('Ausbildung gespeichert.', 'ok');   // nach dem Neuzeichnen, sonst wäre die Meldung gleich wieder weg
       }, function () {});
@@ -372,7 +373,7 @@
         bereich.appendChild(A.el('h3', 'Einzelne Sollstellungen'));
         bereich.appendChild(historieTabelle(d, true));
         bereich.appendChild(A.el('p', d.hinweis, { className: 'leise' }));
-      }, function () { A.leere(bereich); bereich.appendChild(A.el('p', 'Konnte nicht geladen werden.', { className: 'leise' })); });
+      }, function () { nichtGeladen(bereich, 'Die Zahlungshistorie konnte nicht geladen werden.'); });
     }
   });
 
@@ -383,14 +384,15 @@
     ziel.appendChild(kopf);
     var bereich = A.el('div');
     ziel.appendChild(bereich);
-    var auf = A.knopf('Anzeigen', function () {
-      auf.remove(); laedt(bereich);
-      A.rufe('apiFamilieKontohistorie', k.beitragskonto_id).then(function (d) {
+    function zeige() {
+      laedt(A.leere(bereich));
+      return A.rufe('apiFamilieKontohistorie', k.beitragskonto_id).then(function (d) {
         A.leere(bereich);
         bereich.appendChild(jahresTabelle(d.jahre));
         bereich.appendChild(historieTabelle(d, false));
-      }, function () { A.leere(bereich); });
-    }, 'zweit');
+      }, function () { nichtGeladen(bereich, 'Die Zahlungshistorie konnte nicht geladen werden.', zeige); });
+    }
+    var auf = A.knopf('Anzeigen', zeige, 'zweit');
     bereich.appendChild(auf);
   });
 })();

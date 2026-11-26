@@ -124,7 +124,7 @@
         if (bestand) { w.notiz_id = bestand.notiz_id; w.version = bestand.version || 0; }
         else { w.mitglied_id = vorgabe.mitglied_id || null; w.beitragskonto_id = vorgabe.beitragskonto_id || null; }
         f.setzeFehler([]);
-        A.rufe('apiNotizSpeichern', w, A.still).then(function (d) { schliessen(); nachSpeichern(d); }, function (err) {
+        return A.rufe('apiNotizSpeichern', w, A.still).then(function (d) { schliessen(); nachSpeichern(d); }, function (err) {
           if (err.felder) f.setzeFehler(err.felder); else A.fehler({ meldung: err.message, nr: err.nr });
           if (err.art === 'konflikt') { schliessen(); A.ladeNeu(); }
         });
@@ -137,7 +137,7 @@
     A.dialog('Erledigen', A.el('div', null, null, [A.el('p', String(n.text || '').slice(0, 200), { className: 'leise' }), f.element]), [
       { text: 'Abbrechen' },
       { text: 'Erledigt', art: '', aktion: function (schliessen) {
-        A.rufe('apiNotizErledigen', n.notiz_id, n.version || 0, f.werte().ergebnis).then(function (d) { schliessen(); nachSpeichern(d, 'Erledigt.'); }, function () {});
+        return A.rufe('apiNotizErledigen', n.notiz_id, n.version || 0, f.werte().ergebnis).then(function (d) { schliessen(); nachSpeichern(d, 'Erledigt.'); }, function () {});
       } }
     ]);
   }
@@ -152,7 +152,7 @@
     ]);
     function antworte(entscheidung) {
       return function (schliessen) {
-        A.rufe('apiNotizRueckfrageAntwort', n.notiz_id, n.version || 0, { entscheidung: entscheidung, bemerkung: f.werte().bemerkung })
+        return A.rufe('apiNotizRueckfrageAntwort', n.notiz_id, n.version || 0, { entscheidung: entscheidung, bemerkung: f.werte().bemerkung })
           .then(function (d) {
             schliessen();
             A.daten.uebernehme(d);
@@ -172,9 +172,9 @@
   }
 
   function loeschen(n) {
-    A.bestaetige('Notiz löschen', 'Diese Notiz endgültig löschen? (Offene Rückfragen und Wiedervorlagen bitte erledigen statt löschen.)', 'Löschen').then(function (ja) {
+    return A.bestaetige('Notiz löschen', 'Diese Notiz endgültig löschen? (Offene Rückfragen und Wiedervorlagen bitte erledigen statt löschen.)', 'Löschen', 'gefahr').then(function (ja) {
       if (!ja) return;
-      A.rufe('apiNotizLoeschen', n.notiz_id, n.version || 0).then(function (d) { nachSpeichern(d, 'Gelöscht.'); }, function () {});
+      return A.rufe('apiNotizLoeschen', n.notiz_id, n.version || 0).then(function (d) { nachSpeichern(d, 'Gelöscht.'); }, function () {});
     });
   }
 
@@ -201,7 +201,7 @@
     if (offen(n) && darfAendern(n)) knoepfe.appendChild(A.knopf('Erledigen', function () { erledigenDialog(n); }, 'zweit klein'));
     if (darfAendern(n)) knoepfe.appendChild(A.knopf('Bearbeiten', function () { formularDialog(n); }, 'zweit klein'));
     if (istVerwaltung() && !(offen(n) && (n.art === 'Rückfrage' || n.art === 'Wiedervorlage' || n.wiedervorlage_am))) {
-      knoepfe.appendChild(A.knopf('Löschen', function () { loeschen(n); }, 'zweit klein'));
+      knoepfe.appendChild(A.knopf('Löschen', function () { return loeschen(n); }, 'zweit klein'));
     }
     if (knoepfe.childNodes.length) k.appendChild(knoepfe);
     return k;
@@ -288,7 +288,7 @@
     var knoepfe = [];
     if (istVerwaltung()) knoepfe.push(A.knopf('CSV', function () {
       var l = gefiltert();
-      A.rufe('apiNotizenExportVermerken', l.length).then(function () {
+      return A.rufe('apiNotizenExportVermerken', l.length).then(function () {
         A.csv('notizen.csv', [
           { titel: 'Art', feld: 'art' }, { titel: 'Bezug', wert: bezugText }, { titel: 'Leserkreis', wert: kreisText },
           { titel: 'Text', feld: 'text' }, { titel: 'Wiedervorlage', wert: function (n) { return n.wiedervorlage_am ? A.datum(n.wiedervorlage_am) : ''; } },

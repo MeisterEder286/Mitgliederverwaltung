@@ -50,8 +50,32 @@
     return e;
   };
   App.leere = function (k) { while (k.firstChild) k.removeChild(k.firstChild); return k; };
+  /**
+   * Knopf mit Doppelklick-Schutz: Startet die Aktion Server-Aufrufe (App.rufe) oder liefert sie ein Promise,
+   * ist der Knopf bis zu deren Ende „beschäftigt“ (aria-busy) und weitere Klicks werden ignoriert.
+   * disabled bleibt allein Sache der Ansicht.
+   */
   App.knopf = function (text, aktion, art) {
-    return App.el('button', text, { type: 'button', className: 'knopf' + (art ? ' ' + art : ''), onclick: aktion });
+    var b = App.el('button', text, { type: 'button', className: 'knopf' + (art ? ' ' + art : '') });
+    if (aktion) b.addEventListener('click', function (e) {
+      if (b.getAttribute('aria-busy') === 'true') return;
+      App.mitSperre(b, function () { return aktion.call(b, e); });
+    });
+    return b;
+  };
+  var sammler = null;   // nimmt die Promises der App.rufe-Aufrufe auf, die während einer Knopfaktion starten
+  App.mitSperre = function (knopf, fn) {
+    var vorher = sammler, eigene = [];
+    sammler = eigene;
+    var r;
+    try { r = fn(); } finally { sammler = vorher; }
+    if (r && typeof r.then === 'function') eigene.push(r);
+    if (vorher) eigene.forEach(function (p) { vorher.push(p); });
+    if (!eigene.length || knopf.disabled) return r;
+    knopf.setAttribute('aria-busy', 'true');
+    var leer = function () {};
+    Promise.all(eigene.map(function (p) { return p.then(leer, leer); })).then(function () { knopf.removeAttribute('aria-busy'); });
+    return r;
   };
   App.sichereUrl = function (url) { return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null; };
 
@@ -97,17 +121,44 @@
 
   // ================================================================== Meldungen
 
-  App.meldung = function (text, art) {
+  var meldungTimer = null;
+  var offeneDialoge = [];
+  /**
+   * Meldung oben anzeigen. art: 'ok' | 'hinweis' | sonst Fehler. aktion (optional): { text, aktion } als Knopf,
+   * z. B. „Rückgängig“. Ist ein Dialog offen, erscheint die Meldung zusätzlich in diesem – das Banner oben
+   * liegt sonst unbedienbar hinter dem Dialog.
+   */
+  App.meldung = function (text, art, aktion) {
     var m = App.$('meldung');
+    var klasse = 'meldung' + (art === 'ok' ? ' ok' : art === 'hinweis' ? ' hinweis' : '');
+    clearTimeout(meldungTimer);
     App.leere(m);
-    m.className = 'meldung' + (art === 'ok' ? ' ok' : art === 'hinweis' ? ' hinweis' : '');
+    m.className = klasse;
     m.appendChild(App.el('span', text));
+    if (aktion) m.appendChild(App.knopf(aktion.text, function () { m.hidden = true; return aktion.aktion(); }, 'zweit klein'));
     m.appendChild(App.knopf('Schließen', function () { m.hidden = true; }, 'zweit klein'));
     m.hidden = false;
-    if (art === 'ok') setTimeout(function () { m.hidden = true; }, 4000);
+    if (art === 'ok') meldungTimer = setTimeout(function () { m.hidden = true; }, aktion ? 10000 : 4000);
+    var d = offeneDialoge[offeneDialoge.length - 1];
+    if (d) {
+      App.leere(d.meldung).appendChild(App.el('span', text));
+      d.meldung.className = klasse + ' dialog-meldung';
+      d.meldung.hidden = false;
+    }
   };
+  /** Ladefehler im Inhalt mit „Erneut versuchen“ (statt leerer Fläche). */
+  App.ladefehler = function (ziel, text, nochmal) {
+    return ziel.appendChild(App.el('div', null, { className: 'meldung ladefehler', role: 'alert' }, [
+      App.el('span', text || 'Die Daten konnten nicht geladen werden.'),
+      nochmal ? App.knopf('Erneut versuchen', nochmal, 'zweit klein') : null
+    ]));
+  };
+  /** Fehler anzeigen: { meldung, nr } vom Server oder das Error-Objekt aus einem abgelehnten App.rufe. */
   App.fehler = function (f) {
-    var text = (f && f.meldung) || 'Es ist ein Fehler aufgetreten.';
+    var text = f instanceof Error
+      ? (f.art === 'netz' ? 'Keine Verbindung zum Server. Bitte erneut versuchen.' : f.message)
+      : f && f.meldung;
+    text = text || 'Es ist ein Fehler aufgetreten.';
     if (f && f.nr) text += ' (Fehler-Nr. ' + f.nr + ')';
     App.meldung(text, 'fehler');
   };
@@ -138,7 +189,7 @@
     var args = Array.prototype.slice.call(arguments, 1);
     var still = false;
     if (args.length && args[args.length - 1] && args[args.length - 1].__still) { still = true; args.pop(); }
-    return new Promise(function (resolve, reject) {
+    var p = new Promise(function (resolve, reject) {
       var t0 = performance.now();
       var runner = google.script.run
         .withSuccessHandler(function (antwort) {
@@ -164,6 +215,8 @@
         });
       runner[name].apply(runner, args);
     });
+    if (sammler) sammler.push(p);
+    return p;
   };
   App.still = { __still: true };
 
@@ -550,29 +603,46 @@
 
   // ================================================================== Dialog
 
-  /** Modaler Dialog (natives <dialog>). inhalt: Node; knoepfe: [{ text, art, aktion(schliessen) }]. */
-  App.dialog = function (titel, inhalt, knoepfe) {
+  /**
+   * Modaler Dialog (natives <dialog>). inhalt: Node; knoepfe: [{ text, art, aktion(schliessen) }].
+   * optionen: { beiAbbruch() } – wird bei Escape aufgerufen. Liefert { schliessen, element, knoepfe: [button] }.
+   * Meldungen (App.meldung/App.fehler), solange der Dialog oben liegt, erscheinen in seinem Meldungsbereich.
+   */
+  App.dialog = function (titel, inhalt, knoepfe, optionen) {
+    optionen = optionen || {};
     var d = App.el('dialog', null, { className: 'dialog' });
     d.setAttribute('aria-label', titel);
-    var schliessen = function () { d.close(); d.remove(); };
+    var eintrag = { element: d, meldung: App.el('div', null, { className: 'meldung dialog-meldung', role: 'alert', hidden: true }) };
+    var entferne = function () {
+      var i = offeneDialoge.indexOf(eintrag);
+      if (i >= 0) offeneDialoge.splice(i, 1);
+      d.remove();
+    };
+    var schliessen = function () { if (d.open) d.close(); entferne(); };
     d.appendChild(App.el('h2', titel));
     if (inhalt) d.appendChild(inhalt);
+    d.appendChild(eintrag.meldung);
     var leiste = App.el('div', null, { className: 'knopfleiste' });
-    (knoepfe || [{ text: 'Schließen' }]).forEach(function (k) {
-      leiste.appendChild(App.knopf(k.text, function () { if (k.aktion) k.aktion(schliessen); else schliessen(); }, k.art === undefined || k.art === null ? 'zweit' : k.art));
+    var buttons = (knoepfe || [{ text: 'Schließen' }]).map(function (k) {
+      return leiste.appendChild(App.knopf(k.text, function () {
+        eintrag.meldung.hidden = true;
+        return k.aktion ? k.aktion(schliessen) : schliessen();
+      }, k.art === undefined || k.art === null ? 'zweit' : k.art));
     });
     d.appendChild(leiste);
-    d.addEventListener('cancel', function () { d.remove(); });
+    d.addEventListener('cancel', function () { entferne(); if (optionen.beiAbbruch) optionen.beiAbbruch(); });
     document.body.appendChild(d);
+    offeneDialoge.push(eintrag);
     if (d.showModal) d.showModal(); else d.setAttribute('open', '');
-    return { schliessen: schliessen, element: d };
+    return { schliessen: schliessen, element: d, knoepfe: buttons };
   };
-  App.bestaetige = function (titel, text, jaText) {
+  /** Rückfrage → Promise<boolean>. art 'gefahr' für unumkehrbare oder folgenreiche Aktionen. Escape = nein. */
+  App.bestaetige = function (titel, text, jaText, art) {
     return new Promise(function (resolve) {
       App.dialog(titel, App.el('p', text), [
         { text: 'Abbrechen', aktion: function (s) { s(); resolve(false); } },
-        { text: jaText || 'OK', art: '', aktion: function (s) { s(); resolve(true); } }
-      ]);
+        { text: jaText || 'OK', art: art || '', aktion: function (s) { s(); resolve(true); } }
+      ], { beiAbbruch: function () { resolve(false); } });
     });
   };
 

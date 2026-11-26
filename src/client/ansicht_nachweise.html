@@ -22,17 +22,23 @@
 (function () {
   'use strict';
   var A = window.App;
-  var zustand = { reiter: 'fz', daten: null, markiert: {} };
+  var zustand = { reiter: 'fz', daten: null, markiert: {}, erfassen: [] };
   var AMPEL_TEXT = { gruen: 'gültig', gelb: 'läuft ab', rot: 'fehlt / abgelaufen' };
   var STAND_AMPEL = { 'gültig': 'gruen', 'unbefristet': 'grau', 'läuft ab': 'gelb', 'abgelaufen': 'rot' };
 
   function lade(bereich) {
     A.leere(bereich).appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
-    A.rufe('apiNachweiseUebersicht').then(function (d) {
+    return A.rufe('apiNachweiseUebersicht').then(function (d) {
       zustand.daten = d; zustand.markiert = {};
       zeichne(A.leere(bereich));
-    }).catch(function () { A.leere(bereich).appendChild(A.el('p', 'Die Nachweise konnten nicht geladen werden.', { className: 'leise' })); });
+      sperreErfassen(false);
+    }).catch(function () {
+      zustand.daten = null;
+      sperreErfassen(true);
+      A.ladefehler(A.leere(bereich), 'Die Nachweise konnten nicht geladen werden.', function () { return lade(bereich); });
+    });
   }
+  function sperreErfassen(an) { zustand.erfassen.forEach(function (b) { b.disabled = an; }); }
 
   function zeichne(bereich) {
     var d = zustand.daten;
@@ -61,7 +67,7 @@
     if (A.darf('qualifikation_erfassen') && d.fristen_neu_berechnen) {
       var fr = A.knopf('Fristen aller Vermerke neu berechnen', function () {
         fr.disabled = true;
-        A.rufe('apiNachweiseFristenAktualisieren').then(function (r) {
+        return A.rufe('apiNachweiseFristenAktualisieren').then(function (r) {
           A.daten.uebernehme(r); A.meldung((r.geaendert || 0) + ' Vermerk(e) aktualisiert.', 'ok'); lade(bereich);
         }).catch(function () { fr.disabled = false; });
       }, 'zweit klein');
@@ -120,10 +126,10 @@
         var l = d.zu_loeschen.filter(function (z) { return zustand.markiert[z.qualifikation_id]; });
         if (!l.length) { A.meldung('Bitte zuerst Vermerke markieren.', 'hinweis'); return; }
         var k = ev.currentTarget;
-        A.bestaetige('Vermerke löschen', l.length + ' Führungszeugnis-Vermerk(e) werden unwiderruflich geleert.', 'Löschen').then(function (ja) {
+        return A.bestaetige('Vermerke löschen', l.length + ' Führungszeugnis-Vermerk(e) werden unwiderruflich geleert.', 'Löschen', 'gefahr').then(function (ja) {
           if (!ja) return;
           k.disabled = true;
-          A.rufe('apiNachweiseLoeschen', l.map(function (z) { return { qualifikation_id: z.qualifikation_id, version: z.version }; })).then(function (r) {
+          return A.rufe('apiNachweiseLoeschen', l.map(function (z) { return { qualifikation_id: z.qualifikation_id, version: z.version }; })).then(function (r) {
             A.daten.uebernehme(r); A.meldung('Gelöscht.', 'ok'); lade(bereich);
           }).catch(function (err) { k.disabled = false; if (err.art === 'konflikt') lade(bereich); });
         });
@@ -206,7 +212,7 @@
         var w = form.werte();
         w.mitglied_id = Number(person.value);
         w.qualifikationsart_id = Number(artWahl.value);
-        A.rufe('apiNachweiseErfassen', w).then(function (r) {
+        return A.rufe('apiNachweiseErfassen', w).then(function (r) {
           A.daten.uebernehme(r); schliessen(); A.meldung('Nachweis gespeichert.', 'ok'); lade(bereich);
         }, function (err) {
           if (err.felder) {
@@ -227,7 +233,7 @@
     A.dialog(l.art + ' – ' + l.name, form.element, [
       { text: 'Abbrechen' },
       { text: 'Speichern', art: ' ', aktion: function (schliessen) {
-        A.rufe('apiNachweiseAendern', l.qualifikation_id, l.version, form.werte()).then(function (r) {
+        return A.rufe('apiNachweiseAendern', l.qualifikation_id, l.version, form.werte()).then(function (r) {
           A.daten.uebernehme(r); schliessen(); A.meldung('Gespeichert.', 'ok'); lade(bereich);
         }, function (err) {
           if (err.felder) form.setzeFehler(err.felder);
@@ -238,7 +244,7 @@
   }
 
   function exportiere(art) {
-    A.rufe('apiNachweiseExport').then(function (zeilen) {
+    return A.rufe('apiNachweiseExport').then(function (zeilen) {
       var sp = [{ feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'name', titel: 'Name' }, { feld: 'funktionen', titel: 'Funktion' },
         { feld: 'eingesehen_am', titel: 'eingesehen', wert: function (z) { return A.datum(z.eingesehen_am); } },
         { feld: 'wiedervorlage', titel: 'Wiedervorlage', wert: function (z) { return A.datum(z.wiedervorlage); } },
@@ -254,11 +260,14 @@
       var bereich = A.el('div');
       var knoepfe = [];
       if (A.darf('qualifikation_erfassen')) {
-        knoepfe.push(A.knopf('Einsichtnahme erfassen', function () { if (zustand.daten) erfassenDialog(bereich, null, 'fz'); }));
-        knoepfe.push(A.knopf('Lizenz / Kurs erfassen', function () { if (zustand.daten) erfassenDialog(bereich, null, 'lizenz'); }, 'zweit'));
-      }
-      knoepfe.push(A.knopf('Fälligkeitsliste drucken', function () { exportiere('druck'); }, 'zweit'));
-      knoepfe.push(A.knopf('CSV', function () { exportiere('csv'); }, 'zweit'));
+        zustand.erfassen = [
+          A.knopf('Einsichtnahme erfassen', function () { if (zustand.daten) erfassenDialog(bereich, null, 'fz'); }),
+          A.knopf('Lizenz / Kurs erfassen', function () { if (zustand.daten) erfassenDialog(bereich, null, 'lizenz'); }, 'zweit')
+        ];
+        zustand.erfassen.forEach(function (b) { b.disabled = true; knoepfe.push(b); });
+      } else zustand.erfassen = [];
+      knoepfe.push(A.knopf('Fälligkeitsliste drucken', function () { return exportiere('druck'); }, 'zweit'));
+      knoepfe.push(A.knopf('CSV', function () { return exportiere('csv'); }, 'zweit'));
       ziel.appendChild(A.abschnitt('Nachweise & Lizenzen', knoepfe, 'h1'));
       ziel.appendChild(A.el('p', 'Die Nachweispflicht hängt an der Funktion, nicht an der Person: Wer als Trainer, Betreuer oder in einem anderen nachweispflichtigen Amt eingetragen ist, erscheint hier automatisch. Endet die Funktion, startet die Löschfrist von selbst.', { className: 'leise' }));
       ziel.appendChild(bereich);

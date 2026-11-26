@@ -10,11 +10,12 @@ Funktion wofür zuständig ist**. Fachliche Regeln stehen im Datenmodell (`docs/
 |---|---|
 | `npm run schema` | erzeugt `src/lib/schema.js` und `src/lib/startbelegung.js` aus `docs/daten/*.csv` |
 | `npm run check` | Syntax, gemeinsamer globaler Namensraum, HTML-Skripte, Kopfkommentare, Scopes (`tools/check.js`) |
-| `npm test` | alle Tests unter `test/` (Node, keine Abhängigkeiten) |
-| `npm run push` | check + test + `clasp push` |
+| `npm test` | alle Tests `test/*.test.js` (Node, keine Abhängigkeiten; Aufruf über `tools/tests.js`) |
+| `npm run test:ui` | Oberflächentests `test/ui/*.ui.test.js` in Chromium (Playwright), nacheinander |
+| `npm run push` | check + test + test:ui + `clasp push` |
 | `npm run vorschau` | `vorschau.html` – Oberfläche lokal im Browser, mit synthetischen Daten und Stub für `google.script.run` (Mobil-Sichtprüfung) |
 
-Node ≥ 20. Es gibt **keine** npm-Abhängigkeiten und **keinen** Build-Schritt: Der Code in `src/` ist genau der
+Node ≥ 20. Einzige npm-Abhängigkeit ist `playwright` (devDependency, nur für `npm run test:ui`; einmalig `npm install` und `npx playwright install chromium`). Es gibt **keinen** Build-Schritt: Der Code in `src/` ist genau der
 Code, der im Apps-Script-Editor steht.
 
 ## 2. Datenmodell als Daten

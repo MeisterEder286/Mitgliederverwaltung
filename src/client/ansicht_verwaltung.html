@@ -103,7 +103,7 @@
   }
 
   function laedt(ziel) { var p = A.el('p', 'Lädt …', { className: 'laedt' }); ziel.appendChild(p); return p; }
-  function fehlerText(ziel) { A.leere(ziel); ziel.appendChild(A.el('p', 'Konnte nicht geladen werden.', { className: 'leise' })); }
+  function fehlerText(ziel, text, nochmal) { A.leere(ziel); A.ladefehler(ziel, text, nochmal); }
 
   /** Formular im Dialog speichern; ruft api mit (…args, werte) und zeigt Feldfehler. */
   function speicherDialog(titel, form, api, args, fertig, zusatzVorher) {
@@ -111,7 +111,7 @@
     A.dialog(titel, inhalt, [
       { text: 'Abbrechen' },
       { text: 'Speichern', art: ' ', aktion: function (schliessen) {
-        A.rufe.apply(null, [api].concat(args).concat([form.werte(), A.still])).then(function (antwort) {
+        return A.rufe.apply(null, [api].concat(args).concat([form.werte(), A.still])).then(function (antwort) {
           A.daten.uebernehme(antwort);
           schliessen();
           A.meldung((antwort && antwort.hinweis) ? 'Gespeichert. ' + antwort.hinweis : 'Gespeichert.', antwort && antwort.hinweis ? 'hinweis' : 'ok');
@@ -174,7 +174,7 @@
         { feld: 'sicht', titel: 'Datenarten', wert: function (r) { return r.sicht.join(', '); } },
         { feld: 'aktionen', titel: 'darf', wert: function (r) { return r.aktionen.length + ' Aktionen: ' + r.aktionen.join(', '); } }
       ], Object.keys(d.matrix).map(function (k) { var m = d.matrix[k]; return { rolle: k, zeilen: m.zeilen, sicht: m.sicht, aktionen: m.aktionen }; }), { block: 10 }));
-    }).catch(function () { fehlerText(ziel); });
+    }).catch(function () { fehlerText(ziel, 'Die Zugänge konnten nicht geladen werden.', neu); });
   }
 
   // ================================================================== Einstellungen
@@ -192,7 +192,7 @@
     var bisher = k.wert;
     var knopf = A.knopf('Speichern', function () {
       knopf.disabled = true; fehler.textContent = '';
-      A.rufe('apiVerwaltungKonfigSpeichern', k.schluessel, eingabe.value, bisher, A.still).then(function (r) {
+      return A.rufe('apiVerwaltungKonfigSpeichern', k.schluessel, eingabe.value, bisher, A.still).then(function (r) {
         bisher = r.wert; eingabe.value = r.wert;
         A.meldung(r.geaendert ? 'Einstellung „' + k.schluessel + '“ gespeichert.' : 'Keine Änderung.', 'ok');
       }, function (err) {
@@ -227,7 +227,9 @@
         }).forEach(function (k) { bereich.appendChild(konfigZeile(k)); });
       }
       zeichne(leiste.zustand);
-    }).catch(function () { fehlerText(ziel); });
+    }).catch(function () {
+      fehlerText(ziel, 'Die Einstellungen konnten nicht geladen werden.', function () { A.leere(ziel); reiterEinstellungen(ziel); });
+    });
   }
 
   // ================================================================== Stammdaten
@@ -270,7 +272,7 @@
       spalten.push({ feld: 'bemerkung', titel: 'Bemerkung' });
       bereich.appendChild(A.tabelle(spalten, d.zeilen, { beiKlick: dialog, sortiere: def.name }));
       bereich.appendChild(A.el('p', 'Einträge werden nicht gelöscht, sondern auf „aktiv: nein“ gesetzt – sonst würde die Historie unverständlich.', { className: 'leise' }));
-    }).catch(function () { fehlerText(bereich); });
+    }).catch(function () { fehlerText(bereich, 'Die Stammdaten konnten nicht geladen werden.', neu); });
   }
 
   // ================================================================== Datenqualität
@@ -321,7 +323,9 @@
         else if (b.tab === 'Beitragskonto') A.zeige('konto', { id: b.id });
       } });
       ziel.appendChild(tabelle);
-    }).catch(function () { fehlerText(ziel); });
+    }).catch(function () {
+      fehlerText(ziel, 'Die Prüfergebnisse konnten nicht geladen werden.', function () { A.leere(ziel); reiterDatenqualitaet(ziel); });
+    });
   }
 
   // ================================================================== System
@@ -339,7 +343,7 @@
       ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [
         A.knopf('Snapshot neu aufbauen', function (ev) {
           var k = ev.target; k.disabled = true;
-          A.rufe('apiVerwaltungSnapshotNeu').then(function () { return A.ladeNeu(); })
+          return A.rufe('apiVerwaltungSnapshotNeu').then(function () { return A.ladeNeu(); })
             .then(function () { A.meldung('Snapshot neu aufgebaut und geladen.', 'ok'); }, function () {})
             .then(function () { k.disabled = false; });
         }, 'zweit'),
@@ -349,7 +353,9 @@
       ziel.appendChild(A.el('h2', 'Zeilen je Tabelle'));
       ziel.appendChild(A.tabelle([{ feld: 'tab', titel: 'Tabelle' }, { feld: 'n', titel: 'Zeilen', zahl: true }],
         Object.keys(d.zeilen).map(function (t) { return { tab: t, n: d.zeilen[t] }; }), { sortiere: 'tab', block: 40 }));
-    }).catch(function () { fehlerText(ziel); });
+    }).catch(function () {
+      fehlerText(ziel, 'Die Systemangaben konnten nicht geladen werden.', function () { A.leere(ziel); reiterSystem(ziel); });
+    });
   }
 
   // ================================================================== Ansicht
