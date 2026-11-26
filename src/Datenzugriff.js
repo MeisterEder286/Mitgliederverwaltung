@@ -129,8 +129,8 @@ var DB = (function () {
     return ergebnis;
   }
 
-  /** Zeilennummer (1-basiert) des Datensatzes mit dieser ID oder -1. Liest nur die ID-Spalte. */
-  function findeZeile(b, kopf, idSpalte, id) {
+  /** Zeilennummer (1-basiert) des Datensatzes mit dieser ID oder -1. Liest nur die ID-Spalte und merkt alle Positionen. */
+  function findeZeile(b, kopf, idSpalte, id, tab) {
     var spalte = kopf.indexOf(idSpalte);
     if (spalte < 0) throw intern('ID-Spalte ' + idSpalte + ' fehlt in ' + b.getName());
     var letzte = b.getLastRow();
@@ -138,10 +138,49 @@ var DB = (function () {
     if (letzte < 2) return -1;
     var ids = b.getRange(2, spalte + 1, letzte - 1, 1).getValues();
     sheetsAufrufe++;
+    var karte = {}, gefunden = -1;
     for (var i = 0; i < ids.length; i++) {
-      if (ids[i][0] !== '' && String(ids[i][0]) === String(id)) return i + 2;
+      if (ids[i][0] === '') continue;
+      karte[String(ids[i][0])] = i + 2;
+      if (gefunden < 0 && String(ids[i][0]) === String(id)) gefunden = i + 2;
     }
-    return -1;
+    if (tab) zeilenKarteSpeichern(tab, karte);
+    return gefunden;
+  }
+
+  // Zeilenpositionen je Tab (id → Zeilennummer) im Script-Cache. Nur ein Hinweis: Vor dem Schreiben wird die ID in
+  // der gelesenen Zeile geprüft; passt sie nicht (Zeilen gelöscht, sortiert, verschoben), wird neu gesucht.
+  var ZEILEN_CACHE_S = 21600;
+  var zeilenMerker = {};
+  function zeilenKarte(tab) {
+    if (zeilenMerker[tab]) return zeilenMerker[tab];
+    var m = null;
+    try { var roh = CacheService.getScriptCache().get('zeilen:' + tab); m = roh ? JSON.parse(roh) : null; } catch (e) { m = null; }
+    zeilenMerker[tab] = m || {};
+    return zeilenMerker[tab];
+  }
+  function zeilenKarteSpeichern(tab, karte) {
+    zeilenMerker[tab] = karte;
+    try { CacheService.getScriptCache().put('zeilen:' + tab, JSON.stringify(karte), ZEILEN_CACHE_S); } catch (e) { /* nur Beschleunigung */ }
+  }
+
+  /** Liest die Zeile mit dieser ID: { nr, werte } oder null. Mit gültigem Positionshinweis EIN Lesezugriff statt drei. */
+  function zeileMitId(tab, b, kopf, idSpalte, id) {
+    var sp = kopf.indexOf(idSpalte);
+    if (sp < 0) throw intern('ID-Spalte ' + idSpalte + ' fehlt in ' + b.getName());
+    var vermutet = zeilenKarte(tab)[String(id)];
+    if (vermutet >= 2) {
+      try {
+        var z = b.getRange(vermutet, 1, 1, kopf.length).getValues()[0];
+        sheetsAufrufe++;
+        if (z[sp] !== '' && String(z[sp]) === String(id)) return { nr: vermutet, werte: z };
+      } catch (e) { /* Zeile gibt es nicht mehr → suchen */ }
+    }
+    var nr = findeZeile(b, kopf, idSpalte, id, tab);
+    if (nr < 0) return null;
+    var werte = b.getRange(nr, 1, 1, kopf.length).getValues()[0];
+    sheetsAufrufe++;
+    return { nr: nr, werte: werte };
   }
 
   /**
@@ -330,10 +369,9 @@ var DB = (function () {
     fachlichAusPruefung(Werte.pruefe(tab, sauber, { teilweise: true }));
     var b = blatt(tab);
     var kopf = kopfLesen(b);
-    var nr = findeZeile(b, kopf, t.idSpalte, id);
-    if (nr < 0) throw Fehler.fachlich('Der Datensatz wurde nicht gefunden. Bitte die Ansicht neu laden.');
-    var alteZeile = b.getRange(nr, 1, 1, kopf.length).getValues()[0];
-    sheetsAufrufe++;
+    var gelesen = zeileMitId(tab, b, kopf, t.idSpalte, id);
+    if (!gelesen) throw Fehler.fachlich('Der Datensatz wurde nicht gefunden. Bitte die Ansicht neu laden.');
+    var nr = gelesen.nr, alteZeile = gelesen.werte;
     var alt = Werte.zeileZuObjekt(kopf, alteZeile, tab);
     if (hatSpalte(tab, 'version') && Number(alt.version || 0) !== Number(erwarteteVersion)) {
       throw Fehler.konflikt(alt);

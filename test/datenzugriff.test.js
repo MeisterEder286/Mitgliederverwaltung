@@ -159,6 +159,23 @@ test('Blatt und Kopfzeile werden je Ausführung nur einmal gelesen', () => {
   assert.strictEqual(f.zaehler.getLastColumn, 3);
 });
 
+test('aktualisieren: Zeilenposition aus dem Cache spart das Suchen, verschobene Zeilen werden trotzdem richtig getroffen', () => {
+  const { f, g } = aufbau();
+  g.DB.mitSperre(() => g.DB.aktualisieren('Abteilung', 3, { bemerkung: 'A' }, 0, KTX));
+  const g2 = ladeProjekt(f.globale);   // neue Ausführung, gleicher Cache
+  const vorher = f.zaehler.getLastRow || 0;
+  g2.DB.mitSperre(() => g2.DB.aktualisieren('Abteilung', 3, { bemerkung: 'B' }, 1, KTX));
+  assert.strictEqual(f.zaehler.getLastRow || 0, vorher, 'keine Suche über die ID-Spalte');
+  // Jemand fügt im Sheet oben eine Zeile ein → gemerkte Position stimmt nicht mehr
+  const daten = f.daten('Abteilung');
+  daten.splice(1, 0, daten[0].map(() => ''));
+  const g3 = ladeProjekt(f.globale);
+  g3.DB.mitSperre(() => g3.DB.aktualisieren('Abteilung', 3, { bemerkung: 'C' }, 2, KTX));
+  const kopf = daten[0];
+  assert.strictEqual(daten.find(z => z[0] === 3)[kopf.indexOf('bemerkung')], 'C');
+  assert.strictEqual(daten.filter(z => z[kopf.indexOf('bemerkung')] === 'C').length, 1, 'keine fremde Zeile überschrieben');
+});
+
 test('aktualisieren: Eindeutigkeit auch bei Änderung', () => {
   const { g } = aufbau();
   // Zugehörigkeit 1 (Mitglied 1, Abt. 1) auf Abt. 4 ändern – Mitglied 1 ist dort schon (Zugehörigkeit 2)
