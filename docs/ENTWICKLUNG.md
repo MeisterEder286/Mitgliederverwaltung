@@ -187,7 +187,8 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 - `Snapshot.verwerfen()` – Cache ungültig machen (z. B. nach Setup, Massenänderung).
 - **Bereiche und Spaltenform:** `apiStart()` liefert nur den Bereich `kern`. `finanzen` (konten, gemeinschaften,
   sollstellungen) und `historie` (zeitraeume, einwilligungen) holt der Browser einmal je Sitzung über
-  `App.daten.lade('finanzen')` → `apiSnapshot(['finanzen'])`. Übertragen wird in Spaltenform
+  `App.daten.lade('finanzen')` → `apiSnapshot(['finanzen'])`. `client/start` lädt `historie` (und für Rollen mit
+  Finanzsicht `korrespondenz`) kurz nach dem Start still im Hintergrund vor (`App.daten.lade(b, App.still)`). Übertragen wird in Spaltenform
   `{ bereiche, listen: { name: { k: [schlüssel], z: [[werte]] } } }` (`SnapshotKern.packe`), der Browser packt in
   `App.daten.setze` wieder aus. Gemessen mit 1.200 synthetischen Mitgliedern (Rolle Mitgliederverwalter): Start
   638 KB (gzip 82 KB) statt 2,8 MB für alles; finanzen 452 KB, historie 323 KB.

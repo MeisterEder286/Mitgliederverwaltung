@@ -7,6 +7,18 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { starteOberflaeche } = require('./harness');
 
+test('Vorladen: Historie (und für Finanzrollen Schriftverkehr) kommt nach dem Start still im Hintergrund', async () => {
+  for (const [rolle, erwartet] of [['Kassier', ['historie', 'korrespondenz']], ['Abteilungsleiter', ['historie']]]) {
+    const ui = await starteOberflaeche({ rolle });
+    try {
+      await ui.page.waitForFunction(e => e.every(b => App.daten.bereiche.includes(b)), erwartet, { timeout: 10000 });
+      const bereiche = await ui.page.evaluate(() => App.daten.bereiche);
+      if (!erwartet.includes('korrespondenz')) assert.ok(!bereiche.includes('korrespondenz'), rolle + ': Schriftverkehr vorgeladen');
+      assert.deepStrictEqual(ui.fehler, []);
+    } finally { await ui.schliessen(); }
+  }
+});
+
 for (const rolle of ['Vorstand', 'Mitgliederverwalter', 'Kassier', 'Abteilungsleiter', 'Jugendleiter']) {
   test('Start als ' + rolle + ': ohne Fehler, kein waagrechtes Scrollen bei 360 px', async () => {
     const ui = await starteOberflaeche({ rolle });
