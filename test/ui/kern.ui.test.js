@@ -82,3 +82,59 @@ test('Post kam zurück: Erfolgsmeldung mit Rückgängig stellt den alten Stand h
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });
+
+test('Browser-Zurück: Mitglied → Liste an derselben Scrollstelle; Anker im Verlauf', async () => {
+  const ui = await starteOberflaeche({ breite: 1000 });
+  const p = ui.page;
+  try {
+    await p.getByRole('button', { name: 'Mitglieder', exact: true }).click();
+    await p.locator('tr.klickbar').first().waitFor();
+    await p.getByRole('button', { name: 'Mehr anzeigen' }).first().click();
+    const zeile = p.locator('tr.klickbar').nth(40);
+    await zeile.scrollIntoViewIfNeeded();
+    const y = await p.evaluate(() => window.scrollY);
+    assert.ok(y > 300, 'Liste nicht weit genug gescrollt: ' + y);
+    await zeile.click();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'mitglied');
+    assert.match(await p.evaluate(() => location.hash), /^#mitglied\/\d+$/);
+    await p.goBack();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'mitglieder');
+    assert.ok(Math.abs(await p.evaluate(() => window.scrollY) - y) < 80, 'Scrollstelle nicht wiederhergestellt');
+    await p.goForward();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'mitglied');
+    await p.getByRole('button', { name: '← Zurück' }).dblclick();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'mitglieder');
+    await p.waitForTimeout(800);   // kein verspätetes zweites Zurück
+    assert.strictEqual(await p.evaluate(() => App.aktuell().schluessel), 'mitglieder');
+    assert.strictEqual(await p.evaluate(() => location.hash), '#mitglieder');
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
+test('Ungespeicherte Eingaben: Rückfrage bei Navigation und Browser-Zurück, nach Speichern keine', async () => {
+  const ui = await starteOberflaeche({ breite: 1000 });
+  const p = ui.page;
+  try {
+    const id = await p.evaluate(() => App.daten.liste('mitglieder').filter(function (m) { return m.status_abgeleitet === 'aktiv'; })[0].mitglied_id);
+    await p.evaluate(i => App.zeige('mitglied', { id: i }), id);
+    await p.getByRole('button', { name: 'Bearbeiten', exact: true }).click();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'mitglied_bearbeiten');
+    await p.getByLabel('Titel', { exact: true }).fill('Dr.');
+    // Hauptnavigation → Rückfrage, Abbrechen bleibt auf der Seite
+    await p.locator('#navigation').getByRole('button', { name: 'Start' }).click();
+    await p.locator('dialog').getByRole('button', { name: 'Abbrechen' }).click();
+    assert.strictEqual(await p.evaluate(() => App.aktuell().schluessel), 'mitglied_bearbeiten');
+    assert.strictEqual(await p.getByLabel('Titel', { exact: true }).inputValue(), 'Dr.');
+    // Browser-Zurück → Rückfrage, Abbrechen bleibt ebenfalls
+    await p.goBack();
+    await p.locator('dialog').getByRole('button', { name: 'Abbrechen' }).click();
+    assert.strictEqual(await p.evaluate(() => App.aktuell().schluessel), 'mitglied_bearbeiten');
+    // Speichern → danach ohne Rückfrage weiter
+    await p.getByRole('button', { name: 'Speichern', exact: true }).click();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'mitglied');
+    await p.locator('#navigation').getByRole('button', { name: 'Start' }).click();
+    await p.waitForFunction(() => App.aktuell().schluessel === 'start');
+    assert.strictEqual(await p.locator('dialog').count(), 0);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});

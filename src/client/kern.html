@@ -24,7 +24,6 @@
   var gemeldet = 0;
   var ansichten = {};
   var aktuelle = { schluessel: null, param: null };
-  var verlauf = [];
 
   var App = window.App = {
     startdaten: null,
@@ -374,10 +373,105 @@
   App.registriere = function (schluessel, def) { ansichten[schluessel] = def; };
   App.ansichten = ansichten;
 
-  App.zeige = function (schluessel, param, ohneVerlauf) {
+  /*
+   * Browser-Verlauf: Jede Ansicht ist ein Eintrag (Zurück-Taste von Browser/Handy, direkte Links wie #mitglied/17).
+   * In Apps Script über google.script.history (das innere Fenster hat keine eigene Adresszeile), sonst – Vorschau,
+   * Oberflächentests – über window.history. Zustand: { s: schluessel, p: param, i: laufende Position }.
+   */
+  var gasVerlauf = window.google && google.script && google.script.history;
+  var position = 0;
+  var stapel = [];                 // stapel[i] = { s, p } – für „← Zurück“, falls der Browser-Verlauf nicht reagiert
+  var scrollStand = {};            // Position → scrollY, damit „Zurück“ an derselben Stelle der Liste landet
+  var zurueckTimer = null;
+  function zurueckErledigt() { clearTimeout(zurueckTimer); zurueckTimer = null; }
+
+  function anker(s, p) {
+    if (!p) return s;
+    var nurId = Object.keys(p).length === 1 && typeof p.id === 'number';
+    return s + '/' + (nurId ? p.id : encodeURIComponent(JSON.stringify(p)));
+  }
+  function ausAnker(hash) {
+    var h = String(hash || '').replace(/^#/, '');
+    if (!h) return null;
+    var i = h.indexOf('/'), s = i < 0 ? h : h.slice(0, i), rest = i < 0 ? '' : h.slice(i + 1), p = null;
+    if (/^\d+$/.test(rest)) p = { id: Number(rest) };
+    else if (rest) { try { p = JSON.parse(decodeURIComponent(rest)); } catch (e) { p = null; } }
+    var a = ansichten[s];
+    if (!a || (a.aktion && !App.darf(a.aktion))) return null;
+    return { s: s, p: p && typeof p === 'object' ? p : null };
+  }
+  function merkeVerlauf(s, p, ersetzen) {
+    if (!ersetzen) position++;
+    stapel[position] = { s: s, p: p };
+    stapel.length = position + 1;
+    var zustand = { s: s, p: p, i: position };
+    try {
+      if (gasVerlauf) gasVerlauf[ersetzen ? 'replace' : 'push'](zustand, null, anker(s, p));
+      else window.history[ersetzen ? 'replaceState' : 'pushState'](zustand, '', '#' + anker(s, p));
+    } catch (e) { /* ohne Verlauf weiter (z. B. about:blank) */ }
+  }
+  function verlaufGeaendert(zustand) {
+    zurueckErledigt();
+    if (!zustand || !ansichten[zustand.s]) return;
+    var ziel = typeof zustand.i === 'number' ? zustand.i : position;
+    if (ungespeichert()) {
+      // Der Browser hat den Eintrag schon gewechselt – bei „Abbrechen“ den aktuellen wieder herstellen
+      var hier = { s: aktuelle.schluessel, p: aktuelle.param };
+      return frageUngespeichert().then(function (ja) {
+        if (ja) { aenderungsschutz = false; verlaufGeaendert(zustand); } else { position = ziel; merkeVerlauf(hier.s, hier.p, false); }
+      });
+    }
+    aenderungsschutz = false;
+    position = ziel;
+    stapel[position] = { s: zustand.s, p: zustand.p || null };
+    zeichneAnsicht(zustand.s, zustand.p || null, scrollStand[position] || 0);
+  }
+
+  /** Startet den Verlauf: direkter Link (#ansicht/…) oder Startseite. */
+  function starteVerlauf() {
+    var los = function (hash) {
+      var z = ausAnker(hash) || { s: 'start', p: null };
+      position = 0;
+      merkeVerlauf(z.s, z.p, true);
+      zeichneAnsicht(z.s, z.p, 0);
+    };
+    if (gasVerlauf) {
+      gasVerlauf.setChangeHandler(function (e) { verlaufGeaendert(e && e.state); });
+      if (google.script.url) google.script.url.getLocation(function (ort) { los(ort && ort.hash); });
+      else los('');
+    } else {
+      window.addEventListener('popstate', function (e) { verlaufGeaendert(e.state); });
+      los(window.location.hash);
+    }
+  }
+
+  // Änderungsschutz: Formulare mit { schutz: true } (App.formular) melden Eingaben; vor dem Wegnavigieren wird gefragt.
+  var aenderungsschutz = false;
+  function ungespeichert() { return aenderungsschutz && !!App.$('inhalt').querySelector('form[data-geaendert]'); }
+  function frageUngespeichert() {
+    return App.bestaetige('Ungespeicherte Änderungen', 'Ihre Eingaben sind noch nicht gespeichert. Seite trotzdem verlassen?', 'Verlassen', 'gefahr');
+  }
+  window.addEventListener('beforeunload', function (e) { if (ungespeichert()) { e.preventDefault(); e.returnValue = ''; } });
+
+  /**
+   * Ansicht zeigen. ersetzen = true: aktuellen Verlaufseintrag ersetzen statt neuen anlegen (Reiterwechsel,
+   * nach dem Speichern, Neuzeichnen). Bei ungespeicherten Eingaben wird vorher gefragt.
+   */
+  App.zeige = function (schluessel, param, ersetzen) {
+    if (!ansichten[schluessel]) return;
+    if (ungespeichert()) {
+      frageUngespeichert().then(function (ja) { if (ja) { aenderungsschutz = false; App.zeige(schluessel, param, ersetzen); } });
+      return;
+    }
+    aenderungsschutz = false;
+    zurueckErledigt();
+    if (!ersetzen) scrollStand[position] = window.scrollY;
+    merkeVerlauf(schluessel, param || null, !!ersetzen);
+    zeichneAnsicht(schluessel, param || null, ersetzen && aktuelle.schluessel === schluessel ? window.scrollY : 0);
+  };
+
+  function zeichneAnsicht(schluessel, param, scrollY) {
     var a = ansichten[schluessel];
-    if (!a) return;
-    if (!ohneVerlauf && aktuelle.schluessel) verlauf.push({ schluessel: aktuelle.schluessel, param: aktuelle.param });
     aktuelle = { schluessel: schluessel, param: param || null };
     var hauptschluessel = a.gehoertZu || schluessel;
     Array.prototype.forEach.call(App.$('navigation').querySelectorAll('button'), function (k) {
@@ -390,15 +484,37 @@
       console.error(e);
       inhalt.appendChild(App.el('p', 'Diese Ansicht konnte nicht angezeigt werden.', { className: 'leise' }));
     }
-    inhalt.focus();
-    window.scrollTo(0, 0);
-  };
+    inhalt.focus({ preventScroll: true });
+    window.scrollTo(0, scrollY || 0);
+  }
+  /** „← Zurück“: wie die Zurück-Taste des Browsers; ohne Vorgänger zur Startseite. */
   App.zurueck = function () {
-    var v = verlauf.pop();
-    if (v) App.zeige(v.schluessel, v.param, true); else App.zeige('start', null, true);
+    if (zurueckTimer) return;   // Zurück läuft bereits (Doppelklick)
+    if (position <= 0) { App.zeige('start', null, true); return; }
+    var vorher = stapel[position - 1], startPos = position;
+    if (ungespeichert()) {
+      frageUngespeichert().then(function (ja) { if (ja) { aenderungsschutz = false; App.zurueck(); } });
+      return;
+    }
+    scrollStand[position] = window.scrollY;
+    window.history.back();
+    // Reagiert der Verlauf nicht (z. B. eingebettet ohne Verlauf), selbst zurückgehen
+    zurueckTimer = setTimeout(function () {
+      zurueckTimer = null;
+      if (position !== startPos) return;   // inzwischen anderswohin navigiert
+      if (!vorher) { App.zeige('start', null, true); return; }
+      position--;
+      merkeVerlauf(vorher.s, vorher.p, true);
+      zeichneAnsicht(vorher.s, vorher.p, scrollStand[position] || 0);
+    }, 600);
   };
   App.aktuell = function () { return aktuelle; };
-  App.neuZeichnen = function () { if (aktuelle.schluessel) App.zeige(aktuelle.schluessel, aktuelle.param, true); };
+  /** Aktuelle Ansicht neu aufbauen (nach Datenänderung) – ohne Rückfrage, ohne neuen Verlaufseintrag. */
+  App.neuZeichnen = function () {
+    if (!aktuelle.schluessel) return;
+    aenderungsschutz = false;
+    App.zeige(aktuelle.schluessel, aktuelle.param, true);
+  };
 
   function fuelleGeruest() {
     var s = App.startdaten;
@@ -513,13 +629,24 @@
    * Formular aus Felddefinitionen. felder: [{ name, titel, typ: 'text'|'datum'|'zahl'|'betrag'|'auswahl'|'janein'|
    * 'langtext'|'email'|'tel', liste: [werte] oder [{wert, text}], zahl (Auswahl liefert Zahl, z. B. für IDs),
    * pflicht, hilfe, nurLesen, breit }] – zusätzlich { gruppe: 'Überschrift' } als Zwischenüberschrift.
-   * werte: Startwerte. Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name) }.
+   * werte: Startwerte. optionen: { beiAbsenden, schutz } – schutz: vor dem Verlassen der Seite mit
+   * ungespeicherten Eingaben fragen (nur für Formulare direkt auf der Seite, nicht in Dialogen).
+   * Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name), gespeichert() }.
    */
   App.formular = function (felder, werte, optionen) {
     werte = werte || {};
     optionen = optionen || {};
     var form = App.el('form', null, { className: 'formular', noValidate: true });
     form.addEventListener('submit', function (e) { e.preventDefault(); if (optionen.beiAbsenden) optionen.beiAbsenden(); });
+    if (optionen.schutz) {
+      var geaendert = function (e) {
+        if (!e.isTrusted) return;   // nur echte Eingaben, nicht vorbefüllte Werte
+        form.dataset.geaendert = 'ja';
+        aenderungsschutz = true;
+      };
+      form.addEventListener('input', geaendert);
+      form.addEventListener('change', geaendert);
+    }
     var eingaben = {};
     felder.forEach(function (f) {
       // Gruppenüberschrift: { gruppe: 'Anschrift' } als eigener Eintrag in der Feldliste
@@ -555,6 +682,8 @@
     });
     return {
       element: form,
+      /** Nach erfolgreichem Speichern: Änderungsschutz aufheben. */
+      gespeichert: function () { delete form.dataset.geaendert; },
       feld: function (name) { return eingaben[name] && eingaben[name].eingabe; },
       werte: function () {
         var o = {};
@@ -593,6 +722,7 @@
     formular.setzeFehler([]);
     return App.rufe.apply(null, [apiName].concat(args || []).concat([formular.werte()])).then(function (daten) {
       App.daten.uebernehme(daten);
+      if (formular.gespeichert) formular.gespeichert();
       App.meldung('Gespeichert.', 'ok');
       return daten;
     }, function (err) {
@@ -743,7 +873,7 @@
       App.startdaten = daten || {};
       App.daten.setze(App.startdaten.snapshot || {});
       fuelleGeruest();
-      App.zeige('start', null, true);
+      starteVerlauf();
       // performance.now() zählt ab dem Laden des (inneren) Dokuments; die Apps-Script-Hülle davor fehlt.
       App.startBisBedienbar = Math.round(performance.now());
     }).catch(function () {

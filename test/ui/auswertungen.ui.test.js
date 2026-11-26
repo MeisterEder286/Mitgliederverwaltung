@@ -85,6 +85,8 @@ test('Neues Mitglied: Anrede → Geschlecht, PLZ → Ort, Verweis auf den Beitri
     await p.getByLabel('Geschlecht', { exact: true }).selectOption('');
     // XML-Import liegt jetzt in der Ansicht „Beitritte importieren“
     await p.locator('a', { hasText: 'Beitrittsanträge aus XML-Dateien importieren' }).click();
+    // ungespeicherte Eingaben → Rückfrage
+    await p.locator('dialog').getByRole('button', { name: 'Verlassen' }).click();
     await p.waitForFunction(() => App.aktuell().schluessel === 'beitritt');
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }

@@ -135,6 +135,19 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 `index.html` (Gerüst), `stil.html`, `app.html`. Startdaten kommen als `<script type="application/json" id="startdaten">`.
 `rufe(name, ...args)` → Promise, misst die Zeit je Aufruf (Auftragspunkt 8).
 
+Bausteine in `client/kern` (Auszug):
+- `App.zeige(ansicht, param, ersetzen)` – jede Ansicht ist ein Eintrag im Browser-Verlauf (`google.script.history`,
+  außerhalb von Apps Script `window.history`), Anker `#ansicht/id` bzw. `#ansicht/<JSON>`; `param` muss daher
+  JSON-fähig sein. `ersetzen = true` für Reiterwechsel und „nach dem Speichern“. `App.zurueck()` = Browser-Zurück.
+- `App.formular(felder, werte, { schutz: true })` – fragt vor dem Verlassen mit ungespeicherten Eingaben; nach
+  erfolgreichem Speichern `formular.gespeichert()` aufrufen (`App.speichere` tut das selbst).
+- `App.knopf` – Doppelklick-Schutz: solange die von der Aktion gestarteten `App.rufe`-Aufrufe (oder ein
+  zurückgegebenes Promise) laufen, ist der Knopf `aria-busy` und ignoriert weitere Klicks.
+- `App.dialog(titel, inhalt, knoepfe, { beiAbbruch })` – Meldungen erscheinen während des Dialogs in diesem;
+  `App.bestaetige(titel, text, jaText, 'gefahr')` → Promise<boolean> (Escape = false).
+- `App.meldung(text, art, { text, aktion })` – optionaler Aktionsknopf (z. B. „Rückgängig“);
+  `App.ladefehler(ziel, text, nochmal)` – Ladefehler mit „Erneut versuchen“.
+
 ## 6. Ausbau ab Phase 3 – Verträge für Fachmodule
 
 ### Dateien je Bereich

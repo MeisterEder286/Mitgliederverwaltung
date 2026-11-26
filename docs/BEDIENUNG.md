@@ -12,6 +12,11 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 - **„Der Datensatz wurde inzwischen geändert“:** Jemand anderes hat gleichzeitig gespeichert. Die aktuelle Fassung wird
   geladen; Änderung bitte noch einmal eintragen.
 - **Fehler-Nr.:** Bei unerwarteten Fehlern erscheint eine Nummer. Diese bitte an die Mitgliederverwaltung melden.
+- **Zurück-Taste und Links:** Die Zurück-Taste des Browsers bzw. Handys springt zur vorigen Ansicht (Listen an derselben
+  Stelle). Die Adresse einer Ansicht (z. B. eines Mitglieds) kann als Lesezeichen gespeichert oder weitergegeben werden –
+  geöffnet wird sie nur mit passender Berechtigung.
+- **Nicht gespeicherte Eingaben:** Wer beim Bearbeiten wegklickt, wird vorher gefragt.
+- **„Rückgängig“:** Manche Aktionen (z. B. „Post kam zurück“) lassen sich direkt in der Bestätigungsmeldung zurücknehmen.
 
 ## Abteilungsleitung
 - **Meine Abteilung:** alle Mitglieder Ihrer Abteilung mit Kontakt und Geburtsdatum. Filter nach aktiv/passiv, Alter, Funktion.

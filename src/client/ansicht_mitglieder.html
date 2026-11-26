@@ -312,7 +312,7 @@
     });
     ziel.appendChild(tabelle);
     aktualisiere(leiste.zustand);
-    setTimeout(function () { try { suchfeld.focus(); } catch (e) { /* egal */ } }, 0);
+    setTimeout(function () { try { suchfeld.focus({ preventScroll: true }); } catch (e) { /* egal */ } }, 0);
 
     // Nur sinnvoll für Rollen mit eingeschränkter Sicht (Abteilungsleitung); wer alle sieht, findet jeden über die Liste.
     var siehtAlle = ((A.startdaten.benutzer || {}).rollen || []).some(function (r) { return ['Vorstand', 'Mitgliederverwalter', 'Kassier'].indexOf(r) >= 0; });
@@ -665,11 +665,11 @@
 
   function zeichneBearbeiten(ziel, param) {
     var m = mitglied(param && param.id);
-    if (!m) { A.zeige('mitglieder'); return; }
+    if (!m) { A.zeige('mitglieder', null, true); return; }
     ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
     ziel.appendChild(A.el('h1', A.name(m) + ' bearbeiten'));
     var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status']);
-    var f = A.formular(mitGruppen(spalten.map(function (sp) { return feldDef(sp); })), m);
+    var f = A.formular(mitGruppen(spalten.map(function (sp) { return feldDef(sp); })), m, { schutz: true });
     var warnung = A.el('div', null, { className: 'mv-warnung', hidden: true });
     ziel.appendChild(warnung);
     ziel.appendChild(f.element);
@@ -691,6 +691,7 @@
       speichern.disabled = true;
       return A.rufe('apiMitgliedSpeichern', m.mitglied_id, m.version, w).then(function (d) {
         A.daten.uebernehme(d);
+        f.gespeichert();
         A.meldung('Gespeichert.', 'ok');
         hinweiseZeigen(d);
         A.zeige('mitglied', { id: m.mitglied_id }, true);
@@ -716,7 +717,7 @@
     }
     var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status', 'ehrenmitglied', 'ehrenmitglied_seit']);
     var felder = [{ name: 'eintrittsdatum', titel: 'Eintritt', typ: 'datum', pflicht: true }].concat(spalten.map(function (sp) { return feldDef(sp); }));
-    var f = A.formular(mitGruppen(felder), { eintrittsdatum: heute(), land: 'DE', versandart: 'E-Mail' });
+    var f = A.formular(mitGruppen(felder), { eintrittsdatum: heute(), land: 'DE', versandart: 'E-Mail' }, { schutz: true });
     A.mitgliedNeuFormular = f;   // für Erweiterungen (z. B. XML-Import), die das Formular vorbefüllen
     var dublette = A.el('div', null, { className: 'mv-warnung', hidden: true });
     var trotz = A.el('input', null, { type: 'checkbox', id: 'mv-trotz' });
@@ -735,6 +736,7 @@
         liste.forEach(function (x) {
           var zeile = A.el('p', null, null, [A.el('span', x.name + ' (Nr. ' + x.mitgliedsnummer + ', ' + (x.status || '–') + ') ')]);
           if (mitglied(x.mitglied_id)) zeile.appendChild(A.knopf(x.status === 'ausgetreten' ? 'Wiedereintritt erfassen' : 'Ansehen', function () {
+            f.gespeichert();   // bewusst zur vorhandenen Person – keine Rückfrage wegen der Dublette
             A.zeige('mitglied', { id: x.mitglied_id });
             if (x.status === 'ausgetreten') wiedereintrittDialog(mitglied(x.mitglied_id));
           }, 'zweit klein'));
@@ -777,6 +779,7 @@
       f.setzeFehler([]);
       return A.rufe('apiMitgliedAnlegen', eingabe).then(function (d) {
         A.daten.uebernehme(d);
+        f.gespeichert();
         A.meldung('Angelegt mit Mitgliedsnummer ' + d.mitgliedsnummer + '.' + (d.hinweise && d.hinweise.length ? ' ' + d.hinweise.join(' ') : ''), d.hinweise && d.hinweise.length ? 'hinweis' : 'ok');
         A.zeige('mitglied', { id: d.mitglied_id }, true);
       }, function (err) {
