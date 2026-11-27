@@ -1587,7 +1587,7 @@
       var fest = gem.form.werte().festbetrag;
       if (/^r/.test(w) && fest !== null && r.betrag !== undefined && Math.abs(Number(fest) - Number(r.betrag)) > 0.004) meldungen.push('Festbetrag ' + A.betrag(fest) + ' weicht vom Betrag der Regel (' + A.betrag(r.betrag) + ') ab.');
       gem.pruefung.hidden = false;
-      if (!meldungen.length) { gem.pruefung.className = 'mv-regelpruefung leise'; gem.pruefung.textContent = 'Passt zur Regel: ' + erw + ' Erwachsene, ' + kinder + (kinder === 1 ? ' Kind' : ' Kinder') + '.'; return; }
+      if (!meldungen.length) { gem.pruefung.className = 'mv-regelpruefung leise'; gem.pruefung.textContent = 'Passt zur Regel: ' + erw + (erw === 1 ? ' Erwachsener, ' : ' Erwachsene, ') + kinder + (kinder === 1 ? ' Kind' : ' Kinder') + '.'; return; }
       gem.pruefung.className = 'mv-regelpruefung mv-warnung';
       gem.pruefung.appendChild(A.el('strong', 'Abweichung von der Regel (Speichern ist trotzdem möglich, wird aber gemeldet):'));
       var ul = A.el('ul');

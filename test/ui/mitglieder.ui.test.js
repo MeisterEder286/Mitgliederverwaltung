@@ -128,7 +128,7 @@ test('Mitgliederverwalter: Familie aufnehmen, vorhandene IBAN erkennen und Konto
       assert.strictEqual(gemArt, 'r1', 'mit Kind → Familienbeitrag vorgeschlagen');
       assert.strictEqual(await p.getByLabel('Bezeichnung *').inputValue(), 'Familie Familienprobe');
       assert.strictEqual(await p.getByLabel('Festbetrag', { exact: true }).inputValue(), '180');
-      assert.match(await p.locator('.mv-regelpruefung').innerText(), /Passt zur Regel: \d Erwachsene, 1 Kind/);
+      assert.match(await p.locator('.mv-regelpruefung').innerText(), /Passt zur Regel: \d Erwachsene?r?, 1 Kind/);
     }
     await p.locator('button', { hasText: '2 Mitglieder anlegen' }).click();
     await p.waitForSelector('.mv-kopf');
