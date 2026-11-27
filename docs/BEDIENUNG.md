@@ -5,13 +5,27 @@ Für alle, die mit der Mitgliederverwaltung arbeiten – ohne Technikkenntnisse.
 angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 
 ## Für alle
-- **Start:** Kennzahlen und „Zu erledigen“. Ein Klick auf eine Kachel führt zur passenden Liste.
+- **Navigation:** Die Bereiche sind in Gruppen zusammengefasst: Start · Mitglieder · Finanzen · Schreiben · Berichte ·
+  Verwaltung (je nach Rolle weniger). Hat eine Gruppe mehrere Bereiche (z. B. Mitglieder: Mitglieder, Familien,
+  Funktionen, Nachweise, Ehrungen), stehen sie als Knöpfe oben über der Liste. Auf dem Handy liegt die Navigation als
+  Leiste am unteren Bildschirmrand; weitere Gruppen öffnen sich über „Mehr“. Die angemeldete E-Mail-Adresse zeigt der
+  Name oben rechts beim Darüberfahren mit der Maus.
+- **Start:** Kacheln in drei Gruppen: „Mitglieder“ (Bestand), „Zu erledigen“ (Führungszeugnisse, Ehrungen,
+  Datenqualität, DSGVO-Anfragen, Postausgang, Wiedervorlagen – grau gestrichelt mit 0 heißt „nichts zu tun“) und
+  „Finanzen“. Ein Klick auf eine Kachel führt zur passenden Liste.
 - **Suchen:** oben auf der Startseite oder in „Mitglieder“ – Name, Mitgliedsnummer, Ort. Umlaute egal (Müller = Mueller).
+  Auf der Startseite wählen die Pfeiltasten einen Vorschlag, Enter öffnet ihn, Escape schließt die Vorschläge.
+  In „Mitglieder“ setzt „Filter zurücksetzen“ Suche und Filter wieder auf den Grundzustand (Status „aktiv“).
 - **Listen drucken/exportieren:** jeweils über „Drucken“ (auch „Als PDF speichern“) oder „CSV“ (öffnet in Excel).
   Jeder Export wird mit Name, Zeit und Liste protokolliert. Kontaktlisten bitte nicht in Messenger-Gruppen weitergeben.
 - **„Der Datensatz wurde inzwischen geändert“:** Jemand anderes hat gleichzeitig gespeichert. Die aktuelle Fassung wird
   geladen; Änderung bitte noch einmal eintragen.
 - **Fehler-Nr.:** Bei unerwarteten Fehlern erscheint eine Nummer. Diese bitte an die Mitgliederverwaltung melden.
+- **Zurück-Taste und Links:** Die Zurück-Taste des Browsers bzw. Handys springt zur vorigen Ansicht (Listen an derselben
+  Stelle). Die Adresse einer Ansicht (z. B. eines Mitglieds) kann als Lesezeichen gespeichert oder weitergegeben werden –
+  geöffnet wird sie nur mit passender Berechtigung.
+- **Nicht gespeicherte Eingaben:** Wer beim Bearbeiten wegklickt, wird vorher gefragt.
+- **„Rückgängig“:** Manche Aktionen (z. B. „Post kam zurück“) lassen sich direkt in der Bestätigungsmeldung zurücknehmen.
 
 ## Abteilungsleitung
 - **Meine Abteilung:** alle Mitglieder Ihrer Abteilung mit Kontakt und Geburtsdatum. Filter nach aktiv/passiv, Alter, Funktion.
@@ -87,7 +101,7 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   gesendet (Meldung). Je Versand höchstens `mail_max_je_lauf` Mails.
 
 ## Notizen und Wiedervorlagen
-- **Wo:** im Mitglied über den Reiter „Notizen“ (oder den Knopf „Notizen (n)“ – n = offene), im Konto unter „Notizen zum
+- **Wo:** im Mitglied über den Reiter „Dokumente & Notizen“ (oder den Knopf „Notizen (n)“ – n = offene), im Konto unter „Notizen zum
   Konto“ und gesammelt im Menü „Notizen“. Die Startseite zeigt unter „Wiedervorlagen“ bis zu fünf fällige Einträge.
 - **Art:** Notiz, Telefonat, Rückfrage oder Wiedervorlage. Mit „Wiedervorlage am“ erscheint der Eintrag ab diesem Tag
   unter „Notizen → Zu erledigen“ und auf der Startseite.

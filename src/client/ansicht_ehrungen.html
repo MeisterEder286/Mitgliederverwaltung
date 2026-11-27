@@ -33,10 +33,10 @@
   function lade(ziel) {
     var bereich = A.leere(ziel);
     bereich.appendChild(A.el('p', 'Ehrungsliste wird berechnet …', { className: 'laedt' }));
-    A.rufe('apiEhrungenListe', zustand.jahr).then(function (d) {
+    return A.rufe('apiEhrungenListe', zustand.jahr).then(function (d) {
       zustand.daten = d; zustand.markiert = {};
       zeichneListe(A.leere(bereich));
-    }).catch(function () { A.leere(bereich).appendChild(A.el('p', 'Die Liste konnte nicht geladen werden.', { className: 'leise' })); });
+    }).catch(function () { A.ladefehler(A.leere(bereich), 'Die Ehrungsliste konnte nicht geladen werden.', function () { return lade(ziel); }); });
   }
 
   function statusZelle(e) {
@@ -71,16 +71,16 @@
     if (d.anzahl.neu) {
       leiste.appendChild(A.knopf('Liste übernehmen (' + d.anzahl.neu + ')', function (ev) {
         var k = ev.currentTarget; k.disabled = true;
-        A.rufe('apiEhrungenUebernehmen', d.jahr).then(function (r) {
+        return A.rufe('apiEhrungenUebernehmen', d.jahr).then(function (r) {
           A.daten.uebernehme(r);
           A.meldung(r.angelegt + ' Ehrung(en) als „fällig“ übernommen.', 'ok');
           lade(ziel);
         }).catch(function () { k.disabled = false; });
       }));
     }
-    leiste.appendChild(A.knopf('JHV-Liste drucken', function () { exportiere('druck'); }, 'zweit'));
-    leiste.appendChild(A.knopf('CSV', function () { exportiere('csv'); }, 'zweit'));
-    leiste.appendChild(A.knopf('Urkunden-Daten (CSV)', function () { exportiere('urkunden'); }, 'zweit'));
+    leiste.appendChild(A.knopf('JHV-Liste drucken', function () { return exportiere('druck'); }, 'zweit'));
+    leiste.appendChild(A.knopf('CSV', function () { return exportiere('csv'); }, 'zweit'));
+    leiste.appendChild(A.knopf('Urkunden-Daten (CSV)', function () { return exportiere('urkunden'); }, 'zweit'));
     ziel.appendChild(leiste);
 
     var typen = [];
@@ -158,7 +158,7 @@
       { text: 'Speichern', art: ' ', aktion: function (schliessen) {
         var w = f.werte();
         if (!w.verliehen_am || !/^\d{4}-\d{2}-\d{2}$/.test(w.verliehen_am)) { f.setzeFehler([{ feld: 'verliehen_am', meldung: 'Bitte ein Datum TT.MM.JJJJ angeben.' }]); return; }
-        aktion(eintraege, 'verleihen', w, ziel, schliessen, f);
+        return aktion(eintraege, 'verleihen', w, ziel, schliessen, f);
       } }
     ]);
   }
@@ -175,17 +175,17 @@
     var inhalt = A.el('div', null, null, [details, bem.element]);
     var knoepfe = [{ text: 'Schließen' }];
     if (e.status === 'verliehen' || e.status === 'abgelehnt') {
-      knoepfe.push({ text: 'Wieder öffnen', aktion: function (s) { aktion([e], 'oeffnen', {}, ziel, s); } });
+      knoepfe.push({ text: 'Wieder öffnen', aktion: function (s) { return aktion([e], 'oeffnen', {}, ziel, s); } });
     } else {
-      knoepfe.push({ text: 'Ablehnen', aktion: function (s) { aktion([e], 'ablehnen', bem.werte(), ziel, s); } });
-      knoepfe.push({ text: 'Verschieben', aktion: function (s) { aktion([e], 'verschieben', bem.werte(), ziel, s); } });
+      knoepfe.push({ text: 'Ablehnen', aktion: function (s) { return aktion([e], 'ablehnen', bem.werte(), ziel, s); } });
+      knoepfe.push({ text: 'Verschieben', aktion: function (s) { return aktion([e], 'verschieben', bem.werte(), ziel, s); } });
       knoepfe.push({ text: 'Verleihen …', art: ' ', aktion: function (s) { s(); verleihDialog([e], ziel); } });
     }
     A.dialog('Ehrung', inhalt, knoepfe);
   }
 
   function exportiere(art) {
-    A.rufe('apiEhrungenExport', zustand.jahr, art === 'urkunden' ? 'urkunden' : 'liste').then(function (zeilen) {
+    return A.rufe('apiEhrungenExport', zustand.jahr, art === 'urkunden' ? 'urkunden' : 'liste').then(function (zeilen) {
       var spalten = [
         { feld: 'mitgliedsnummer', titel: 'Nr.' }, { feld: 'name', titel: 'Name' }, { feld: 'anlass', titel: 'Anlass' },
         { feld: 'stufe', titel: 'Stufe' }, { feld: 'grundlage', titel: 'Grundlage' }, { feld: 'faellig_jahr', titel: 'fällig' },

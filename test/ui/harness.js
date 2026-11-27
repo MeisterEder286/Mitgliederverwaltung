@@ -8,9 +8,12 @@
  *
  *   const { starteOberflaeche } = require('./harness');
  *   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
- *   await ui.page.getByRole('button', { name: 'Mitglieder' }).click();
+ *   await ui.page.getByRole('button', { name: 'Mitglieder' }).click();   // Gruppe der Hauptnavigation
+ *   await ui.oeffne('nachweise')    // Ansicht direkt öffnen (auch wenn sie mobil unter „Mehr“/Unterreiter liegt)
+ *   await ui.navAnsichten()         // Titel aller für die Rolle erreichbaren Ansichten
  *   ui.daten('Mitglied')          // rohe Zeilen der Fake-Tabelle
  *   ui.fehler                     // JavaScript-Fehler der Seite (sollte leer bleiben)
+ *   ui.downloads                  // [{ name, pfad }] – pfad erst nach await ui.downloadsFertig()
  *   await ui.schliessen();
  *
  * Optionen: rolle (erste Benutzerzeile mit dieser Rolle), email (statt rolle), seed, mitglieder (Standard 300 für
@@ -65,9 +68,14 @@ async function starteOberflaeche(opt) {
   page.on('pageerror', e => fehler.push(e.message));
   page.on('console', m => { if (m.type() === 'error') fehler.push(m.text()); });
   page.on('dialog', d => d.accept());
-  // Downloads (CSV, XML) abfangen
+  // Downloads (CSV, XML) abfangen: Name sofort, Pfad sobald fertig (ui.downloadsFertig())
   const downloads = [];
-  page.on('download', async d => { downloads.push({ name: d.suggestedFilename(), pfad: await d.path() }); });
+  const offeneDownloads = [];
+  page.on('download', d => {
+    const eintrag = { name: d.suggestedFilename(), pfad: null };
+    downloads.push(eintrag);
+    offeneDownloads.push(d.path().then(p => { eintrag.pfad = p; }, () => {}));
+  });
   await page.exposeFunction('__gas', async (name, argsJson) => {
     aufrufe.push(name);
     if (opt.verzoegerungMs) await new Promise(r => setTimeout(r, opt.verzoegerungMs));
@@ -85,7 +93,15 @@ async function starteOberflaeche(opt) {
     daten: tab => f.daten(tab),
     /** Zeilen eines Fake-Tabs als Objekte (Spaltennamen aus der Kopfzeile, Rohwerte). */
     objekte: tab => { const d = f.daten(tab); return d.slice(1).map(z => Object.fromEntries(d[0].map((k, i) => [k, z[i]]))); },
-    schliessen: () => browser.close()
+    downloadsFertig: () => Promise.all(offeneDownloads),
+    /** Ansicht direkt öffnen (wie ein Klick in Navigation/Unterreiter, unabhängig von Breite und „Mehr“). */
+    oeffne: async (schluessel, param) => {
+      await page.evaluate(([k, p]) => App.zeige(k, p), [schluessel, param || null]);
+      await page.waitForFunction(k => App.aktuell().schluessel === k, schluessel);
+    },
+    /** Titel aller Ansichten, die die Rolle über Navigation und Unterreiter erreicht. */
+    navAnsichten: () => page.evaluate(() => App.sichtbareAnsichten().map(App.titelVon)),
+    schliessen: async () => { await Promise.all(offeneDownloads); await browser.close(); }
   };
 }
 

@@ -5,15 +5,18 @@
   "description": "Mitgliederverwaltung TSV Ergoldsbach e.V. – Apps-Script-WebApp mit Google Sheets",
   "scripts": {
     "check": "node tools/check.js",
-    "test": "node --test \"test/*.test.js\"",
+    "test": "node tools/tests.js",
     "schema": "node tools/schema-erzeugen.js",
     "push": "npm run check && npm test && npm run test:ui && clasp push",
     "deploy:hinweis": "echo 'Deployment nur über bestehende Deployment-ID: clasp deploy -i <ID> -d \"Beschreibung\" (siehe docs/BETRIEB.md)'",
     "vorschau": "node tools/vorschau.js",
-    "test:ui": "node --test --test-concurrency=1 \"test/ui/**/*.ui.test.js\"",
+    "test:ui": "node tools/tests.js ui",
     "push:backup": "npm run check && cd backup && clasp push"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
   }
 }

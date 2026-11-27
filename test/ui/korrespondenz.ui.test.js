@@ -53,7 +53,7 @@ test('Mitgliederverwalter: Austrittsbestätigung aus dem Detail, Druck, Ablage u
     await p.waitForSelector('text=Bestätigung Ihres Austritts');
     // Reiter im Mitglied-Detail
     await p.evaluate(id => App.zeige('mitglied', { id }), ausgetreten.mitglied_id);
-    await p.locator('.reiter button', { hasText: 'Dokumente & Schreiben' }).click();
+    await p.locator('.reiter button', { hasText: 'Dokumente & Notizen' }).click();
     await p.waitForSelector('text=Bestätigung Ihres Austritts');
     await p.locator('button', { hasText: 'Dokument verknüpfen' }).click();
     await p.getByLabel('Titel *').fill('Aufnahmeantrag 2010');
@@ -80,13 +80,13 @@ test('Konto-Detail: Hinweis auf fehlendes SEPA-Mandat; Kassier sieht „Schreibe
     await p.evaluate(id => App.zeige('konto', { id }), konto.beitragskonto_id);
     await p.waitForSelector('text=SEPA-Mandat & Dokumente');
     await p.waitForSelector('text=kein unterschriebenes SEPA-Mandat');
-    const nav = await p.$$eval('#navigation button', b => b.map(x => x.textContent));
+    const nav = await ui.navAnsichten();
     assert.ok(nav.includes('Schreiben'));
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
   const al = await starteOberflaeche({ rolle: 'Abteilungsleiter', tabs: tabsMitVorlagen() });
   try {
-    const nav = await al.page.$$eval('#navigation button', b => b.map(x => x.textContent));
+    const nav = await al.navAnsichten();
     assert.ok(!nav.includes('Schreiben'));
     const r = await al.page.evaluate(() => App.rufe('apiKorrespondenzVorlagen', App.still).then(() => 'ok', e => e.art));
     assert.strictEqual(r, 'zugriff');

@@ -9,7 +9,11 @@
               erzwungen wird jede Berechtigung auf dem Server (Sicherheitsregel A2).
   Besonderheiten:
     - Ansichten liegen je in einer eigenen Datei client/ansicht_*.html und melden sich mit
-      App.registriere(schluessel, { titel, aktion, reihenfolge, zeichne(ziel, param) }) an.
+      App.registriere(schluessel, { titel, aktion, reihenfolge, zeichne(ziel, param) }) an; „titel“ darf eine
+      Funktion sein (dynamischer Titel, z. B. „Meine Abteilung“).
+    - Navigation: Ansichten werden in der Tabelle GRUPPEN (Abschnitt „Navigation“) zu Gruppen zusammengefasst
+      (Start · Mitglieder · Finanzen · Schreiben · Berichte · Verwaltung); hat die Gruppe mehrere sichtbare
+      Ansichten, erscheinen über der Listenansicht Unterreiter. Auf dem Handy ist die Navigation eine Leiste unten.
     - Texte immer über textContent (App.el), nie innerHTML – kein Einschleusen von HTML aus Daten.
     - App.rufe misst jeden Server-Aufruf (Auftragspunkt 8); die Ansicht „Messwerte“ zeigt die Werte.
     - Suche/Filter/Sortierung laufen im Browser auf App.daten (Architektur „einmal laden, lokal arbeiten“).
@@ -24,7 +28,6 @@
   var gemeldet = 0;
   var ansichten = {};
   var aktuelle = { schluessel: null, param: null };
-  var verlauf = [];
 
   var App = window.App = {
     startdaten: null,
@@ -50,8 +53,32 @@
     return e;
   };
   App.leere = function (k) { while (k.firstChild) k.removeChild(k.firstChild); return k; };
+  /**
+   * Knopf mit Doppelklick-Schutz: Startet die Aktion Server-Aufrufe (App.rufe) oder liefert sie ein Promise,
+   * ist der Knopf bis zu deren Ende „beschäftigt“ (aria-busy) und weitere Klicks werden ignoriert.
+   * disabled bleibt allein Sache der Ansicht.
+   */
   App.knopf = function (text, aktion, art) {
-    return App.el('button', text, { type: 'button', className: 'knopf' + (art ? ' ' + art : ''), onclick: aktion });
+    var b = App.el('button', text, { type: 'button', className: 'knopf' + (art ? ' ' + art : '') });
+    if (aktion) b.addEventListener('click', function (e) {
+      if (b.getAttribute('aria-busy') === 'true') return;
+      App.mitSperre(b, function () { return aktion.call(b, e); });
+    });
+    return b;
+  };
+  var sammler = null;   // nimmt die Promises der App.rufe-Aufrufe auf, die während einer Knopfaktion starten
+  App.mitSperre = function (knopf, fn) {
+    var vorher = sammler, eigene = [];
+    sammler = eigene;
+    var r;
+    try { r = fn(); } finally { sammler = vorher; }
+    if (r && typeof r.then === 'function') eigene.push(r);
+    if (vorher) eigene.forEach(function (p) { vorher.push(p); });
+    if (!eigene.length || knopf.disabled) return r;
+    knopf.setAttribute('aria-busy', 'true');
+    var leer = function () {};
+    Promise.all(eigene.map(function (p) { return p.then(leer, leer); })).then(function () { knopf.removeAttribute('aria-busy'); });
+    return r;
   };
   App.sichereUrl = function (url) { return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null; };
 
@@ -71,6 +98,19 @@
     var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s);
     if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
     return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  };
+  /**
+   * Datumseingabe vereinheitlichen → 'TT.MM.JJJJ': '1.1.2026', '01012026', '2026-01-01'.
+   * Zweistellige Jahre bleiben bewusst unverändert (Geburtsdatum 1930 vs. Austritt 2030 wäre geraten) –
+   * der Server meldet sie dann als ungültig. Unbekanntes bleibt unverändert.
+   */
+  App.normalisiereDatum = function (text) {
+    var s = String(text || '').trim();
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (m) return App.datum(s);
+    m = /^(\d{1,2})[.\/ -](\d{1,2})[.\/ -](\d{4})$/.exec(s) || /^(\d{2})(\d{2})(\d{4})$/.exec(s);
+    if (!m || +m[1] < 1 || +m[1] > 31 || +m[2] < 1 || +m[2] > 12) return s;
+    return ('0' + m[1]).slice(-2) + '.' + ('0' + m[2]).slice(-2) + '.' + m[3];
   };
   App.heute = function () {
     var d = new Date();
@@ -97,17 +137,44 @@
 
   // ================================================================== Meldungen
 
-  App.meldung = function (text, art) {
+  var meldungTimer = null;
+  var offeneDialoge = [];
+  /**
+   * Meldung oben anzeigen. art: 'ok' | 'hinweis' | sonst Fehler. aktion (optional): { text, aktion } als Knopf,
+   * z. B. „Rückgängig“. Ist ein Dialog offen, erscheint die Meldung zusätzlich in diesem – das Banner oben
+   * liegt sonst unbedienbar hinter dem Dialog.
+   */
+  App.meldung = function (text, art, aktion) {
     var m = App.$('meldung');
+    var klasse = 'meldung' + (art === 'ok' ? ' ok' : art === 'hinweis' ? ' hinweis' : '');
+    clearTimeout(meldungTimer);
     App.leere(m);
-    m.className = 'meldung' + (art === 'ok' ? ' ok' : art === 'hinweis' ? ' hinweis' : '');
+    m.className = klasse;
     m.appendChild(App.el('span', text));
+    if (aktion) m.appendChild(App.knopf(aktion.text, function () { m.hidden = true; return aktion.aktion(); }, 'zweit klein'));
     m.appendChild(App.knopf('Schließen', function () { m.hidden = true; }, 'zweit klein'));
     m.hidden = false;
-    if (art === 'ok') setTimeout(function () { m.hidden = true; }, 4000);
+    if (art === 'ok') meldungTimer = setTimeout(function () { m.hidden = true; }, aktion ? 10000 : 4000);
+    var d = offeneDialoge[offeneDialoge.length - 1];
+    if (d) {
+      App.leere(d.meldung).appendChild(App.el('span', text));
+      d.meldung.className = klasse + ' dialog-meldung';
+      d.meldung.hidden = false;
+    }
   };
+  /** Ladefehler im Inhalt mit „Erneut versuchen“ (statt leerer Fläche). */
+  App.ladefehler = function (ziel, text, nochmal) {
+    return ziel.appendChild(App.el('div', null, { className: 'meldung ladefehler', role: 'alert' }, [
+      App.el('span', text || 'Die Daten konnten nicht geladen werden.'),
+      nochmal ? App.knopf('Erneut versuchen', nochmal, 'zweit klein') : null
+    ]));
+  };
+  /** Fehler anzeigen: { meldung, nr } vom Server oder das Error-Objekt aus einem abgelehnten App.rufe. */
   App.fehler = function (f) {
-    var text = (f && f.meldung) || 'Es ist ein Fehler aufgetreten.';
+    var text = f instanceof Error
+      ? (f.art === 'netz' ? 'Keine Verbindung zum Server. Bitte erneut versuchen.' : f.message)
+      : f && f.meldung;
+    text = text || 'Es ist ein Fehler aufgetreten.';
     if (f && f.nr) text += ' (Fehler-Nr. ' + f.nr + ')';
     App.meldung(text, 'fehler');
   };
@@ -138,7 +205,7 @@
     var args = Array.prototype.slice.call(arguments, 1);
     var still = false;
     if (args.length && args[args.length - 1] && args[args.length - 1].__still) { still = true; args.pop(); }
-    return new Promise(function (resolve, reject) {
+    var p = new Promise(function (resolve, reject) {
       var t0 = performance.now();
       var runner = google.script.run
         .withSuccessHandler(function (antwort) {
@@ -165,6 +232,8 @@
         });
       runner[name].apply(runner, args);
     });
+    if (sammler) sammler.push(p);
+    return p;
   };
   App.still = { __still: true };
 
@@ -322,35 +391,155 @@
 
   // ================================================================== Router
 
-  /** Ansicht anmelden: { titel, aktion (Recht oder null), reihenfolge (Zahl), zeichne(ziel, param), versteckt }. */
+  /** Ansicht anmelden: { titel (Text oder Funktion), aktion (Recht oder null), reihenfolge (Zahl), zeichne(ziel, param), versteckt, gehoertZu }. */
   App.registriere = function (schluessel, def) { ansichten[schluessel] = def; };
   App.ansichten = ansichten;
 
-  App.zeige = function (schluessel, param, ohneVerlauf) {
+  /*
+   * Browser-Verlauf: Jede Ansicht ist ein Eintrag (Zurück-Taste von Browser/Handy, direkte Links wie #mitglied/17).
+   * In Apps Script über google.script.history (das innere Fenster hat keine eigene Adresszeile), sonst – Vorschau,
+   * Oberflächentests – über window.history. Zustand: { s: schluessel, p: param, i: laufende Position }.
+   */
+  var gasVerlauf = window.google && google.script && google.script.history;
+  var position = 0;
+  var stapel = [];                 // stapel[i] = { s, p } – für „← Zurück“, falls der Browser-Verlauf nicht reagiert
+  var scrollStand = {};            // Position → scrollY, damit „Zurück“ an derselben Stelle der Liste landet
+  var zurueckTimer = null;
+  function zurueckErledigt() { clearTimeout(zurueckTimer); zurueckTimer = null; }
+
+  function anker(s, p) {
+    if (!p) return s;
+    var nurId = Object.keys(p).length === 1 && typeof p.id === 'number';
+    return s + '/' + (nurId ? p.id : encodeURIComponent(JSON.stringify(p)));
+  }
+  function ausAnker(hash) {
+    var h = String(hash || '').replace(/^#/, '');
+    if (!h) return null;
+    var i = h.indexOf('/'), s = i < 0 ? h : h.slice(0, i), rest = i < 0 ? '' : h.slice(i + 1), p = null;
+    if (/^\d+$/.test(rest)) p = { id: Number(rest) };
+    else if (rest) { try { p = JSON.parse(decodeURIComponent(rest)); } catch (e) { p = null; } }
+    var a = ansichten[s];
+    if (!a || (a.aktion && !App.darf(a.aktion))) return null;
+    return { s: s, p: p && typeof p === 'object' ? p : null };
+  }
+  function merkeVerlauf(s, p, ersetzen) {
+    if (!ersetzen) position++;
+    stapel[position] = { s: s, p: p };
+    stapel.length = position + 1;
+    var zustand = { s: s, p: p, i: position };
+    try {
+      if (gasVerlauf) gasVerlauf[ersetzen ? 'replace' : 'push'](zustand, null, anker(s, p));
+      else window.history[ersetzen ? 'replaceState' : 'pushState'](zustand, '', '#' + anker(s, p));
+    } catch (e) { /* ohne Verlauf weiter (z. B. about:blank) */ }
+  }
+  function verlaufGeaendert(zustand) {
+    zurueckErledigt();
+    if (!zustand || !ansichten[zustand.s]) return;
+    var ziel = typeof zustand.i === 'number' ? zustand.i : position;
+    if (ungespeichert()) {
+      // Der Browser hat den Eintrag schon gewechselt – bei „Abbrechen“ den aktuellen wieder herstellen
+      var hier = { s: aktuelle.schluessel, p: aktuelle.param };
+      return frageUngespeichert().then(function (ja) {
+        if (ja) { aenderungsschutz = false; verlaufGeaendert(zustand); } else { position = ziel; merkeVerlauf(hier.s, hier.p, false); }
+      });
+    }
+    aenderungsschutz = false;
+    position = ziel;
+    stapel[position] = { s: zustand.s, p: zustand.p || null };
+    zeichneAnsicht(zustand.s, zustand.p || null, scrollStand[position] || 0);
+  }
+
+  /** Startet den Verlauf: direkter Link (#ansicht/…) oder Startseite. */
+  function starteVerlauf() {
+    var los = function (hash) {
+      var z = ausAnker(hash) || { s: 'start', p: null };
+      position = 0;
+      merkeVerlauf(z.s, z.p, true);
+      zeichneAnsicht(z.s, z.p, 0);
+    };
+    if (gasVerlauf) {
+      gasVerlauf.setChangeHandler(function (e) { verlaufGeaendert(e && e.state); });
+      if (google.script.url) google.script.url.getLocation(function (ort) { los(ort && ort.hash); });
+      else los('');
+    } else {
+      window.addEventListener('popstate', function (e) { verlaufGeaendert(e.state); });
+      los(window.location.hash);
+    }
+  }
+
+  // Änderungsschutz: Formulare mit { schutz: true } (App.formular) melden Eingaben; vor dem Wegnavigieren wird gefragt.
+  var aenderungsschutz = false;
+  function ungespeichert() { return aenderungsschutz && !!App.$('inhalt').querySelector('form[data-geaendert]'); }
+  function frageUngespeichert() {
+    return App.bestaetige('Ungespeicherte Änderungen', 'Ihre Eingaben sind noch nicht gespeichert. Seite trotzdem verlassen?', 'Verlassen', 'gefahr');
+  }
+  window.addEventListener('beforeunload', function (e) { if (ungespeichert()) { e.preventDefault(); e.returnValue = ''; } });
+
+  /**
+   * Ansicht zeigen. ersetzen = true: aktuellen Verlaufseintrag ersetzen statt neuen anlegen (Reiterwechsel,
+   * nach dem Speichern, Neuzeichnen). Bei ungespeicherten Eingaben wird vorher gefragt.
+   */
+  App.zeige = function (schluessel, param, ersetzen) {
+    if (!ansichten[schluessel]) return;
+    if (ungespeichert()) {
+      frageUngespeichert().then(function (ja) { if (ja) { aenderungsschutz = false; App.zeige(schluessel, param, ersetzen); } });
+      return;
+    }
+    aenderungsschutz = false;
+    zurueckErledigt();
+    if (!ersetzen) scrollStand[position] = window.scrollY;
+    merkeVerlauf(schluessel, param || null, !!ersetzen);
+    zeichneAnsicht(schluessel, param || null, ersetzen && aktuelle.schluessel === schluessel ? window.scrollY : 0);
+  };
+
+  function zeichneAnsicht(schluessel, param, scrollY) {
     var a = ansichten[schluessel];
-    if (!a) return;
-    if (!ohneVerlauf && aktuelle.schluessel) verlauf.push({ schluessel: aktuelle.schluessel, param: aktuelle.param });
     aktuelle = { schluessel: schluessel, param: param || null };
     var hauptschluessel = a.gehoertZu || schluessel;
-    Array.prototype.forEach.call(App.$('navigation').querySelectorAll('button'), function (k) {
-      if (k.dataset.ansicht === hauptschluessel) k.setAttribute('aria-current', 'page');
-      else k.removeAttribute('aria-current');
-    });
-    var inhalt = App.leere(App.$('inhalt'));
+    var gruppe = gruppeVon(hauptschluessel);
+    markiereGruppe(gruppe);
+    var inhalt = App.leere(App.$('inhalt')), haupt = inhalt;
     App.$('meldung').hidden = true;
+    // Unterreiter nur über Listenansichten, nicht über Detailansichten (versteckt: Mitglied, Konto …)
+    if (gruppe && gruppe.ansichten.length > 1 && !a.versteckt) {
+      inhalt.appendChild(unterreiter(gruppe, hauptschluessel));
+      inhalt = inhalt.appendChild(App.el('div', null, { className: 'ansicht' }));
+    }
     try { a.zeichne(inhalt, param || null); } catch (e) {
       console.error(e);
       inhalt.appendChild(App.el('p', 'Diese Ansicht konnte nicht angezeigt werden.', { className: 'leise' }));
     }
-    inhalt.focus();
-    window.scrollTo(0, 0);
-  };
+    haupt.focus({ preventScroll: true });
+    window.scrollTo(0, scrollY || 0);
+  }
+  /** „← Zurück“: wie die Zurück-Taste des Browsers; ohne Vorgänger zur Startseite. */
   App.zurueck = function () {
-    var v = verlauf.pop();
-    if (v) App.zeige(v.schluessel, v.param, true); else App.zeige('start', null, true);
+    if (zurueckTimer) return;   // Zurück läuft bereits (Doppelklick)
+    if (position <= 0) { App.zeige('start', null, true); return; }
+    var vorher = stapel[position - 1], startPos = position;
+    if (ungespeichert()) {
+      frageUngespeichert().then(function (ja) { if (ja) { aenderungsschutz = false; App.zurueck(); } });
+      return;
+    }
+    scrollStand[position] = window.scrollY;
+    window.history.back();
+    // Reagiert der Verlauf nicht (z. B. eingebettet ohne Verlauf), selbst zurückgehen
+    zurueckTimer = setTimeout(function () {
+      zurueckTimer = null;
+      if (position !== startPos) return;   // inzwischen anderswohin navigiert
+      if (!vorher) { App.zeige('start', null, true); return; }
+      position--;
+      merkeVerlauf(vorher.s, vorher.p, true);
+      zeichneAnsicht(vorher.s, vorher.p, scrollStand[position] || 0);
+    }, 600);
   };
   App.aktuell = function () { return aktuelle; };
-  App.neuZeichnen = function () { if (aktuelle.schluessel) App.zeige(aktuelle.schluessel, aktuelle.param, true); };
+  /** Aktuelle Ansicht neu aufbauen (nach Datenänderung) – ohne Rückfrage, ohne neuen Verlaufseintrag. */
+  App.neuZeichnen = function () {
+    if (!aktuelle.schluessel) return;
+    aenderungsschutz = false;
+    App.zeige(aktuelle.schluessel, aktuelle.param, true);
+  };
 
   function fuelleGeruest() {
     var s = App.startdaten;
@@ -359,19 +548,144 @@
     var benutzer = App.leere(App.$('benutzer'));
     benutzer.appendChild(App.el('span', b.name || b.email || ''));
     if (b.rollen && b.rollen.length) benutzer.appendChild(App.el('span', ' · ' + b.rollen.join(', ')));
+    if (b.email) benutzer.title = 'Angemeldet als ' + b.email;
     [['link-impressum', s.impressum_url], ['link-datenschutz', s.datenschutz_url]].forEach(function (p) {
       var url = App.sichereUrl(p[1]); var a = App.$(p[0]);
       if (url) { a.href = url; a.hidden = false; } else a.hidden = true;
     });
+    baueNavigation();
+  }
+
+  // ================================================================== Navigation (Gruppen, Unterreiter, Leiste unten)
+
+  /*
+   * Hauptnavigation in Gruppen. Ansichten, die hier fehlen, bilden je eine eigene Gruppe (künftige Ansichten
+   * erscheinen also ohne Änderung hier). Reihenfolge der Gruppen: kleinste „reihenfolge“ ihrer sichtbaren Ansichten;
+   * innerhalb einer Gruppe: Reihenfolge dieser Tabelle. Nur sichtbare Ansichten zählen; eine Gruppe ohne
+   * sichtbare Ansicht fällt weg, eine mit genau einer trägt deren Titel. Auf dem Handy (< 720 px) wird die
+   * Navigation zur Leiste unten: die ersten 4 Gruppen + „Mehr“ (bei mehr als 5 Gruppen).
+   */
+  var GRUPPEN = [
+    { name: 'Start',      symbol: '\u2302', ansichten: ['start'] },
+    { name: 'Mitglieder', symbol: '\u263A', ansichten: ['mitglieder', 'familien', 'funktionen', 'nachweise', 'ehrungen'] },
+    { name: 'Finanzen',   symbol: '\u20AC', ansichten: ['finanzen'] },
+    { name: 'Schreiben',  symbol: '\u2709', ansichten: ['korrespondenz', 'notizen'] },
+    { name: 'Berichte',   symbol: '\u25A4', ansichten: ['berichte', 'auswertungen'] },
+    { name: 'Verwaltung', symbol: '\u2699', ansichten: ['verwaltung', 'datenschutz', 'messwerte'] }
+  ];
+  var MOBIL_PLAETZE = 5;
+  var gruppen = [];
+
+  function sichtbar(k) { var a = ansichten[k]; return !!a && !a.versteckt && (!a.aktion || App.darf(a.aktion)); }
+  function reihenfolge(k) { return ansichten[k].reihenfolge || 99; }
+  /** Titel einer Ansicht; „titel“ darf eine Funktion sein (z. B. „Meine Abteilung“ für Abteilungsleiter). */
+  App.titelVon = function (k) {
+    var t = ansichten[k] && ansichten[k].titel;
+    return typeof t === 'function' ? t() : (t || k);
+  };
+  /** Schlüssel aller Ansichten, die die Rolle in der Navigation erreicht (in Navigationsreihenfolge). */
+  App.sichtbareAnsichten = function () {
+    return gruppen.reduce(function (l, g) { return l.concat(g.ansichten); }, []);
+  };
+
+  function bildeGruppen() {
+    var vergeben = {};
+    var liste = GRUPPEN.map(function (g) {
+      g.ansichten.forEach(function (k) { vergeben[k] = true; });
+      return { name: g.name, symbol: g.symbol, ansichten: g.ansichten.filter(sichtbar) };
+    });
+    Object.keys(ansichten).filter(function (k) { return !vergeben[k] && sichtbar(k); }).forEach(function (k) {
+      liste.push({ name: null, symbol: '\u2022', ansichten: [k] });
+    });
+    liste = liste.filter(function (g) { return g.ansichten.length; });
+    liste.forEach(function (g, i) {
+      g.nr = i;
+      g.rang = Math.min.apply(null, g.ansichten.map(reihenfolge));
+      var erste = g.ansichten[0];
+      // Eine Ansicht: deren Titel; sonst Gruppenname – außer die erste Ansicht hat einen dynamischen Titel
+      g.titel = g.ansichten.length === 1 || !g.name || typeof ansichten[erste].titel === 'function' ? App.titelVon(erste) : g.name;
+    });
+    return liste.sort(function (x, y) { return x.rang - y.rang || x.nr - y.nr; });
+  }
+  function gruppeVon(k) {
+    for (var i = 0; i < gruppen.length; i++) if (gruppen[i].ansichten.indexOf(k) >= 0) return gruppen[i];
+    return null;
+  }
+
+  function gruppenKnopf(g, klasse) {
+    var knopf = App.el('button', null, { type: 'button', className: klasse || '', dataset: { ansicht: g.ansichten[0] } }, [
+      App.el('span', g.symbol, { className: 'nav-symbol', aria: { hidden: 'true' } }),
+      App.el('span', g.titel, { className: 'nav-text' })
+    ]);
+    knopf.addEventListener('click', function () { schliesseMehr(); App.zeige(g.ansichten[0]); });
+    knopf.gruppe = g;
+    return knopf;
+  }
+
+  function baueNavigation() {
+    gruppen = bildeGruppen();
     var nav = App.leere(App.$('navigation'));
-    Object.keys(ansichten)
-      .filter(function (k) { var a = ansichten[k]; return !a.versteckt && (!a.aktion || App.darf(a.aktion)); })
-      .sort(function (x, y) { return (ansichten[x].reihenfolge || 99) - (ansichten[y].reihenfolge || 99); })
-      .forEach(function (k) {
-        var knopf = App.el('button', ansichten[k].titel, { type: 'button', dataset: { ansicht: k } });
-        knopf.addEventListener('click', function () { App.zeige(k); });
-        nav.appendChild(knopf);
-      });
+    var mitMehr = gruppen.length > MOBIL_PLAETZE;
+    var mehrListe = App.$('mehr-liste');
+    if (mehrListe) mehrListe.remove();
+    gruppen.forEach(function (g, i) {
+      nav.appendChild(gruppenKnopf(g, mitMehr && i >= MOBIL_PLAETZE - 1 ? 'nav-ueberzaehlig' : ''));
+    });
+    if (!mitMehr) return;
+    mehrListe = App.el('div', null, { id: 'mehr-liste', className: 'mehr-liste', hidden: true, aria: { label: 'Weitere Bereiche' } });
+    mehrListe.setAttribute('role', 'group');
+    gruppen.slice(MOBIL_PLAETZE - 1).forEach(function (g) { mehrListe.appendChild(gruppenKnopf(g)); });
+    var mehr = App.el('button', null, { type: 'button', className: 'nav-mehr', aria: { expanded: 'false', controls: 'mehr-liste' } }, [
+      App.el('span', '\u2630', { className: 'nav-symbol', aria: { hidden: 'true' } }),
+      App.el('span', 'Mehr', { className: 'nav-text' })
+    ]);
+    mehr.id = 'nav-mehr';
+    mehr.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (mehrListe.hidden) {
+        mehrListe.hidden = false;
+        mehr.setAttribute('aria-expanded', 'true');
+        var erster = mehrListe.querySelector('button');
+        if (erster) erster.focus();
+      } else schliesseMehr();
+    });
+    nav.appendChild(mehr);
+    document.body.appendChild(mehrListe);
+  }
+  function schliesseMehr(fokusZurueck) {
+    var liste = App.$('mehr-liste'), mehr = App.$('nav-mehr');
+    if (!liste || liste.hidden) return;
+    liste.hidden = true;
+    mehr.setAttribute('aria-expanded', 'false');
+    if (fokusZurueck) mehr.focus();
+  }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') schliesseMehr(true); });
+  document.addEventListener('click', function (e) {
+    var liste = App.$('mehr-liste');
+    if (liste && !liste.hidden && !liste.contains(e.target)) schliesseMehr();
+  });
+
+  function markiereGruppe(gruppe) {
+    var knoepfe = Array.prototype.slice.call(App.$('navigation').querySelectorAll('button'));
+    var liste = App.$('mehr-liste');
+    if (liste) knoepfe = knoepfe.concat(Array.prototype.slice.call(liste.querySelectorAll('button')));
+    knoepfe.forEach(function (k) {
+      if (k.gruppe && k.gruppe === gruppe) k.setAttribute('aria-current', 'page');
+      else k.removeAttribute('aria-current');
+    });
+    var mehr = App.$('nav-mehr');
+    if (mehr) mehr.classList.toggle('aktiv', !!gruppe && gruppen.indexOf(gruppe) >= MOBIL_PLAETZE - 1);
+  }
+
+  function unterreiter(gruppe, aktuell) {
+    var nav = App.el('nav', null, { className: 'unterreiter', aria: { label: 'Unterbereiche' } });
+    gruppe.ansichten.forEach(function (k) {
+      var knopf = App.el('button', App.titelVon(k), { type: 'button', dataset: { ansicht: k } });
+      if (k === aktuell) knopf.setAttribute('aria-current', 'page');
+      knopf.addEventListener('click', function () { if (k !== aktuell) App.zeige(k); });
+      nav.appendChild(knopf);
+    });
+    return nav;
   }
 
   // ================================================================== Tabelle
@@ -379,17 +693,40 @@
   /**
    * Tabelle mit sortierbaren Spalten und „mehr anzeigen“ (Paginierung in Blöcken, Auftragspunkt 6).
    * spalten: [{ feld, titel, zahl, wert(z) → Anzeige, sort(z) → Sortierwert, klasse(z) }]
-   * optionen: { beiKlick(z), block (Standard 50), leer: 'Text', sortiere: feld, absteigend }
+   * optionen: { beiKlick(z), block (Standard 50), leer: 'Text', sortiere: feld, absteigend, karten, kartenTitel }
+   *   karten: true – unter 600 px Breite wird jede Zeile zur Karte (nur CSS: Kopfzeile ausgeblendet, je Zelle
+   *     „Spaltentitel: Wert“ aus data-titel); statt der Spaltenköpfe erscheint dann eine Auswahl „Sortieren nach“.
+   *   kartenTitel: feld (oder [felder]) – diese Zelle(n) bilden die Kartenüberschrift (fett, ohne Titel),
+   *     z. B. App.tabelle(spalten, zeilen, { karten: true, kartenTitel: 'name', beiKlick: … }).
    */
   App.tabelle = function (spalten, zeilen, optionen) {
     optionen = optionen || {};
     var block = optionen.block || 50;
     var anzahl = block;
     var sort = { feld: optionen.sortiere || null, ab: !!optionen.absteigend };
+    var kartenTitel = [].concat(optionen.kartenTitel || []);
     var rahmen = App.el('div', null, { className: 'tabelle-rahmen' });
     var info = App.el('p', '', { className: 'leise tabelle-info' });
     var mehr = App.knopf('Mehr anzeigen', function () { anzahl += block; zeichne(); }, 'zweit');
-    var huelle = App.el('div', null, null, [rahmen, info, mehr]);
+    var sortierbare = spalten.filter(function (s) { return s.feld && s.sortierbar !== false; });
+    var sortWahl = null, sortLeiste = null;
+    // Kartenansicht: Ersatz für die ausgeblendeten Spaltenköpfe (nur unter 600 px sichtbar, siehe stil)
+    if (optionen.karten && sortierbare.length) {
+      var wahlId = 'sortierung-' + Math.random().toString(36).slice(2, 7);
+      sortWahl = App.el('select', null, { id: wahlId });
+      sortWahl.appendChild(App.el('option', '–', { value: '' }));
+      sortierbare.forEach(function (s) {
+        sortWahl.appendChild(App.el('option', s.titel + ' ▲ aufsteigend', { value: s.feld + '|auf' }));
+        sortWahl.appendChild(App.el('option', s.titel + ' ▼ absteigend', { value: s.feld + '|ab' }));
+      });
+      sortWahl.addEventListener('change', function () {
+        var teile = sortWahl.value.split('|');
+        sort.feld = teile[0] || null; sort.ab = teile[1] === 'ab';
+        zeichne();
+      });
+      sortLeiste = App.el('div', null, { className: 'kartensortierung' }, [App.el('label', 'Sortieren nach', { htmlFor: wahlId }), sortWahl]);
+    }
+    var huelle = App.el('div', null, null, [sortLeiste, rahmen, info, mehr]);
 
     function wertVon(s, z) { return s.wert ? s.wert(z) : z[s.feld]; }
     function sortWert(s, z) { var v = s.sort ? s.sort(z) : z[s.feld]; return typeof v === 'string' ? App.falte(v) : v; }
@@ -407,8 +744,12 @@
         });
       }
       App.leere(rahmen);
+      if (sortWahl) {
+        sortWahl.value = sort.feld ? sort.feld + '|' + (sort.ab ? 'ab' : 'auf') : '';
+        sortLeiste.hidden = !liste.length;
+      }
       if (!liste.length) { rahmen.appendChild(App.el('p', optionen.leer || 'Keine Einträge.', { className: 'leise' })); info.textContent = ''; mehr.hidden = true; return; }
-      var t = App.el('table');
+      var t = App.el('table', null, { className: optionen.karten ? 'karten' : '' });
       var kopf = App.el('tr');
       spalten.forEach(function (s) {
         var th = App.el('th', null, { className: s.zahl ? 'zahl' : '', scope: 'col' });
@@ -432,6 +773,10 @@
         spalten.forEach(function (s) {
           var v = wertVon(s, z);
           var td = App.el('td', null, { className: (s.zahl ? 'zahl ' : '') + (s.klasse ? s.klasse(z) || '' : '') });
+          if (optionen.karten) {
+            td.setAttribute('data-titel', s.titel || '');
+            if (s.feld && kartenTitel.indexOf(s.feld) >= 0) td.classList.add('kartentitel');
+          }
           if (v instanceof Node) td.appendChild(v); else td.textContent = v === null || v === undefined || v === '' ? '–' : v;
           tr.appendChild(td);
         });
@@ -465,13 +810,25 @@
    * Formular aus Felddefinitionen. felder: [{ name, titel, typ: 'text'|'datum'|'zahl'|'betrag'|'auswahl'|'janein'|
    * 'langtext'|'email'|'tel', liste: [werte] oder [{wert, text}], zahl (Auswahl liefert Zahl, z. B. für IDs),
    * pflicht, hilfe, nurLesen, breit }] – zusätzlich { gruppe: 'Überschrift' } als Zwischenüberschrift.
-   * werte: Startwerte. Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name) }.
+   * Gibt es Pflichtfelder, steht am Ende der Hinweis „* Pflichtfeld“; Datumsfelder siehe datumshilfe.
+   * werte: Startwerte. optionen: { beiAbsenden, schutz } – schutz: vor dem Verlassen der Seite mit
+   * ungespeicherten Eingaben fragen (nur für Formulare direkt auf der Seite, nicht in Dialogen).
+   * Liefert { element, werte() → Objekt, setzeFehler([{feld, meldung}]), feld(name), gespeichert() }.
    */
   App.formular = function (felder, werte, optionen) {
     werte = werte || {};
     optionen = optionen || {};
     var form = App.el('form', null, { className: 'formular', noValidate: true });
     form.addEventListener('submit', function (e) { e.preventDefault(); if (optionen.beiAbsenden) optionen.beiAbsenden(); });
+    if (optionen.schutz) {
+      var geaendert = function (e) {
+        if (!e.isTrusted) return;   // nur echte Eingaben, nicht vorbefüllte Werte
+        form.dataset.geaendert = 'ja';
+        aenderungsschutz = true;
+      };
+      form.addEventListener('input', geaendert);
+      form.addEventListener('change', geaendert);
+    }
     var eingaben = {};
     felder.forEach(function (f) {
       // Gruppenüberschrift: { gruppe: 'Anschrift' } als eigener Eintrag in der Feldliste
@@ -491,7 +848,10 @@
       } else {
         var typ = { datum: 'text', zahl: 'number', betrag: 'text', email: 'email', tel: 'tel' }[f.typ] || 'text';
         eingabe = App.el('input', null, { id: id, type: typ });
-        if (f.typ === 'datum') { eingabe.placeholder = 'TT.MM.JJJJ'; eingabe.inputMode = 'numeric'; eingabe.value = v ? App.datum(v) : ''; }
+        if (f.typ === 'datum') {
+          eingabe.placeholder = 'TT.MM.JJJJ'; eingabe.inputMode = 'numeric'; eingabe.value = v ? App.datum(v) : '';
+          datumshilfe(eingabe);
+        }
         else if (f.typ === 'betrag') { eingabe.inputMode = 'decimal'; eingabe.value = v === null || v === undefined ? '' : String(v).replace('.', ','); }
         else eingabe.value = v === null || v === undefined ? '' : String(v);
       }
@@ -505,8 +865,13 @@
       form.appendChild(zeile);
       eingaben[f.name] = { def: f, eingabe: eingabe, fehler: fehler };
     });
+    if (felder.some(function (f) { return f.pflicht && !f.gruppe; })) {
+      form.appendChild(App.el('p', '* Pflichtfeld', { className: 'leise pflichthinweis' }));
+    }
     return {
       element: form,
+      /** Nach erfolgreichem Speichern: Änderungsschutz aufheben. */
+      gespeichert: function () { delete form.dataset.geaendert; },
       feld: function (name) { return eingaben[name] && eingaben[name].eingabe; },
       werte: function () {
         var o = {};
@@ -515,7 +880,7 @@
           if (e.def.nurLesen) return;
           if (e.def.typ === 'janein') o[n] = s === 'ja' ? true : s === 'nein' ? false : null;
           else if (e.def.typ === 'auswahl' && e.def.zahl) o[n] = s === '' ? null : Number(s);
-          else if (e.def.typ === 'datum') o[n] = s ? (App.isoDatum(s) || s) : null;
+          else if (e.def.typ === 'datum') o[n] = s ? (App.isoDatum(App.normalisiereDatum(s)) || s) : null;
           else if (e.def.typ === 'zahl') o[n] = s === '' ? null : Number(s);
           else if (e.def.typ === 'betrag') o[n] = s === '' ? null : Number(s.replace(/\./g, '').replace(',', '.'));
           else o[n] = s === '' ? null : s;
@@ -537,6 +902,25 @@
   };
 
   /**
+   * Datumsfeld: Beim Tippen reiner Ziffern Punkte nach Tag und Monat einfügen ('0101' → '01.01'), beim
+   * Verlassen vereinheitlichen (App.normalisiereDatum). Eingefügte Texte (z. B. ISO-Datum) bleiben beim Tippen unberührt.
+   */
+  function datumshilfe(eingabe) {
+    var form = function (z) { return z.length <= 2 ? z : z.slice(0, 2) + '.' + z.slice(2, 4) + (z.length > 4 ? '.' + z.slice(4) : ''); };
+    eingabe.addEventListener('input', function (e) {
+      var s = eingabe.value, ziffern = s.replace(/\./g, '');
+      if (e.inputType !== 'insertText' || !/^\d$/.test(e.data || '') || eingabe.selectionStart !== s.length) return;
+      // nur weiterformatieren, solange die Eingabe aus reinen (ggf. schon gepunkteten) Ziffern besteht
+      if (!/^\d{1,8}$/.test(ziffern) || s.slice(0, -1) !== form(ziffern.slice(0, -1))) return;
+      eingabe.value = form(ziffern);
+    });
+    eingabe.addEventListener('blur', function () {
+      var neu = App.normalisiereDatum(eingabe.value);
+      if (neu !== eingabe.value) eingabe.value = neu;
+    });
+  }
+
+  /**
    * Speichern-Ablauf für Formulare: ruft apiName(…args, werte) und zeigt Feldfehler (err.felder) am Formular.
    * Liefert Promise mit den Antwortdaten; übernimmt sie in App.daten.
    */
@@ -545,6 +929,7 @@
     formular.setzeFehler([]);
     return App.rufe.apply(null, [apiName].concat(args || []).concat([formular.werte()])).then(function (daten) {
       App.daten.uebernehme(daten);
+      if (formular.gespeichert) formular.gespeichert();
       App.meldung('Gespeichert.', 'ok');
       return daten;
     }, function (err) {
@@ -555,29 +940,46 @@
 
   // ================================================================== Dialog
 
-  /** Modaler Dialog (natives <dialog>). inhalt: Node; knoepfe: [{ text, art, aktion(schliessen) }]. */
-  App.dialog = function (titel, inhalt, knoepfe) {
+  /**
+   * Modaler Dialog (natives <dialog>). inhalt: Node; knoepfe: [{ text, art, aktion(schliessen) }].
+   * optionen: { beiAbbruch() } – wird bei Escape aufgerufen. Liefert { schliessen, element, knoepfe: [button] }.
+   * Meldungen (App.meldung/App.fehler), solange der Dialog oben liegt, erscheinen in seinem Meldungsbereich.
+   */
+  App.dialog = function (titel, inhalt, knoepfe, optionen) {
+    optionen = optionen || {};
     var d = App.el('dialog', null, { className: 'dialog' });
     d.setAttribute('aria-label', titel);
-    var schliessen = function () { d.close(); d.remove(); };
+    var eintrag = { element: d, meldung: App.el('div', null, { className: 'meldung dialog-meldung', role: 'alert', hidden: true }) };
+    var entferne = function () {
+      var i = offeneDialoge.indexOf(eintrag);
+      if (i >= 0) offeneDialoge.splice(i, 1);
+      d.remove();
+    };
+    var schliessen = function () { if (d.open) d.close(); entferne(); };
     d.appendChild(App.el('h2', titel));
     if (inhalt) d.appendChild(inhalt);
+    d.appendChild(eintrag.meldung);
     var leiste = App.el('div', null, { className: 'knopfleiste' });
-    (knoepfe || [{ text: 'Schließen' }]).forEach(function (k) {
-      leiste.appendChild(App.knopf(k.text, function () { if (k.aktion) k.aktion(schliessen); else schliessen(); }, k.art === undefined || k.art === null ? 'zweit' : k.art));
+    var buttons = (knoepfe || [{ text: 'Schließen' }]).map(function (k) {
+      return leiste.appendChild(App.knopf(k.text, function () {
+        eintrag.meldung.hidden = true;
+        return k.aktion ? k.aktion(schliessen) : schliessen();
+      }, k.art === undefined || k.art === null ? 'zweit' : k.art));
     });
     d.appendChild(leiste);
-    d.addEventListener('cancel', function () { d.remove(); });
+    d.addEventListener('cancel', function () { entferne(); if (optionen.beiAbbruch) optionen.beiAbbruch(); });
     document.body.appendChild(d);
+    offeneDialoge.push(eintrag);
     if (d.showModal) d.showModal(); else d.setAttribute('open', '');
-    return { schliessen: schliessen, element: d };
+    return { schliessen: schliessen, element: d, knoepfe: buttons };
   };
-  App.bestaetige = function (titel, text, jaText) {
+  /** Rückfrage → Promise<boolean>. art 'gefahr' für unumkehrbare oder folgenreiche Aktionen. Escape = nein. */
+  App.bestaetige = function (titel, text, jaText, art) {
     return new Promise(function (resolve) {
       App.dialog(titel, App.el('p', text), [
         { text: 'Abbrechen', aktion: function (s) { s(); resolve(false); } },
-        { text: jaText || 'OK', art: '', aktion: function (s) { s(); resolve(true); } }
-      ]);
+        { text: jaText || 'OK', art: art || '', aktion: function (s) { s(); resolve(true); } }
+      ], { beiAbbruch: function () { resolve(false); } });
     });
   };
 
@@ -678,7 +1080,7 @@
       App.startdaten = daten || {};
       App.daten.setze(App.startdaten.snapshot || {});
       fuelleGeruest();
-      App.zeige('start', null, true);
+      starteVerlauf();
       // performance.now() zählt ab dem Laden des (inneren) Dokuments; die Apps-Script-Hülle davor fehlt.
       App.startBisBedienbar = Math.round(performance.now());
     }).catch(function () {

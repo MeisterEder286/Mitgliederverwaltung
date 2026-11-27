@@ -108,10 +108,10 @@
     A.leere(inhalt).appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
     var o = zustand.optionen;
     var g = String(o.grenzen || '').split(/[^0-9]+/).filter(Boolean).map(Number);
-    A.rufe('apiAuswertungen', { stichtag: o.stichtag, grenzen: g, nach: o.nach || null }).then(function (d) {
+    return A.rufe('apiAuswertungen', { stichtag: o.stichtag, grenzen: g, nach: o.nach || null }).then(function (d) {
       zustand.ergebnis = d;
       if (A.aktuell().schluessel === 'auswertungen') zeichneErgebnis(A.leere(inhalt));
-    }).catch(function () { A.leere(inhalt); });
+    }).catch(function () { A.ladefehler(A.leere(inhalt), 'Die Auswertung konnte nicht berechnet werden.', function () { return lade(inhalt); }); });
   }
 
   function reiterListe(d) {

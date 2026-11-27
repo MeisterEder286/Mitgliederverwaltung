@@ -43,6 +43,7 @@ keine externen Schriften oder Bibliotheken. Mobil bedienbar, Rollen- und Feldrec
 npm run check     # Syntax, gemeinsamer Namensraum, Kopfkommentare, Scopes, externe Ressourcen
 npm test          # Server- und Fachlogik-Tests (Node ≥ 20, keine Abhängigkeiten)
 npm run test:ui   # Oberflächentests in Chromium gegen den echten Servercode (Playwright)
+                  # einmalig vorher: npm install; npx playwright install chromium
 npm run vorschau  # Oberfläche lokal ansehen (--gross: 1.200 synthetische Mitglieder)
 npm run push      # check + test + test:ui + clasp push
 npm run schema    # Datenmodell-CSV → src/lib/schema.js

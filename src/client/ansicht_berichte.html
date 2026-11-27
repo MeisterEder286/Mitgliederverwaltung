@@ -60,6 +60,7 @@
     return b;
   }
   function laedt(z) { A.leere(z).appendChild(A.el('p', 'Lädt …', { className: 'laedt' })); }
+  function ladefehler(z, text, nochmal) { A.ladefehler(A.leere(z), text, nochmal); }
 
   // ------------------------------------------------------------------ BLSV
 
@@ -88,10 +89,11 @@
       laedt(ergebnis);
       if (modusWahl.value === 'nachmeldung') {
         if (!bis.iso()) { A.meldung('Bitte „bis“ als TT.MM.JJJJ angeben.', 'fehler'); A.leere(ergebnis); return; }
-        A.rufe('apiBerichteBlsvNachmeldung', s, bis.iso()).then(function (n) { zeichneNachmeldung(A.leere(ergebnis), n); }).catch(function () { A.leere(ergebnis); });
-        return;
+        return A.rufe('apiBerichteBlsvNachmeldung', s, bis.iso()).then(function (n) { zeichneNachmeldung(A.leere(ergebnis), n); })
+          .catch(function () { ladefehler(ergebnis, 'Die Nachmeldung konnte nicht berechnet werden.', rechne); });
       }
-      A.rufe('apiBerichteBlsv', s).then(function (b) { zeichneBlsv(A.leere(ergebnis), b); }).catch(function () { A.leere(ergebnis); });
+      return A.rufe('apiBerichteBlsv', s).then(function (b) { zeichneBlsv(A.leere(ergebnis), b); })
+        .catch(function () { ladefehler(ergebnis, 'Die Bestandserhebung konnte nicht berechnet werden.', rechne); });
     }
     rechne();
   }
@@ -108,7 +110,7 @@
     }));
     ziel.appendChild(A.abschnitt('Nachmeldung ' + A.datum(n.stichtag) + ' – ' + A.datum(n.bis), [
       A.knopf('CSV', function () {
-        A.rufe('apiBerichteBlsvNachmeldungExport', n.stichtag, n.bis).then(function (d) { A.herunterladen(d.dateiname, '\ufeff' + d.inhalt, 'text/csv;charset=utf-8'); }).catch(function () {});
+        return A.rufe('apiBerichteBlsvNachmeldungExport', n.stichtag, n.bis).then(function (d) { A.herunterladen(d.dateiname, '\ufeff' + d.inhalt, 'text/csv;charset=utf-8'); }).catch(function () {});
       }, 'zweit klein'),
       A.knopf('Drucken', function () { A.drucke('BLSV-Nachmeldung', spalten, zeilen, A.datum(n.stichtag) + ' – ' + A.datum(n.bis)); protokolliere('BLSV-Nachmeldung (Druck)', zeilen.length); }, 'zweit klein')
     ]));
@@ -131,7 +133,7 @@
     }));
     var knoepfe = [
       A.knopf('CSV für verein360', function () {
-        A.rufe('apiBerichteBlsvExport', b.stichtag).then(function (d) { A.herunterladen(d.dateiname, '﻿' + d.inhalt, 'text/csv;charset=utf-8'); }).catch(function () {});
+        return A.rufe('apiBerichteBlsvExport', b.stichtag).then(function (d) { A.herunterladen(d.dateiname, '﻿' + d.inhalt, 'text/csv;charset=utf-8'); }).catch(function () {});
       }, 'zweit klein'),
       A.knopf('Drucken', function () { A.drucke('BLSV-Bestandserhebung', spalten, zeilen, 'Stichtag ' + A.datum(b.stichtag)); protokolliere('BLSV-Bestand (Druck)', zeilen.length); }, 'zweit klein')
     ];
@@ -160,9 +162,9 @@
       { text: 'Abbrechen' },
       { text: 'Einfrieren', art: ' ', aktion: function (schliessen) {
         var w = f.werte();
-        A.rufe('apiBerichteStatistikEinfrieren', w.jahr, w.stichtag, w.gemeldet).then(function (r) {
+        return A.rufe('apiBerichteStatistikEinfrieren', w.jahr, w.stichtag, w.gemeldet, A.still).then(function (r) {
           schliessen(); A.meldung('Jahresstatistik ' + r.jahr + ' eingefroren (' + r.zeilen + ' Zeilen).', 'ok');
-        }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
+        }, function (err) { if (err.felder) f.setzeFehler(err.felder); else A.fehler(err); });
       } }
     ]);
   }
@@ -183,7 +185,7 @@
         { feld: 'beitragssoll', titel: 'Beitragssoll', zahl: true, wert: function (z) { return z.beitragssoll === null ? '–' : A.betrag(z.beitragssoll); } }
       ];
       ziel.appendChild(A.tabelle(spalten, j, { sortiere: 'jahr' }));
-    }).catch(function () { A.leere(ziel); });
+    }).catch(function () { ladefehler(ziel, 'Der Jahresvergleich konnte nicht geladen werden.', function () { jahresvergleich(ziel); }); });
   }
 
   function diagramm(jahre) {
@@ -251,7 +253,8 @@
     function rechne() {
       if (!von.iso() || !bis.iso()) { A.meldung('Bitte Datum als TT.MM.JJJJ angeben.', 'fehler'); return; }
       laedt(ergebnis);
-      A.rufe('apiBerichteGeburtstage', von.iso(), bis.iso()).then(function (d) { daten = d; zeichne(); }).catch(function () { A.leere(ergebnis); });
+      return A.rufe('apiBerichteGeburtstage', von.iso(), bis.iso()).then(function (d) { daten = d; zeichne(); })
+        .catch(function () { daten = null; ladefehler(ergebnis, 'Die Geburtstage konnten nicht geladen werden.', rechne); });
     }
     rechne();
   }
@@ -279,7 +282,8 @@
     }
     function rechne() {
       laedt(ergebnis);
-      A.rufe('apiBerichteJubilaeen', Number(jahrWahl.value)).then(function (d) { daten = d; zeichne(); }).catch(function () { A.leere(ergebnis); });
+      return A.rufe('apiBerichteJubilaeen', Number(jahrWahl.value)).then(function (d) { daten = d; zeichne(); })
+        .catch(function () { daten = null; ladefehler(ergebnis, 'Die Jubiläen konnten nicht geladen werden.', rechne); });
     }
     jahrWahl.addEventListener('change', rechne);
     nurEw.addEventListener('change', zeichne);
@@ -302,7 +306,7 @@
       ziel.appendChild(A.abschnitt('Abteilungen', exportKnoepfe('Abteilungsübersicht', 'Abteilungen_' + A.heute(), spalten, function () { return l; })));
       ziel.appendChild(A.tabelle(spalten, l));
       ziel.appendChild(A.el('p', 'Die Abteilungsleitung wird aus der laufenden Funktion gelesen – endet das Amt, verschwindet der Name hier automatisch.', { className: 'leise' }));
-    }).catch(function () { A.leere(ziel); });
+    }).catch(function () { ladefehler(ziel, 'Die Abteilungsübersicht konnte nicht geladen werden.', function () { abteilungen(ziel); }); });
   }
 
   function bewegungen(ziel) {
@@ -316,7 +320,7 @@
     function rechne() {
       if (!von.iso() || !bis.iso()) { A.meldung('Bitte Datum als TT.MM.JJJJ angeben.', 'fehler'); return; }
       laedt(ergebnis);
-      A.rufe('apiBerichteBewegungen', von.iso(), bis.iso()).then(function (d) {
+      return A.rufe('apiBerichteBewegungen', von.iso(), bis.iso()).then(function (d) {
         A.leere(ergebnis);
         var k = A.el('div', null, { className: 'kacheln' }, [A.kachel(d.eintritte, 'Eintritte'), A.kachel(d.austritte, 'Austritte'),
           A.kachel((d.eintritte - d.austritte > 0 ? '+' : '') + (d.eintritte - d.austritte), 'Saldo')]);
@@ -324,7 +328,7 @@
         ergebnis.appendChild(A.abschnitt('Ein- und Austritte', exportKnoepfe('Ein- und Austritte ' + A.datum(d.von) + '–' + A.datum(d.bis),
           'Bewegungen_' + d.von + '_' + d.bis, spalten, function () { return d.eintraege; })));
         ergebnis.appendChild(A.tabelle(spalten, d.eintraege, { sortiere: 'datum', leer: 'Keine Ein- oder Austritte im Zeitraum.' }));
-      }).catch(function () { A.leere(ergebnis); });
+      }).catch(function () { ladefehler(ergebnis, 'Die Ein- und Austritte konnten nicht geladen werden.', rechne); });
     }
     rechne();
   }

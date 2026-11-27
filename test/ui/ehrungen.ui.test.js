@@ -11,7 +11,7 @@ test('Ehrungen: übernehmen und verleihen als Mitgliederverwalter', async () => 
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   const p = ui.page;
   try {
-    await p.getByRole('button', { name: 'Ehrungen', exact: true }).click();
+    await ui.oeffne('ehrungen');
     await p.waitForSelector('table');
     // Jahr 2027 hat neu fällige Einträge (2026 hat der Generator schon angelegt)
     await p.selectOption('select.ehr-jahr', '2027');
@@ -47,7 +47,7 @@ test('Ehrungen: Kassier und Abteilungsleiter sehen den Menüpunkt nicht', async 
   for (const rolle of ['Kassier', 'Abteilungsleiter']) {
     const ui = await starteOberflaeche({ rolle });
     try {
-      const nav = await ui.page.$$eval('#navigation button', b => b.map(x => x.textContent));
+      const nav = await ui.navAnsichten();
       assert.ok(!nav.includes('Ehrungen'), rolle);
     } finally { await ui.schliessen(); }
   }

@@ -11,7 +11,7 @@ test('Mitgliederverwalter: Benutzer, Einstellungen, Stammdaten, Datenqualität, 
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   try {
     const p = ui.page;
-    await p.getByRole('button', { name: 'Verwaltung' }).click();
+    await ui.oeffne('verwaltung');
     await p.getByRole('heading', { name: 'Rechte je Rolle' }).waitFor();
     await p.getByRole('button', { name: 'Zugang anlegen' }).click();
     const d = p.locator('dialog');
@@ -58,7 +58,7 @@ test('Abteilungsleiter und Kassier sehen keine Verwaltung; Server weist ab', asy
   for (const rolle of ['Abteilungsleiter', 'Kassier']) {
     const ui = await starteOberflaeche({ rolle });
     try {
-      assert.strictEqual(await ui.page.getByRole('button', { name: 'Verwaltung' }).count(), 0);
+      assert.ok(!(await ui.navAnsichten()).includes('Verwaltung'));
       const r = await ui.page.evaluate(() => App.rufe('apiVerwaltungBenutzer', App.still).then(() => 'ok', e => e.art));
       assert.strictEqual(r, 'zugriff');
     } finally { await ui.schliessen(); }

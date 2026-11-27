@@ -4,7 +4,7 @@
   Zweck:      Briefe aus Vorlagen erstellen und drucken (einzeln oder als Serienbrief: Aufnahme- und Austritts-
               bestätigung, Rechnung, Mahnung, SEPA-Vorabinformation, Umstellung auf Einzelbeitrag …), erstellte Schreiben
               ansehen/nachdrucken, Vorlagen pflegen, Serienbrief-Export für Word. Dazu Links auf Aufnahmeantrag und
-              SEPA-Mandat: als Reiter „Dokumente & Schreiben“ im Mitglied-Detail und als Abschnitt im Konto-Detail
+              SEPA-Mandat: als Teil „Dokumente & Schreiben“ (Reiter „Dokumente & Notizen“) im Mitglied-Detail und als Abschnitt im Konto-Detail
               (über die Erweiterungspunkte App.erweitere, ohne die anderen Ansichtsdateien zu ändern).
   Datenquelle: App.daten (Kern: vorlagen ohne Text; Bereich „korrespondenz“: dokumente, anschreiben ohne Inhalt) und
               apiKorrespondenz…-Funktionen (src/api/Korrespondenz.js).
@@ -56,7 +56,11 @@
     var p = A.el('p', 'Lädt …', { className: 'laedt' });
     ziel.appendChild(p);
     A.daten.lade(bereich).then(function () { if (p.parentNode) { p.remove(); weiter(); } })
-      .catch(function () { p.textContent = 'Konnte nicht geladen werden.'; });
+      .catch(function () {
+        if (!p.parentNode) return;
+        p.remove();
+        var box = A.ladefehler(ziel, 'Schreiben und Dokumente konnten nicht geladen werden.', function () { box.remove(); laedt(ziel, bereich, weiter); });
+      });
   }
   function ladeVorlagen(neu) {
     if (vorlagenSpeicher && !neu) return Promise.resolve(vorlagenSpeicher);
@@ -67,7 +71,7 @@
     var a = A.el('a', text, { href: url, target: '_blank', rel: 'noopener noreferrer' });
     return a;
   }
-  /** Nach dem Speichern neu zeichnen – im Mitglied-Detail auf dem Reiter „Dokumente & Schreiben“ bleiben. */
+  /** Nach dem Speichern neu zeichnen – im Mitglied-Detail beim Abschnitt „Dokumente & Schreiben“ bleiben. */
   function neuZeichnen() {
     var a = A.aktuell();
     if (a.schluessel === 'mitglied') A.zeige('mitglied', Object.assign({}, a.param || {}, { reiter: 'dokumente' }), true);
@@ -289,7 +293,7 @@
       var vorschauKnopf = A.knopf('Vorschau', function () {
         var e = eingaben(); if (!e) return;
         vorschauKnopf.disabled = true; A.leere(ergebnis);
-        A.rufe('apiKorrespondenzVorschau', e.vorlage, e.auswahl, e.zusatz).then(function (v) {
+        return A.rufe('apiKorrespondenzVorschau', e.vorlage, e.auswahl, e.zusatz).then(function (v) {
           if (v.unbekannt.length) ergebnis.appendChild(A.el('p', 'Unbekannte Platzhalter in der Vorlage: ' + v.unbekannt.join(', ') + ' – bitte Vorlage korrigieren.', { className: 'ko-warnung' }));
           var leerNamen = Object.keys(v.leer || {});
           if (leerNamen.length) ergebnis.appendChild(A.el('p', 'Hinweis: Diese Angaben sind bei einigen Empfängern leer: ' + leerNamen.join(', '), { className: 'ko-warnung' }));
@@ -306,7 +310,7 @@
         var e = eingaben(); if (!e) return;
         if (kanaele) { e.auswahl = auswahlAus(briefeMit('Brief')); e.zusatz.kanal = 'Brief'; }
         erstellenKnopf.disabled = true;
-        A.rufe('apiKorrespondenzErstellen', e.vorlage, e.auswahl, e.zusatz).then(function (d2) {
+        return A.rufe('apiKorrespondenzErstellen', e.vorlage, e.auswahl, e.zusatz).then(function (d2) {
           A.daten.uebernehme(d2);
           ergebnis.appendChild(A.el('p', d2.briefe.length + ' Schreiben erstellt und unter „Erstellte Schreiben“ abgelegt.', { className: 'karte' }));
           ergebnis.appendChild(A.knopf('Erneut drucken', function () { drucke(d2.briefe, 'Schreiben'); }, 'zweit'));
@@ -318,10 +322,10 @@
         var liste = briefeMit('E-Mail');
         if (!liste.length) return;
         var text = liste.length + ' E-Mail(s) jetzt senden?' + (st.testmodus ? ' TESTMODUS: Alle gehen an ' + (st.test_an || 'die Testadresse') + '.' : ' Die Mails gehen sofort an die Empfänger.');
-        A.bestaetige('E-Mails senden', text, 'Senden').then(function (ja) {
+        return A.bestaetige('E-Mails senden', text, 'Senden').then(function (ja) {
           if (!ja) return;
           mailKnopf.disabled = true;
-          A.rufe('apiMailSenden', e.vorlage, auswahlAus(liste), e.zusatz).then(function (d3) {
+          return A.rufe('apiMailSenden', e.vorlage, auswahlAus(liste), e.zusatz).then(function (d3) {
             A.daten.uebernehme(d3);
             var box = A.el('div', null, { className: 'karte ko-bericht' }, [
               A.el('p', d3.gesendet + ' E-Mail(s) ' + (d3.testmodus ? 'im Testmodus ' : '') + 'gesendet' + (d3.fehlgeschlagen ? ', ' + d3.fehlgeschlagen + ' fehlgeschlagen (unter „Erstellte Schreiben“ erneut senden)' : '') + '.')
@@ -342,7 +346,10 @@
       z.appendChild(A.el('div', null, { className: 'knopfleiste' }, knoepfe));
       if (st.darf_senden && !mailMoeglich(st)) z.appendChild(A.el('p', 'E-Mail-Versand ist ausgeschaltet (Verwaltung → Einstellungen: mail_aktiv bzw. mail_test_an).', { className: 'leise' }));
       z.appendChild(ergebnis);
-    }, function () { p.textContent = 'Vorlagen konnten nicht geladen werden.'; });
+    }, function () {
+      p.remove();
+      A.ladefehler(z, 'Die Vorlagen konnten nicht geladen werden.', function () { A.leere(z); reiterNeu(z, param); });
+    });
   }
 
   // ------------------------------------------------------------------ Reiter: Postausgang
@@ -368,7 +375,10 @@
           }, 'zweit klein')
         ]));
       });
-    }, function () { p.textContent = 'Konnte nicht geladen werden.'; });
+    }, function () {
+      p.remove();
+      A.ladefehler(z, 'Der Postausgang konnte nicht geladen werden.', function () { A.leere(z); reiterPostausgang(z, oeffne, setzeZahl); });
+    });
   }
 
   // ------------------------------------------------------------------ Nachdruck
@@ -388,7 +398,7 @@
         A.dialog('Ablage-Link', f.element, [
           { text: 'Abbrechen' },
           { text: 'Speichern', art: '', aktion: function (s2) {
-            A.rufe('apiKorrespondenzAnschreibenLink', a.anschreiben_id, a.version, f.werte().dokument_link || '').then(function (d) {
+            return A.rufe('apiKorrespondenzAnschreibenLink', a.anschreiben_id, a.version, f.werte().dokument_link || '').then(function (d) {
               A.daten.uebernehme(d); s2(); neuZeichnen(); A.meldung('Gespeichert.', 'ok');
             }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
           } }
@@ -444,10 +454,10 @@
       var fehl = alle.filter(function (a) { return a.mail_status === 'fehlgeschlagen'; });
       if (fehl.length && A.darf('mail_senden')) {
         var nochmal = A.knopf('Fehlgeschlagene E-Mails erneut senden (' + fehl.length + ')', function () {
-          A.bestaetige('Erneut senden', fehl.length + ' fehlgeschlagene E-Mail(s) mit dem gespeicherten Inhalt erneut senden?', 'Senden').then(function (ja) {
+          return A.bestaetige('Erneut senden', fehl.length + ' fehlgeschlagene E-Mail(s) mit dem gespeicherten Inhalt erneut senden?', 'Senden').then(function (ja) {
             if (!ja) return;
             nochmal.disabled = true;
-            A.rufe('apiMailErneutSenden', fehl.map(function (a) { return a.anschreiben_id; })).then(function (d) {
+            return A.rufe('apiMailErneutSenden', fehl.map(function (a) { return a.anschreiben_id; })).then(function (d) {
               A.daten.uebernehme(d);
               A.meldung(d.gesendet + ' E-Mail(s) gesendet' + (d.fehlgeschlagen ? ', ' + d.fehlgeschlagen + ' wieder fehlgeschlagen.' : '.'), d.fehlgeschlagen ? 'fehler' : 'ok');
               A.neuZeichnen();
@@ -513,7 +523,7 @@
       { text: 'Speichern', art: '', aktion: function (s) {
         var w = f.werte();
         if (!neu) { w.vorlage_id = v.vorlage_id; w.version = v.version; }
-        A.rufe('apiKorrespondenzVorlageSpeichern', w).then(function (r) {
+        return A.rufe('apiKorrespondenzVorlageSpeichern', w).then(function (r) {
           A.daten.uebernehme(r); s(); A.meldung('Vorlage gespeichert.', 'ok');
           return ladeVorlagen(true).then(function () { A.neuZeichnen(); });
         }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
@@ -535,7 +545,10 @@
         A.dialog(v.bezeichnung, briefKarte({ betreff: v.betreff, text: v.text }), [{ text: 'Schließen' }]);
       } }));
       z.appendChild(A.el('p', 'Platzhalter wie {{briefanrede}} werden beim Erstellen ersetzt. Die IBAN gibt es nur maskiert.', { className: 'leise' }));
-    }, function () { p.textContent = 'Vorlagen konnten nicht geladen werden.'; });
+    }, function () {
+      p.remove();
+      A.ladefehler(z, 'Die Vorlagen konnten nicht geladen werden.', function () { A.leere(z); reiterVorlagen(z); });
+    });
   }
 
   // ------------------------------------------------------------------ Reiter: Serienbrief-Export
@@ -548,7 +561,7 @@
       var a = wahl.auswahl();
       if (!a.mitglied_ids || !a.mitglied_ids.length) { A.meldung('Bitte mindestens einen Empfänger auswählen.', 'fehler'); return; }
       knopf.disabled = true;
-      A.rufe('apiKorrespondenzSerienExport', a, {}).then(function (d) {
+      return A.rufe('apiKorrespondenzSerienExport', a, {}).then(function (d) {
         var felder = ['mitgliedsnummer', 'anrede', 'briefanrede', 'titel', 'vorname', 'nachname', 'anschrift1', 'anschrift2', 'anschrift3', 'anschrift4',
           'strasse', 'plz', 'ort', 'email', 'versandart', 'beitrag', 'betrag', 'offen'];
         A.csv('serienbrief_' + A.heute() + '.csv', felder.map(function (x) { return { feld: x, titel: x }; }), d.zeilen);
@@ -612,7 +625,7 @@
         var w = f.werte();
         w.mitglied_id = vorgabe.mitglied_id || null;
         w.beitragskonto_id = vorgabe.beitragskonto_id || null;
-        A.rufe('apiKorrespondenzDokumentSpeichern', w).then(function (d) {
+        return A.rufe('apiKorrespondenzDokumentSpeichern', w).then(function (d) {
           A.daten.uebernehme(d); s(); neuZeichnen(); A.meldung('Gespeichert.', 'ok');
         }, function (err) { if (err.felder) f.setzeFehler(err.felder); });
       } }
@@ -625,9 +638,9 @@
       var li = A.el('li', null, null, [A.el('span', d.art, { className: 'marke' }), linkEl(d.titel + (d.datum ? ' (' + A.datum(d.datum) + ')' : ''), d.link)]);
       if (A.darf('dokumente_verwalten') && d.dokument_id) {
         li.appendChild(A.knopf('entfernen', function () {
-          A.bestaetige('Link entfernen', 'Den Link „' + d.titel + '“ entfernen? Die Datei im Drive-Ordner bleibt unverändert.', 'Entfernen').then(function (ja) {
+          return A.bestaetige('Link entfernen', 'Den Link „' + d.titel + '“ entfernen? Die Datei im Drive-Ordner bleibt unverändert.', 'Entfernen', 'gefahr').then(function (ja) {
             if (!ja) return;
-            A.rufe('apiKorrespondenzDokumentEntfernen', d.dokument_id, d.version).then(function (r) { A.daten.uebernehme(r); neuZeichnen(); }, function () {});
+            return A.rufe('apiKorrespondenzDokumentEntfernen', d.dokument_id, d.version).then(function (r) { A.daten.uebernehme(r); neuZeichnen(); }, function () {});
           });
         }, 'zweit klein'));
       }
@@ -647,7 +660,7 @@
         });
         var knoepfe = [];
         if (A.darf('dokumente_verwalten')) knoepfe.push(A.knopf('Dokument verknüpfen', function () { dokumentDialog({ mitglied_id: m.mitglied_id, art: 'Aufnahmeantrag' }); }, 'zweit klein'));
-        z.appendChild(A.abschnitt('Dokumente', knoepfe));
+        z.appendChild(A.abschnitt('Dokumente', knoepfe, 'h3'));
         if (doks.length) z.appendChild(dokumentListe(doks));
         else z.appendChild(A.el('p', 'Keine Dokumente verknüpft (z. B. unterschriebener Aufnahmeantrag, SEPA-Mandat).', { className: 'leise' }));
         var archiv = A.el('div');
@@ -661,7 +674,7 @@
         var briefe = A.daten.liste('anschreiben').filter(function (a) { return a.mitglied_id === m.mitglied_id; });
         var k2 = [];
         if (A.darf('anschreiben_erstellen')) k2.push(A.knopf('Neues Schreiben', function () { A.zeige('korrespondenz', { mitglied_ids: [m.mitglied_id], anlass: anlassVorschlag(m) }); }, 'zweit klein'));
-        z.appendChild(A.abschnitt('Anschreiben', k2));
+        z.appendChild(A.abschnitt('Anschreiben', k2, 'h3'));
         z.appendChild(anschreibenTabelle(briefe, true));
       });
     }

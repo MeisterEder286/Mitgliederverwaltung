@@ -57,7 +57,15 @@ const antworten = {
   apiPing: g.apiPing(),
   apiClientMessungen: { ok: true, daten: true, messung: { server_ms: 1, sheets: 0 } }
 };
-if (typeof g.apiSnapshot === 'function') antworten.apiSnapshot = g.apiSnapshot();
+// apiSnapshot je Bereich vorab; der Stub setzt die Antwort passend zu den angefragten Bereichen zusammen
+const snapshots = {};
+if (typeof g.apiSnapshot === 'function') {
+  ['kern'].concat(Object.keys(g.SnapshotKern.BEREICHE)).forEach(b => {
+    const s = g.apiSnapshot([b]);
+    if (!s.ok) throw new Error('apiSnapshot ' + b + ': ' + JSON.stringify(s.fehler));
+    snapshots[b] = s;
+  });
+}
 g.apiPing();
 antworten.apiMessungen = g.apiMessungen();
 
@@ -66,14 +74,26 @@ const { baueSeite, jsonEinbetten: json } = require('./seite');
 const stub = `<script>
 window.google = { script: { run: (function () {
   var antworten = ${json(antworten)};
-  function antwort(name) {
+  var snapshots = ${json(snapshots)};
+  // Wie apiSnapshot(bereiche): ohne Array nur Kern, unbekannte Bereiche fallen weg, Listen der Bereiche zusammenführen
+  function snapshot(bereiche) {
+    var b = (Array.isArray(bereiche) ? bereiche.map(String) : ['kern']).filter(function (x) { return snapshots[x]; });
+    var listen = {};
+    b.forEach(function (x) { var l = snapshots[x].daten.listen; for (var k in l) listen[k] = l[k]; });
+    return { ok: true, daten: { bereiche: b, listen: listen }, messung: { server_ms: 1, sheets: 0 } };
+  }
+  function antwort(name, args) {
+    if (name === 'apiSnapshot' && Object.keys(snapshots).length) return snapshot(args[0]);
     return antworten[name] || { ok: false, fehler: { art: 'fachlich', meldung: 'Vorschau: „' + name + '“ ist hier nicht verfügbar (keine Verbindung zu Google).' }, messung: { server_ms: 0, sheets: 0 } };
   }
   function laeufer(ok, fehl) {
     return new Proxy({}, { get: function (_, name) {
       if (name === 'withSuccessHandler') return function (h) { return laeufer(h, fehl); };
       if (name === 'withFailureHandler') return function (h) { return laeufer(ok, h); };
-      return function () { setTimeout(function () { if (ok) ok(antwort(name)); }, 250); };
+      return function () {
+        var args = Array.prototype.slice.call(arguments);
+        setTimeout(function () { if (ok) ok(antwort(name, args)); }, 250);
+      };
     } });
   }
   return laeufer();

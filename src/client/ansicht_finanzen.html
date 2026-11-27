@@ -17,6 +17,8 @@
 <style>
   .fin-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
   .fin-zeile select, .fin-zeile input { min-height: 44px; padding: 6px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .fin-feld { display: inline-flex; flex-direction: column; gap: 2px; font-size: 0.9rem; font-weight: 600; }
+  .fin-feld input { font-weight: 400; }
   .fin-summe { font-weight: 600; margin: 6px 0 12px; }
   .fin-iban { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 0.02em; }
   .fin-hinweis { background: #fff6dc; color: #5c4400; border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px; }
@@ -94,6 +96,7 @@
     return s;
   }
   function laedt(ziel) { ziel.appendChild(A.el('p', 'Lädt …', { className: 'laedt' })); }
+  function nichtGeladen(ziel, text) { A.ladefehler(A.leere(ziel), text, A.neuZeichnen); }
   function exportVermerken(liste, anzahl) { A.rufe('apiFinanzenExportVermerken', liste, anzahl, A.still).catch(function () {}); }
   /** Nach dem Speichern: Ansicht neu zeichnen (blendet Meldungen aus) und DANACH Erfolg bzw. Hinweise melden. */
   function fertig(text, d) {
@@ -150,7 +153,7 @@
           sepa: zeigeSepa, klaerliste: zeigeKlaerliste, tarifwechsel: zeigeTarifwechsel,
           rechnungen: zeigeRechnungen, jahre: zeigeJahre }[zustand.reiter] || zeigeUebersicht;
         f(bereich);
-      }).catch(function () { A.leere(bereich); bereich.appendChild(A.el('p', 'Die Finanzdaten konnten nicht geladen werden.', { className: 'leise' })); });
+      }).catch(function () { nichtGeladen(bereich, 'Die Finanzdaten konnten nicht geladen werden.'); });
     }
   });
 
@@ -195,7 +198,7 @@
       inhalt.appendChild(A.abschnitt('Offen und streitig ' + d.jahr, knoepfe));
       inhalt.appendChild(A.el('p', 'Summe offen/streitig: ' + A.betrag(summe), { className: 'fin-summe' }));
       inhalt.appendChild(sollTabelle(streitig, { sortiere: 'status' }));
-    }).catch(function () { A.leere(inhalt); });
+    }).catch(function () { nichtGeladen(inhalt, 'Der Einzugsstand konnte nicht geladen werden.'); });
   }
 
   function mahnSpalten() {
@@ -216,7 +219,7 @@
   }
   function buchhaltungExport() {
     var j = jahr();
-    A.rufe('apiFinanzenBuchhaltung', j).then(function (d) {
+    return A.rufe('apiFinanzenBuchhaltung', j).then(function (d) {
       A.csv('Beitraege_' + j + '_Buchhaltung.csv', [
         { titel: 'Sollstellung', feld: 'sollstellung_id' }, { titel: 'Konto', feld: 'konto' }, { titel: 'Inhaber', feld: 'inhaber' },
         { titel: 'Zahlweg', feld: 'zahlweg' }, { titel: 'Mandatsreferenz', feld: 'mandatsreferenz' },
@@ -279,7 +282,7 @@
       { text: 'Buchen', art: '', aktion: function (schliessen) {
         var w = form.werte();
         if (!w.art) { form.setzeFehler([{ feld: 'art', meldung: 'Bitte einen Status wählen.' }]); return; }
-        A.rufe('apiFinanzenSollstellungStatus', s.sollstellung_id, s.version, w).then(function (d) {
+        return A.rufe('apiFinanzenSollstellungStatus', s.sollstellung_id, s.version, w).then(function (d) {
           A.daten.uebernehme(d); infoVerwerfen(); schliessen(); fertig('Gebucht.');
         }, function (err) { if (err.felder) form.setzeFehler(err.felder); if (err.art === 'konflikt') { schliessen(); A.ladeNeu(); } });
       } }
@@ -328,7 +331,7 @@
       huelle.appendChild(tab);
       function filtern(z) { tab.aktualisiere(zeilen(z)); }
       zustand.kontenZeilen = function () { return zeilen(leiste.zustand); };
-    }).catch(function () { A.leere(huelle); });
+    }).catch(function () { nichtGeladen(huelle, 'Die Konten konnten nicht geladen werden.'); });
   }
 
   function kontoSpalten(d, pj) {
@@ -404,7 +407,7 @@
         } else w.kontoinhaber_mitglied_id = null;
         if (k && !w.iban) delete w.iban;
         if (w.iban && !ibanGueltig(w.iban)) { form.setzeFehler([{ feld: 'iban', meldung: 'Die IBAN ist ungültig (Prüfziffer oder Länge).' }]); return; }
-        A.rufe('apiFinanzenKontoSpeichern', k ? k.beitragskonto_id : null, k ? k.version : null, w).then(function (d) {
+        return A.rufe('apiFinanzenKontoSpeichern', k ? k.beitragskonto_id : null, k ? k.version : null, w).then(function (d) {
           A.daten.uebernehme(d); infoVerwerfen(); schliessen();
           A.zeige('konto', { id: d.konto_id }, !!k);
           if (d.hinweise && d.hinweise.length) A.meldung('Gespeichert. ' + d.hinweise.join(' '), 'hinweis'); else A.meldung('Gespeichert.', 'ok');
@@ -431,7 +434,7 @@
         A.leere(huelle);
         if (!k) { huelle.appendChild(A.el('p', 'Dieses Konto ist nicht (mehr) vorhanden.', { className: 'leise' })); return; }
         zeichneKonto(huelle, k);
-      }).catch(function () { A.leere(huelle); });
+      }).catch(function () { nichtGeladen(huelle, 'Das Konto konnte nicht geladen werden.'); });
     }
   });
 
@@ -441,9 +444,9 @@
     if (A.darf('konto_bearbeiten')) {
       knoepfe.push(A.knopf('Bearbeiten', function () { kontoFormular(k, detail && detail.mandatsvorschlag); }));
       if (k.aktiv !== false) knoepfe.push(A.knopf('Stilllegen', function () {
-        A.bestaetige('Konto stilllegen', 'Konto ' + k.beitragskonto_id + ' stilllegen? Das geht nur, wenn keine aktive Person mehr darüber zahlt.', 'Stilllegen').then(function (ja) {
+        return A.bestaetige('Konto stilllegen', 'Konto ' + k.beitragskonto_id + ' stilllegen? Das geht nur, wenn keine aktive Person mehr darüber zahlt.', 'Stilllegen', 'gefahr').then(function (ja) {
           if (!ja) return;
-          A.rufe('apiFinanzenKontoStilllegen', k.beitragskonto_id, k.version).then(function (d) { A.daten.uebernehme(d); infoVerwerfen(); fertig('Konto stillgelegt.'); }, function () {});
+          return A.rufe('apiFinanzenKontoStilllegen', k.beitragskonto_id, k.version).then(function (d) { A.daten.uebernehme(d); infoVerwerfen(); fertig('Konto stillgelegt.'); }, function () {});
         });
       }, 'zweit'));
     }
@@ -455,7 +458,7 @@
     if (k.iban_maskiert && A.darf('iban_aufdecken')) {
       var auf = A.knopf('aufdecken', function () {
         auf.disabled = true;
-        A.rufe('apiFinanzenIbanAufdecken', k.beitragskonto_id).then(function (d) {
+        return A.rufe('apiFinanzenIbanAufdecken', k.beitragskonto_id).then(function (d) {
           ibanZelle.textContent = d.iban + (d.bic ? ' · BIC ' + d.bic : '');
           setTimeout(function () { ibanZelle.textContent = k.iban_maskiert; auf.disabled = false; }, 60000);
         }, function () { auf.disabled = false; });
@@ -495,7 +498,7 @@
         box.appendChild(l);
         zus.appendChild(box);
       }
-    }).catch(function () { A.leere(zus); });
+    }).catch(function () { nichtGeladen(zus, 'Beitrag und Mandat konnten nicht geladen werden.'); });
 
     // Personen
     var personen = personenJeKonto()[k.beitragskonto_id] || [];
@@ -528,7 +531,7 @@
       { text: 'Umhängen', art: '', aktion: function (schliessen) {
         var w = form.werte();
         if (!w.konto || !A.daten.hole('konten', w.konto)) { form.setzeFehler([{ feld: 'konto', meldung: 'Dieses Konto gibt es nicht.' }]); return; }
-        A.rufe('apiFinanzenPersonZuordnen', m.mitglied_id, m.version, w.konto, w.gemeinsam === true).then(function (d) {
+        return A.rufe('apiFinanzenPersonZuordnen', m.mitglied_id, m.version, w.konto, w.gemeinsam === true).then(function (d) {
           A.daten.uebernehme(d); infoVerwerfen(); schliessen(); fertig('Zugeordnet.', d);
         }, function () {});
       } }
@@ -571,7 +574,7 @@
     var ul = A.el('ul', null, { className: 'liste' });
     mitglieder.forEach(function (m) {
       var li = A.el('li', null, null, [personLink(m), document.createTextNode(' · Konto ' + (m.beitragskonto_id || '–') + ' ')]);
-      if (darf) li.appendChild(A.knopf('herausnehmen', function () { gemeinschaftAktion(g, m, 'entfernen', d.schliessen); }, 'zweit klein'));
+      if (darf) li.appendChild(A.knopf('herausnehmen', function () { return gemeinschaftAktion(g, m, 'entfernen', d.schliessen); }, 'zweit klein'));
       ul.appendChild(li);
     });
     if (!mitglieder.length) ul.appendChild(A.el('li', 'Keine Mitglieder.'));
@@ -586,13 +589,13 @@
       knoepfe.push({ text: 'Aufnehmen', art: 'zweit', aktion: function () {
         var m = mitgliedNachNummer(aufnehmen.werte().nummer);
         if (!m) { aufnehmen.setzeFehler([{ feld: 'nummer', meldung: 'Keine Person mit dieser Mitgliedsnummer gefunden.' }]); return; }
-        gemeinschaftAktion(g, m, 'hinzu', d.schliessen);
+        return gemeinschaftAktion(g, m, 'hinzu', d.schliessen);
       } });
       knoepfe.push({ text: 'Bearbeiten', art: 'zweit', aktion: function (s) { s(); gemeinschaftFormular(g); } });
       knoepfe.push({ text: 'Auflösen', art: 'gefahr', aktion: function (s) {
-        A.bestaetige('Gemeinschaft auflösen', '„' + g.bezeichnung + '“ auflösen? Alle Mitglieder werden herausgenommen und zahlen danach ihre eigene Beitragsart.', 'Auflösen').then(function (ja) {
+        return A.bestaetige('Gemeinschaft auflösen', '„' + g.bezeichnung + '“ auflösen? Alle Mitglieder werden herausgenommen und zahlen danach ihre eigene Beitragsart.', 'Auflösen', 'gefahr').then(function (ja) {
           if (!ja) return;
-          A.rufe('apiFinanzenGemeinschaftAufloesen', g.beitragsgemeinschaft_id, g.version).then(function (r) { A.daten.uebernehme(r); infoVerwerfen(); s(); fertig('Gemeinschaft aufgelöst.', r); }, function () {});
+          return A.rufe('apiFinanzenGemeinschaftAufloesen', g.beitragsgemeinschaft_id, g.version).then(function (r) { A.daten.uebernehme(r); infoVerwerfen(); s(); fertig('Gemeinschaft aufgelöst.', r); }, function () {});
         });
       } });
     }
@@ -600,7 +603,7 @@
   }
 
   function gemeinschaftAktion(g, m, aktion, schliessen) {
-    A.rufe('apiFinanzenGemeinschaftMitglied', g.beitragsgemeinschaft_id, m.mitglied_id, m.version, aktion).then(function (r) {
+    return A.rufe('apiFinanzenGemeinschaftMitglied', g.beitragsgemeinschaft_id, m.mitglied_id, m.version, aktion).then(function (r) {
       A.daten.uebernehme(r); infoVerwerfen(); schliessen(); fertig('Gespeichert.', r);
     }, function () {});
   }
@@ -615,7 +618,7 @@
       { text: 'Abbrechen' },
       { text: 'Speichern', art: '', aktion: function (s) {
         var w = form.werte();
-        A.rufe('apiFinanzenGemeinschaftSpeichern', g ? g.beitragsgemeinschaft_id : null, g ? g.version : null, w).then(function (r) {
+        return A.rufe('apiFinanzenGemeinschaftSpeichern', g ? g.beitragsgemeinschaft_id : null, g ? g.version : null, w).then(function (r) {
           A.daten.uebernehme(r); infoVerwerfen(); s(); fertig('Gespeichert.');
         }, function (err) { if (err.felder) form.setzeFehler(err.felder); });
       } }
@@ -672,15 +675,18 @@
     var d = A.dialog('Sollstellungen ' + j + ' – Probelauf', inhalt, [
       { text: 'Abbrechen' },
       { text: 'Sollstellungen anlegen', art: '', aktion: function (schliessen) {
-        if (!plan || !plan.anzahl) { schliessen(); return; }
-        A.rufe('apiFinanzenSollstellungAnlegen', j, plan.anzahl).then(function (r) {
+        if (!plan || !plan.anzahl) return;
+        return A.rufe('apiFinanzenSollstellungAnlegen', j, plan.anzahl).then(function (r) {
           A.daten.uebernehme(r); infoVerwerfen(); schliessen();
           fertig(r.anzahl + ' Sollstellungen für ' + j + ' angelegt (' + A.betrag(r.summe) + ').');
         }, function () {});
       } }
     ]);
+    var anlegen = d.knoepfe[1];
+    anlegen.disabled = true;   // erst nach dem Probelauf – sonst schlösse der Dialog kommentarlos
     A.rufe('apiFinanzenSollstellungPlanen', j).then(function (p) {
       plan = p;
+      anlegen.disabled = !p.anzahl;
       A.leere(inhalt);
       inhalt.appendChild(A.el('div', null, { className: 'kacheln' }, [
         A.kachel(A.zahl(p.anzahl), 'neue Sollstellungen'), A.kachel(A.betrag(p.summe), 'Summe'),
@@ -716,7 +722,7 @@
     A.dialog('Eingezogene als bezahlt buchen', inhalt, [
       { text: 'Abbrechen' },
       { text: 'Buchen', art: '', aktion: function (s) {
-        A.rufe('apiFinanzenSammelBezahlt', j, kandidaten.map(function (x) { return x.sollstellung_id; }), form.werte().datum).then(function (r) {
+        return A.rufe('apiFinanzenSammelBezahlt', j, kandidaten.map(function (x) { return x.sollstellung_id; }), form.werte().datum).then(function (r) {
           A.daten.uebernehme(r); infoVerwerfen(); s(); fertig(r.anzahl + ' Sollstellungen als bezahlt gebucht.');
         }, function (err) { if (err.felder) form.setzeFehler(err.felder); });
       } }
@@ -726,8 +732,8 @@
   // ------------------------------------------------------------------ SEPA
 
   function zeigeSepa(ziel) {
-    var datum = A.el('input', null, { type: 'text', placeholder: 'Einzugsdatum TT.MM.JJJJ (leer = laut Sollstellung)', inputMode: 'numeric' });
-    datum.setAttribute('aria-label', 'Einzugsdatum');
+    var datum = A.el('input', null, { type: 'text', id: 'fin-sepa-datum', placeholder: 'TT.MM.JJJJ', inputMode: 'numeric' });
+    var datumFeld = A.el('label', null, { className: 'fin-feld', htmlFor: 'fin-sepa-datum' }, [A.el('span', 'Einzugsdatum (leer = laut Sollstellung)'), datum]);
     var ergebnis = A.el('div');
     // Umfang (aus Access: Jahresbeitragseinzug / „Laufender Einzug“ für Nachzügler)
     var umfang = A.el('select', null, { aria: { label: 'Umfang des Laufs' } });
@@ -736,7 +742,7 @@
     umfang.appendChild(A.el('option', 'Auch übermittelte erneut', { value: 'erneut' }));
     umfang.value = zustand.sepaUmfang || 'neu';
     umfang.addEventListener('change', function () { zustand.sepaUmfang = umfang.value; A.leere(ergebnis); });
-    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen), umfang, datum, A.knopf('Probelauf', probelauf)]));
+    ziel.appendChild(A.el('div', null, { className: 'fin-zeile' }, [jahrAuswahl(A.neuZeichnen), umfang, datumFeld, A.knopf('Probelauf', probelauf)]));
     ziel.appendChild(A.el('p', 'Standard: nur Sollstellungen, die noch in keiner SEPA-Datei waren – so kann derselbe Lauf später für Nachzügler (Neuaufnahmen) wiederholt werden, ohne doppelt einzuziehen.', { className: 'leise' }));
     ziel.appendChild(A.el('p', 'Format pain.008.001.08 mit strukturierten Adressen (Pflicht ab 15.11.2026). Vor dem ersten echten Einsatz eine Datei aus dem Testsystem bei der Hausbank als Test einreichen.', { className: 'fin-hinweis' }));
     ziel.appendChild(ergebnis);
@@ -752,7 +758,7 @@
       var e;
       try { e = einzug(); } catch (x) { return; }
       A.leere(ergebnis); laedt(ergebnis);
-      A.rufe('apiFinanzenSepaProbelauf', jahr(), e, umfang.value).then(function (p) { zeigeProbelauf(p, e); }, function () { A.leere(ergebnis); });
+      return A.rufe('apiFinanzenSepaProbelauf', jahr(), e, umfang.value).then(function (p) { zeigeProbelauf(p, e); }, function () { A.ladefehler(A.leere(ergebnis), 'Der Probelauf konnte nicht durchgeführt werden.', probelauf); });
     }
     function zeigeProbelauf(p, e) {
       A.leere(ergebnis);
@@ -780,10 +786,10 @@
         var f = p.freigabe || {};
         ergebnis.appendChild(A.el('p', f.freigegeben ? 'Vier-Augen-Prinzip: freigegeben von ' + f.von + '.' : 'Vier-Augen-Prinzip: Der Probelauf muss noch von einer zweiten Person freigegeben werden.', { className: f.freigegeben ? 'leise' : 'fin-hinweis' }));
         knoepfe.push(A.knopf('Probelauf freigeben', function () {
-          A.rufe('apiFinanzenSepaFreigeben', jahr()).then(function () { probelauf(); A.meldung('Freigegeben.', 'ok'); }, function () {});
+          return A.rufe('apiFinanzenSepaFreigeben', jahr()).then(function () { probelauf(); A.meldung('Freigegeben.', 'ok'); }, function () {});
         }, 'zweit'));
       }
-      if (p.anzahl && !p.glaeubiger_fehler.length) knoepfe.push(A.knopf('SEPA-Datei erzeugen', function () { xmlErzeugen(p, e); }));
+      if (p.anzahl && !p.glaeubiger_fehler.length) knoepfe.push(A.knopf('SEPA-Datei erzeugen', function () { return xmlErzeugen(p, e); }));
       if (p.anzahl && A.darf('export')) knoepfe.push(A.knopf('Kontrollliste CSV', function () {
         A.csv('SEPA-Kontrollliste_' + p.jahr + '.csv', [
           { titel: 'Konto', feld: 'konto' }, { titel: 'Name', feld: 'name' }, { titel: 'IBAN', feld: 'iban' }, { titel: 'Mandat', feld: 'mandat' },
@@ -809,9 +815,9 @@
       ], p.posten, { block: 25, sortiere: 'konto' }));
     }
     function xmlErzeugen(p, e) {
-      A.bestaetige('SEPA-Datei erzeugen', p.anzahl + ' Lastschriften über ' + A.betrag(p.summe) + ' in eine Datei schreiben? Die Sollstellungen werden als „eingezogen“ (Sequenz und Einzugsdatum) vermerkt.', 'Datei erzeugen').then(function (ja) {
+      return A.bestaetige('SEPA-Datei erzeugen', p.anzahl + ' Lastschriften über ' + A.betrag(p.summe) + ' in eine Datei schreiben? Die Sollstellungen werden als „eingezogen“ (Sequenz und Einzugsdatum) vermerkt.', 'Datei erzeugen', 'gefahr').then(function (ja) {
         if (!ja) return;
-        A.rufe('apiFinanzenSepaXml', jahr(), e, umfang.value).then(function (r) {
+        return A.rufe('apiFinanzenSepaXml', jahr(), e, umfang.value).then(function (r) {
           A.herunterladen(r.dateiname, r.xml, 'application/xml');
           var x = Object.assign({}, r); delete x.xml;
           A.daten.uebernehme(x); infoVerwerfen();
@@ -862,7 +868,7 @@
         { feld: 'status', titel: 'Status', wert: function (r) { return STATUSTEXT[r.status] || r.status; } },
         { feld: 'zusammensetzung', titel: 'Zusammensetzung' }
       ], liste, { sortiere: 'kontoinhaber', leer: 'Keine offenen Beiträge von Überweisern oder Barzahlern.' }));
-    }, function () { A.leere(inhalt); });
+    }, function () { nichtGeladen(inhalt, 'Die offenen Rechnungen konnten nicht geladen werden.'); });
   }
 
   // ------------------------------------------------------------------ Jahresübersicht (alle Jahre)
@@ -886,7 +892,7 @@
         exportVermerken('Jahresübersicht Beitragseinzüge', d.jahre.length);
       }, 'zweit')]));
       inhalt.appendChild(A.tabelle(spalten, d.jahre, { sortiere: 'jahr', absteigend: true, leer: 'Noch keine Sollstellungen.' }));
-    }, function () { A.leere(inhalt); });
+    }, function () { nichtGeladen(inhalt, 'Die Jahresübersicht konnte nicht geladen werden.'); });
   }
 
   // ------------------------------------------------------------------ Klärliste
@@ -927,7 +933,7 @@
       ], zeilen(leiste.zustand), { sortiere: 'schwere', leer: 'Keine Klärfälle – alles in Ordnung.' });
       huelle.appendChild(tab);
       function filtern(z) { tab.aktualisiere(zeilen(z)); }
-    }).catch(function () { A.leere(huelle); });
+    }).catch(function () { nichtGeladen(huelle, 'Die Klärliste konnte nicht geladen werden.'); });
   }
 
   // ------------------------------------------------------------------ Tarifwechsel
@@ -967,12 +973,12 @@
         huelle.appendChild(A.knopf('Ausgewählte übernehmen', function () {
           var ids = Object.keys(gewaehlt).filter(function (k) { return gewaehlt[k]; }).map(Number);
           if (!ids.length) { A.meldung('Bitte mindestens einen Vorschlag auswählen.', 'hinweis'); return; }
-          A.rufe('apiFinanzenTarifwechselUebernehmen', zustand.twJahr, ids).then(function (r) {
+          return A.rufe('apiFinanzenTarifwechselUebernehmen', zustand.twJahr, ids).then(function (r) {
             A.daten.uebernehme(r); infoVerwerfen(); fertig(r.anzahl + ' Tarifwechsel übernommen.');
           }, function () {});
         }));
       }
-    }).catch(function () { A.leere(huelle); });
+    }).catch(function () { nichtGeladen(huelle, 'Die Tarifwechsel-Vorschläge konnten nicht geladen werden.'); });
   }
 })();
 </script>

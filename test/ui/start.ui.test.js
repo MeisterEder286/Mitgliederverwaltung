@@ -35,7 +35,7 @@ for (const rolle of ['Vorstand', 'Mitgliederverwalter', 'Kassier', 'Abteilungsle
   test('Start als ' + rolle + ': ohne Fehler, kein waagrechtes Scrollen bei 360 px', async () => {
     const ui = await starteOberflaeche({ rolle });
     try {
-      const nav = await ui.page.$$eval('#navigation button', b => b.map(x => x.textContent));
+      const nav = await ui.navAnsichten();
       assert.ok(nav.includes('Start'));
       const breite = await ui.page.evaluate(() => document.documentElement.scrollWidth);
       assert.ok(breite <= 360, 'waagrechtes Scrollen: ' + breite);

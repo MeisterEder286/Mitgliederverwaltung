@@ -27,9 +27,9 @@ for (const rolle of ['Vorstand', 'Mitgliederverwalter', 'Kassier', 'Abteilungsle
     const p = ui.page;
     const maengel = [];
     try {
-      const nav = await p.$$eval('#navigation button', b => b.map(x => x.dataset.ansicht));
+      const nav = await p.evaluate(() => App.sichtbareAnsichten());
       for (const k of nav) {
-        await p.locator('#navigation button[data-ansicht="' + k + '"]').click();
+        await ui.oeffne(k);
         await p.waitForTimeout(350);
         await pruefe(p, k, maengel);
         const anzahl = await p.locator('#inhalt .reiter button').count();

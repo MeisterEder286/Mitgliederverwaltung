@@ -10,11 +10,12 @@ Funktion wofür zuständig ist**. Fachliche Regeln stehen im Datenmodell (`docs/
 |---|---|
 | `npm run schema` | erzeugt `src/lib/schema.js` und `src/lib/startbelegung.js` aus `docs/daten/*.csv` |
 | `npm run check` | Syntax, gemeinsamer globaler Namensraum, HTML-Skripte, Kopfkommentare, Scopes (`tools/check.js`) |
-| `npm test` | alle Tests unter `test/` (Node, keine Abhängigkeiten) |
-| `npm run push` | check + test + `clasp push` |
+| `npm test` | alle Tests `test/*.test.js` (Node, keine Abhängigkeiten; Aufruf über `tools/tests.js`) |
+| `npm run test:ui` | Oberflächentests `test/ui/*.ui.test.js` in Chromium (Playwright), nacheinander |
+| `npm run push` | check + test + test:ui + `clasp push` |
 | `npm run vorschau` | `vorschau.html` – Oberfläche lokal im Browser, mit synthetischen Daten und Stub für `google.script.run` (Mobil-Sichtprüfung) |
 
-Node ≥ 20. Es gibt **keine** npm-Abhängigkeiten und **keinen** Build-Schritt: Der Code in `src/` ist genau der
+Node ≥ 20. Einzige npm-Abhängigkeit ist `playwright` (devDependency, nur für `npm run test:ui`; einmalig `npm install` und `npx playwright install chromium`). Es gibt **keinen** Build-Schritt: Der Code in `src/` ist genau der
 Code, der im Apps-Script-Editor steht.
 
 ## 2. Datenmodell als Daten
@@ -147,6 +148,45 @@ Antwort trägt `nachlauf: true`, und der Browser (`App.nachlauf` in `client/star
 `index.html` (Gerüst), `stil.html`, `app.html`. Startdaten kommen als `<script type="application/json" id="startdaten">`.
 `rufe(name, ...args)` → Promise, misst die Zeit je Aufruf (Auftragspunkt 8).
 
+Bausteine in `client/kern` (Auszug):
+- Navigation: `App.registriere(schluessel, { titel, aktion, reihenfolge, versteckt, gehoertZu, zeichne })`; `titel` darf
+  eine Funktion sein (`App.titelVon(k)`, z. B. „Meine Abteilung“ für Abteilungsleiter). Die Tabelle `GRUPPEN` fasst
+  Ansichten zu Hauptmenü-Gruppen zusammen:
+
+  | Gruppe | Ansichten |
+  |---|---|
+  | Start | `start` |
+  | Mitglieder | `mitglieder`, `familien`, `funktionen`, `nachweise`, `ehrungen` |
+  | Finanzen | `finanzen` |
+  | Schreiben | `korrespondenz`, `notizen` |
+  | Berichte | `berichte`, `auswertungen` |
+  | Verwaltung | `verwaltung`, `datenschutz`, `messwerte` |
+
+  Nicht eingetragene Ansichten bilden eine eigene Gruppe. Es zählen nur für die Rolle sichtbare Ansichten; Gruppen
+  ohne sichtbare Ansicht fallen weg, Gruppen mit genau einer tragen deren Titel; Reihenfolge = kleinste `reihenfolge`.
+  Klick auf die Gruppe öffnet ihre erste Ansicht; bei mehreren erscheinen über Listenansichten (nicht über
+  `versteckt`-Detailansichten) Unterreiter (`nav.unterreiter`). `aria-current` beachtet `gehoertZu`. Unter 720 px
+  ist `#navigation` eine Leiste unten (erste 4 Gruppen + „Mehr“ bei mehr als 5 Gruppen).
+  `App.sichtbareAnsichten()` liefert alle erreichbaren Ansichten (Tests: `ui.navAnsichten()`, `ui.oeffne(k)`).
+- `App.zeige(ansicht, param, ersetzen)` – jede Ansicht ist ein Eintrag im Browser-Verlauf (`google.script.history`,
+  außerhalb von Apps Script `window.history`), Anker `#ansicht/id` bzw. `#ansicht/<JSON>`; `param` muss daher
+  JSON-fähig sein. `ersetzen = true` für Reiterwechsel und „nach dem Speichern“. `App.zurueck()` = Browser-Zurück.
+- `App.formular(felder, werte, { schutz: true })` – fragt vor dem Verlassen mit ungespeicherten Eingaben; nach
+  erfolgreichem Speichern `formular.gespeichert()` aufrufen (`App.speichere` tut das selbst).
+  Felder mit `pflicht` → Hinweis „* Pflichtfeld“ am Formularende. Datumsfelder (`typ: 'datum'`) setzen beim Tippen
+  reiner Ziffern die Punkte und vereinheitlichen beim Verlassen (`App.normalisiereDatum`: „1.1.2026“,
+  „01012026“, „2026-01-01“ → „01.01.2026“; zweistellige Jahre werden nicht geraten und bleiben unverändert).
+- `App.tabelle(spalten, zeilen, { karten: true, kartenTitel: 'feld' })` – unter 600 px jede Zeile als Karte
+  (nur CSS, Spaltentitel aus `td[data-titel]`, `kartenTitel`-Zelle als fette Überschrift); statt der Spaltenköpfe
+  erscheint dort die Auswahl „Sortieren nach“. Klickbare Zeilen bleiben per Tastatur bedienbar.
+- `#meldung` klebt oben im Sichtfeld (`position: sticky`), ist also auch weit unten in Listen sichtbar.
+- `App.knopf` – Doppelklick-Schutz: solange die von der Aktion gestarteten `App.rufe`-Aufrufe (oder ein
+  zurückgegebenes Promise) laufen, ist der Knopf `aria-busy` und ignoriert weitere Klicks.
+- `App.dialog(titel, inhalt, knoepfe, { beiAbbruch })` – Meldungen erscheinen während des Dialogs in diesem;
+  `App.bestaetige(titel, text, jaText, 'gefahr')` → Promise<boolean> (Escape = false).
+- `App.meldung(text, art, { text, aktion })` – optionaler Aktionsknopf (z. B. „Rückgängig“);
+  `App.ladefehler(ziel, text, nochmal)` – Ladefehler mit „Erneut versuchen“.
+
 ## 6. Ausbau ab Phase 3 – Verträge für Fachmodule
 
 ### Dateien je Bereich
@@ -241,7 +281,7 @@ Ansichten können sich in andere Ansichten einhängen, ohne deren Datei zu ände
 
 | Ort | Erwartet | Wirkung |
 |---|---|---|
-| `mitglied.reiter` | `{ id, titel, sicht?, aktion?, zeichne(ziel, mitglied) }` | zusätzlicher Reiter im Mitglied-Detail |
+| `mitglied.reiter` | `{ id, titel, sicht?, aktion?, zeichne(ziel, mitglied) }` | zusätzlicher Teil im Mitglied-Detail: steht seine `id` in `REITER_GRUPPEN` (client/ansicht_mitglieder), erscheint er als Abschnitt eines zusammengefassten Reiters, sonst als eigener Reiter am Ende |
 | `mitglied.knoepfe` | `function (mitglied) → Node\|null` | zusätzliche Knöpfe im Kopf des Mitglied-Details |
 | `mitglied.formular` | `function (formular, ziel, modus, mitglied)` | läuft nach Aufbau des Formulars „Bearbeiten“ (`modus = 'bearbeiten'`) bzw. „Neues Mitglied“ (`'neu'`) |
 | `konto.abschnitt` | `function (ziel, konto)` | zusätzlicher Abschnitt am Ende des Konto-Details |

@@ -78,7 +78,12 @@
         A.leere(bereich);
         kaputt.forEach(function (x) { bereich.appendChild(A.el('p', 'NICHT lesbar: ' + x.datei + ' – ' + x.fehler, { className: 'meldung' })); });
         if (!lesbar.length) return;
-        A.rufe('apiBeitrittVorschau', lesbar).then(function (v) { zeigeVorschau(bereich, lesbar, v); }, function () {});
+        var vorschau = function () {
+          return A.rufe('apiBeitrittVorschau', lesbar).then(function (v) { zeigeVorschau(bereich, lesbar, v); }, function () {
+            var box = A.ladefehler(bereich, 'Die Vorschau konnte nicht erstellt werden.', function () { box.remove(); return vorschau(); });
+          });
+        };
+        vorschau();
       });
     });
   }
@@ -130,7 +135,7 @@
     });
     var los = A.knopf('Importieren', function () {
       los.disabled = true;
-      A.rufe('apiBeitrittImportieren', antraege, entscheidungen).then(function (r) {
+      return A.rufe('apiBeitrittImportieren', antraege, entscheidungen).then(function (r) {
         A.daten.uebernehme(r.aenderung);
         A.leere(bereich);
         zeigeBericht(bereich, r);
