@@ -34,6 +34,11 @@ function apiFinanzenKontoSpeichern(kontoId, version, werte) {
   });
 }
 
+/** Neuaufnahme: Gibt es diese IBAN schon? Treffer nur maskiert (Kontoinhaber, Zahler, Gemeinschaften). */
+function apiFinanzenIbanSuchen(iban) {
+  return Api.ausfuehren('apiFinanzenIbanSuchen', 'konto_bearbeiten', function (ktx) { return Finanzen.ibanSuchen(ktx, String(iban || '').slice(0, 64)); });
+}
+
 /** Konto stilllegen (nur ohne aktive Personen). */
 function apiFinanzenKontoStilllegen(kontoId, version) {
   return Api.ausfuehren('apiFinanzenKontoStilllegen', 'konto_bearbeiten', function (ktx) { return Finanzen.kontoStilllegen(ktx, finanzenZahl_(kontoId), finanzenZahl_(version)); });

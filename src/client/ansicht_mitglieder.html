@@ -3,7 +3,8 @@
 
   Zweck:      Mitglieder suchen, filtern und sortieren (alles im Browser auf App.daten), Detail mit Reitern
               (Stammdaten · Mitgliedschaft & Abteilungen · Beitrag & Zahlungen · Nachweise & Ehrungen · Einwilligungen ·
-              Dokumente & Notizen), Bearbeiten, Anlegen (mit Dublettenprüfung), Austritt (mit Konto-Guard), Wiedereintritt, Sterbefall,
+              Dokumente & Notizen), Bearbeiten, Neuaufnahme einzeln oder als Familie mit Zahler (IBAN-Abgleich, Konto
+              einer anderen Person, Beitragsgemeinschaft, Vertretung nur unter 18, Dublettenprüfung), Austritt (mit Konto-Guard), Wiedereintritt, Sterbefall,
               Abteilungszugehörigkeiten, Exaktsuche „Mitglied der Abteilung zuordnen“ für Abteilungsleiter,
               Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck.
   Datenquelle: App.daten (Snapshot, Bereich kern; Mitgliedschaft/Einwilligungen → 'historie', Beitrag → 'finanzen')
@@ -54,6 +55,18 @@
   .mv-filter summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
   .mv-teil { scroll-margin-top: 64px; }
   .mv-teil + .mv-teil { margin-top: 20px; }
+  .mv-personkopf { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .mv-personkopf h3 { margin: 0; }
+  .mv-vertretung, .mv-zahlteil { margin-top: 8px; }
+  .mv-vertretung select, #mv-inhaber, #mv-kontowahl { min-height: 44px; padding: 4px 8px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); max-width: 100%; }
+  .mv-personsuche { position: relative; display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+  .mv-personsuche input { min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .mv-treffer { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rand); border-radius: var(--radius); }
+  .mv-treffer li button { width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--flaeche); font: inherit; cursor: pointer; }
+  .mv-treffer li button:hover, .mv-treffer li button:focus { background: #eef4fb; }
+  .mv-ibantreffer p { margin: 6px 0; }
+  .mv-ibantreffer label { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .mv-person [hidden], .mv-zahlung [hidden], .mv-gemeinschaft [hidden], .mv-neu-gruppe[hidden] { display: none; }
 </style>
 <script>
 (function () {
@@ -799,6 +812,26 @@
     feld.parentNode.insertBefore(k, feld.nextSibling);
   }
 
+  /**
+   * Gesetzliche Vertretung nur bei Minderjährigen zeigen: Gruppe ausblenden, solange das Geburtsdatum 18 Jahre oder
+   * mehr ergibt und keine Vertretung eingetragen ist (vorhandene Angaben bleiben sichtbar, damit man sie löschen kann).
+   */
+  function vertretungNurMinderjaehrig(f) {
+    var felder = ['vertreter_mitglied_id', 'vertreter_name', 'vertreter_kontakt'].map(function (n) { return f.feld(n); }).filter(Boolean);
+    if (!felder.length) return;
+    var kopfzeile = Array.prototype.filter.call(f.element.querySelectorAll('h3.feldgruppe'), function (h) { return h.textContent === 'Gesetzliche Vertretung'; })[0];
+    function pruefe() {
+      var g = f.feld('geburtsdatum') ? A.isoDatum(f.feld('geburtsdatum').value) : null;
+      var alter = g ? jahreSeit(g) : null;
+      var belegt = felder.some(function (e) { return e.value; });
+      var zeigen = belegt || (alter !== null && alter < 18);
+      felder.forEach(function (e) { e.parentNode.hidden = !zeigen; e.parentNode.style.display = zeigen ? '' : 'none'; });
+      if (kopfzeile) kopfzeile.hidden = !zeigen;
+    }
+    f.element.addEventListener('change', pruefe);
+    pruefe();
+  }
+
   function zeichneBearbeiten(ziel, param) {
     var m = mitglied(param && param.id);
     if (!m) { A.zeige('mitglieder', null, true); return; }
@@ -810,6 +843,7 @@
     ziel.appendChild(warnung);
     ziel.appendChild(f.element);
     A.rufeErweiterungen('mitglied.formular', f, ziel, 'bearbeiten', m);
+    vertretungNurMinderjaehrig(f);
     function pruefeHinweise() {
       var w = f.werte(), hinweise = [];
       if (w.strasse && /\d/.test(w.strasse) && !w.hausnummer) hinweise.push('Die Straße enthält eine Zahl – bitte die Hausnummer ins eigene Feld (wichtig für SEPA).');
@@ -837,92 +871,502 @@
     pruefeHinweise();
   }
 
-  // ================================================================== Neues Mitglied
+  // ================================================================== Neues Mitglied (Person oder Familie + Zahlung)
+
+  var NEU_OHNE = ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status', 'ehrenmitglied', 'ehrenmitglied_seit',
+    'beitragskonto_id', 'beitragsgemeinschaft_id', 'vertreter_mitglied_id', 'vertreter_name', 'vertreter_kontakt'];
+  var UEBERNEHMEN = ['nachname', 'strasse', 'hausnummer', 'plz', 'ort', 'land', 'telefon', 'email', 'versandart'];
+
+  /** Suchfeld für eine Person aus dem Bestand; beiWahl(m). */
+  function personSuche(beschriftung, beiWahl) {
+    var id = 'mv-ps-' + Math.random().toString(36).slice(2, 7);
+    var feld = A.el('input', null, { type: 'search', id: id, placeholder: 'Name oder Mitgliedsnummer …', autocomplete: 'off' });
+    var ul = A.el('ul', null, { className: 'mv-treffer', hidden: true });
+    feld.addEventListener('input', A.verzoegert(function () {
+      var t = A.falte(feld.value).trim();
+      A.leere(ul);
+      if (!t) { ul.hidden = true; return; }
+      var l = A.daten.liste('mitglieder').filter(function (m) {
+        return statusVon(m) === 'aktiv' && (String(m.mitgliedsnummer || '') === feld.value.trim() ||
+          A.falte([m.nachname, m.vorname].join(' ')).indexOf(t) >= 0 || A.falte([m.vorname, m.nachname].join(' ')).indexOf(t) >= 0);
+      }).slice(0, 8);
+      ul.hidden = !l.length;
+      l.forEach(function (m) {
+        var b = A.el('button', A.name(m) + ' · ' + (m.mitgliedsnummer || '') + (m.ort ? ' · ' + m.ort : ''), { type: 'button' });
+        b.addEventListener('click', function () { ul.hidden = true; feld.value = A.name(m); beiWahl(m); });
+        ul.appendChild(A.el('li', null, null, [b]));
+      });
+    }, 120));
+    return A.el('div', null, { className: 'feld breit mv-personsuche' }, [A.el('label', beschriftung, { htmlFor: id }), feld, ul]);
+  }
+
+  /** Abteilungen zum Ankreuzen (mit Status aktiv/passiv). */
+  function abteilungsWahl() {
+    var box = A.el('div', null, { className: 'mv-abteilungswahl' }), wahl = [];
+    A.daten.liste('abteilungen').filter(function (a) { return a.aktiv !== false && darfAbteilung(a.abteilung_id); }).forEach(function (a) {
+      var cb = A.el('input', null, { type: 'checkbox', value: String(a.abteilung_id) });
+      var st = A.el('select', null, { aria: { label: 'Status ' + a.bezeichnung } }, [A.el('option', 'aktiv', { value: 'aktiv' }), A.el('option', 'passiv', { value: 'passiv' })]);
+      wahl.push({ cb: cb, st: st });
+      box.appendChild(A.el('label', null, null, [cb, A.el('span', a.bezeichnung), st]));
+    });
+    return { element: box, werte: function () {
+      return wahl.filter(function (x) { return x.cb.checked; }).map(function (x) { return { abteilung_id: Number(x.cb.value), status: x.st.value }; });
+    } };
+  }
+
+  /** Auswahl aus Radioknöpfen; optionen = [{ wert, text }]. Liefert { element, wert(), setze(w), beiAenderung(fn) }. */
+  function radios(name, optionen, start) {
+    var box = A.el('div', null, { className: 'mv-optionen', role: 'radiogroup' }), knoepfe = {}, hoerer = [];
+    optionen.forEach(function (o) {
+      var r = A.el('input', null, { type: 'radio', name: name, value: o.wert, checked: o.wert === start });
+      r.addEventListener('change', function () { hoerer.forEach(function (fn) { fn(o.wert); }); });
+      knoepfe[o.wert] = r;
+      box.appendChild(A.el('label', null, null, [r, A.el('span', o.text)]));
+    });
+    return {
+      element: box,
+      wert: function () { var w = null; Object.keys(knoepfe).forEach(function (k) { if (knoepfe[k].checked) w = k; }); return w; },
+      /** still: ohne die Hörer zu benachrichtigen (Vorbelegung durch die Ansicht, nicht durch den Benutzer). */
+      setze: function (w, still) { if (knoepfe[w]) { knoepfe[w].checked = true; if (!still) hoerer.forEach(function (fn) { fn(w); }); } },
+      zeige: function (w, sichtbar) { if (knoepfe[w]) knoepfe[w].parentNode.hidden = !sichtbar; },
+      beiAenderung: function (fn) { hoerer.push(fn); }
+    };
+  }
+
+  function waehleOptionen(select, optionen, wert) {
+    A.leere(select);
+    optionen.forEach(function (o) { select.appendChild(A.el('option', o.text, { value: o.wert })); });
+    if (optionen.some(function (o) { return o.wert === wert; })) select.value = wert;
+    return select.value;
+  }
+
+  function kontoText(k) {
+    return 'Konto ' + k.beitragskonto_id + ' – ' + (k.kontoinhaber_name || '–') + ' (' + (k.zahlweg || '–') + (k.iban_maskiert ? ', ' + k.iban_maskiert : '') + ')';
+  }
 
   function zeichneNeu(ziel) {
     ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
     ziel.appendChild(A.el('h1', 'Neues Mitglied'));
+    var finanzen = A.sieht('finanz') && A.darf('konto_bearbeiten');
     if (A.sieht('finanz') && !A.daten.geladen('finanzen')) {
       var p = A.el('p', 'Lädt Konten …', { className: 'laedt' });
       ziel.appendChild(p);
       A.daten.lade('finanzen').then(function () { A.neuZeichnen(); }).catch(function () { p.remove(); A.ladefehler(ziel, 'Die Konten konnten nicht geladen werden.', A.neuZeichnen); });
       return;
     }
-    var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status', 'ehrenmitglied', 'ehrenmitglied_seit']);
-    var felder = [{ name: 'eintrittsdatum', titel: 'Eintritt', typ: 'datum', pflicht: true }].concat(spalten.map(function (sp) { return feldDef(sp); }));
-    var f = A.formular(mitGruppen(felder), { eintrittsdatum: heute(), land: 'DE', versandart: 'E-Mail' }, { schutz: true });
-    A.mitgliedNeuFormular = f;   // für Erweiterungen (z. B. XML-Import), die das Formular vorbefüllen
-    var dublette = A.el('div', null, { className: 'mv-warnung', hidden: true });
-    var trotz = A.el('input', null, { type: 'checkbox', id: 'mv-trotz' });
-    var trotzLabel = A.el('label', null, { htmlFor: 'mv-trotz' }, [trotz, A.el('span', ' Es ist eine andere Person – trotzdem anlegen')]);
-    ziel.appendChild(A.el('p', 'Die Mitgliedsnummer vergibt das System. Bankverbindung und Mandat werden im Bereich Finanzen erfasst (nie über Formulare im Internet).', { className: 'leise' }));
-    ziel.appendChild(f.element);
-    briefanredeKnopf(f);
-    A.rufeErweiterungen('mitglied.formular', f, ziel, 'neu', null);
+    ziel.appendChild(A.el('p', 'Eine Person oder eine ganze Familie aufnehmen. Die Mitgliedsnummern vergibt das System.' +
+      (finanzen ? ' Danach festlegen, wer den Beitrag zahlt.' : ''), { className: 'leise' }));
 
-    function pruefeDublette() {
-      var w = f.werte();
-      if (!w.nachname || !w.geburtsdatum || !/^\d{4}-\d{2}-\d{2}$/.test(w.geburtsdatum)) { dublette.hidden = true; return; }
+    var kopf = A.formular([{ name: 'eintrittsdatum', titel: 'Eintritt', typ: 'datum', pflicht: true }], { eintrittsdatum: heute() }, { schutz: true });
+    ziel.appendChild(kopf.element);
+
+    // ---------------------------------------------------------------- 1. Personen
+    var spalten = bearbeitbar('Mitglied', NEU_OHNE);
+    var personen = [];
+    var personenBox = A.el('div');
+    ziel.appendChild(A.el('h2', 'Wer tritt bei?'));
+    ziel.appendChild(personenBox);
+    var weitere = A.knopf('+ Weitere Person (Familie)', function () { neuePerson(true); }, 'zweit');
+    ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [weitere]));
+
+    function personName(p, i) {
+      var w = p.form.werte();
+      var n = [w.vorname, w.nachname].filter(Boolean).join(' ');
+      return n || 'Person ' + (i + 1);
+    }
+    function alterVon(p) { var g = p.form.werte().geburtsdatum; return g && /^\d{4}-\d{2}-\d{2}$/.test(g) ? jahreSeit(g) : null; }
+    function minderjaehrig(p) { var a = alterVon(p); return a !== null && a < 18; }
+
+    function neuePerson(uebernehmen) {
+      var i = personen.length;
+      var start = { land: 'DE', versandart: 'E-Mail' };
+      if (uebernehmen && personen[0]) {
+        var w0 = personen[0].form.werte();
+        UEBERNEHMEN.forEach(function (n) { if (w0[n] !== null && w0[n] !== undefined) start[n] = w0[n]; });
+      }
+      var p = {};
+      p.karte = A.el('section', null, { className: 'karte mv-person' });
+      p.titel = A.el('h3', 'Person ' + (i + 1));
+      var kopfzeile = A.el('div', null, { className: 'mv-personkopf' }, [p.titel]);
+      if (i > 0) kopfzeile.appendChild(A.knopf('Entfernen', function () {
+        personen.splice(personen.indexOf(p), 1);
+        p.karte.remove();
+        aktualisiere();
+      }, 'zweit klein'));
+      p.karte.appendChild(kopfzeile);
+      if (uebernehmen && i > 0) p.karte.appendChild(A.el('p', 'Nachname, Anschrift und Kontakt von Person 1 übernommen – bitte prüfen.', { className: 'leise' }));
+      p.form = A.formular(mitGruppen(spalten.map(function (sp) { return feldDef(sp); })), start, { schutz: true });
+      p.karte.appendChild(p.form.element);
+      briefanredeKnopf(p.form);
+      if (i === 0) A.mitgliedNeuFormular = p.form;   // für Erweiterungen (z. B. Formularhilfen), die das Formular vorbefüllen
+      A.rufeErweiterungen('mitglied.formular', p.form, p.karte, i === 0 ? 'neu' : 'neu_weitere', null);
+
+      // Dubletten
+      p.dublette = A.el('div', null, { className: 'mv-warnung', hidden: true });
+      p.trotz = A.el('input', null, { type: 'checkbox' });
+      p.karte.appendChild(p.dublette);
+      ['nachname', 'geburtsdatum'].forEach(function (n) { var e = p.form.feld(n); if (e) e.addEventListener('change', function () { pruefeDublette(p); }); });
+
+      // Beitragsart nach Alter vorschlagen
+      var geb = p.form.feld('geburtsdatum');
+      if (geb && p.form.feld('beitragsart_id')) geb.addEventListener('change', function () {
+        var feld = p.form.feld('beitragsart_id');
+        if (feld.value) return;
+        var v = beitragsartVorschlag(A.isoDatum(geb.value));
+        if (v) feld.value = String(v);
+      });
+
+      // Abteilungen
+      p.karte.appendChild(A.el('h3', 'Abteilungen', { className: 'feldgruppe' }));
+      p.abt = abteilungsWahl();
+      p.karte.appendChild(p.abt.element);
+
+      // Gesetzliche Vertretung – nur bei Minderjährigen
+      p.vertretungBox = A.el('div', null, { className: 'mv-vertretung', hidden: true });
+      p.vertretungWahl = A.el('select', null, { id: 'mv-vt-' + Math.random().toString(36).slice(2, 7) });
+      p.vertretungMitglied = null;
+      p.vertretungSuche = personSuche('Mitglied suchen', function (m) { p.vertretungMitglied = m; p.vertretungGewaehlt.textContent = 'Gewählt: ' + A.name(m) + ' (' + (m.mitgliedsnummer || '') + ')'; });
+      p.vertretungGewaehlt = A.el('p', '', { className: 'leise' });
+      p.vertretungFrei = A.formular([{ name: 'name', titel: 'Name', typ: 'text' }, { name: 'kontakt', titel: 'Kontakt (Telefon/E-Mail)', typ: 'text' }], {});
+      p.vertretungFehler = A.el('span', '', { className: 'feldfehler' });
+      p.vertretungBox.appendChild(A.el('h3', 'Gesetzliche Vertretung', { className: 'feldgruppe' }));
+      p.vertretungBox.appendChild(A.el('p', 'Die Person ist unter 18 – bitte angeben, wer sie gesetzlich vertritt.', { className: 'leise' }));
+      p.vertretungBox.appendChild(A.el('div', null, { className: 'feld breit' }, [A.el('label', 'Wer vertritt?', { htmlFor: p.vertretungWahl.id }), p.vertretungWahl, p.vertretungFehler]));
+      var sucheBox = A.el('div', null, null, [p.vertretungSuche, p.vertretungGewaehlt]);
+      p.vertretungBox.appendChild(sucheBox);
+      p.vertretungBox.appendChild(p.vertretungFrei.element);
+      p.vertretungWahl.addEventListener('change', function () { p.vertretungGewaehltManuell = true; zeigeVertretung(p); });
+      p.sucheBox = sucheBox;
+      p.karte.appendChild(p.vertretungBox);
+
+      p.form.element.addEventListener('change', function () { aktualisiere(); });
+      personen.push(p);
+      personenBox.appendChild(p.karte);
+      aktualisiere();
+      if (i > 0) { var vn = p.form.feld('vorname'); if (vn) try { vn.focus(); } catch (e) { /* egal */ } }
+      return p;
+    }
+
+    function zeigeVertretung(p) {
+      var w = p.vertretungWahl.value;
+      p.sucheBox.hidden = w !== 'mitglied';
+      p.vertretungFrei.element.hidden = w !== 'frei';
+    }
+
+    function pruefeDublette(p) {
+      var w = p.form.werte();
+      if (!w.nachname || !w.geburtsdatum || !/^\d{4}-\d{2}-\d{2}$/.test(w.geburtsdatum)) { p.dublette.hidden = true; return; }
       A.rufe('apiMitgliedDublettenPruefen', w.nachname, w.geburtsdatum, A.still).then(function (liste) {
-        A.leere(dublette);
-        if (!liste.length) { dublette.hidden = true; return; }
-        dublette.appendChild(A.el('p', 'Achtung: Es gibt bereits ' + (liste.length === 1 ? 'eine Person' : liste.length + ' Personen') + ' mit diesem Namen und Geburtsdatum:'));
+        A.leere(p.dublette);
+        if (!liste.length) { p.dublette.hidden = true; return; }
+        p.dublette.appendChild(A.el('p', 'Achtung: Es gibt bereits ' + (liste.length === 1 ? 'eine Person' : liste.length + ' Personen') + ' mit diesem Namen und Geburtsdatum:'));
         liste.forEach(function (x) {
           var zeile = A.el('p', null, null, [A.el('span', x.name + ' (Nr. ' + x.mitgliedsnummer + ', ' + (x.status || '–') + ') ')]);
           if (mitglied(x.mitglied_id)) zeile.appendChild(A.knopf(x.status === 'ausgetreten' ? 'Wiedereintritt erfassen' : 'Ansehen', function () {
-            f.gespeichert();   // bewusst zur vorhandenen Person – keine Rückfrage wegen der Dublette
+            personen.forEach(function (q) { q.form.gespeichert(); }); kopf.gespeichert();
             A.zeige('mitglied', { id: x.mitglied_id });
             if (x.status === 'ausgetreten') wiedereintrittDialog(mitglied(x.mitglied_id));
           }, 'zweit klein'));
-          dublette.appendChild(zeile);
+          p.dublette.appendChild(zeile);
         });
-        dublette.appendChild(trotzLabel);
-        dublette.hidden = false;
+        p.dublette.appendChild(A.el('label', null, null, [p.trotz, A.el('span', ' Es ist eine andere Person – trotzdem anlegen')]));
+        p.dublette.hidden = false;
       }).catch(function () {});
     }
-    ['nachname', 'geburtsdatum'].forEach(function (n) { var e = f.feld(n); if (e) e.addEventListener('change', pruefeDublette); });
-    var geb = f.feld('geburtsdatum');
-    if (geb && f.feld('beitragsart_id')) geb.addEventListener('change', function () {
-      var feld = f.feld('beitragsart_id');
-      if (feld.value) return;
-      var v = beitragsartVorschlag(A.isoDatum(geb.value));
-      if (v) feld.value = String(v);
-    });
-    ziel.appendChild(dublette);
 
-    ziel.appendChild(A.el('h2', 'Abteilungen'));
-    var abtBox = A.el('div', null, { className: 'mv-abteilungswahl' });
-    var abtWahl = [];
-    A.daten.liste('abteilungen').filter(function (a) { return a.aktiv !== false && darfAbteilung(a.abteilung_id); }).forEach(function (a) {
-      var cb = A.el('input', null, { type: 'checkbox', value: String(a.abteilung_id) });
-      var st = A.el('select', null, { aria: { label: 'Status ' + a.bezeichnung } }, [A.el('option', 'aktiv', { value: 'aktiv' }), A.el('option', 'passiv', { value: 'passiv' })]);
-      abtWahl.push({ cb: cb, st: st });
-      abtBox.appendChild(A.el('label', null, null, [cb, A.el('span', a.bezeichnung), st]));
-    });
-    ziel.appendChild(abtBox);
+    // ---------------------------------------------------------------- 2. Wer zahlt?
+    var zahlung = null, gem = null, gefundenesKonto = null, ibanTreffer = [];
+    if (finanzen) {
+      ziel.appendChild(A.el('h2', 'Wer zahlt den Beitrag?'));
+      var zBox = A.el('section', null, { className: 'karte mv-zahlung' });
+      ziel.appendChild(zBox);
+      zahlung = {};
+      zahlung.art = radios('mv-zahlart', [
+        { wert: 'neu', text: 'Neues Konto anlegen (IBAN bzw. Zahlweg eingeben)' },
+        { wert: 'konto', text: 'Zahlt über eine andere Person bzw. ein vorhandenes Konto' },
+        { wert: 'spaeter', text: 'Noch offen – später im Bereich Finanzen klären' }
+      ], 'neu');
+      zBox.appendChild(zahlung.art.element);
 
-    var anlegen = A.knopf('Mitglied anlegen', function () {
-      var w = zahlenFK(f.werte(), 'Mitglied');
-      if (!w.briefanrede && f.feld('briefanrede')) w.briefanrede = briefanredeVorschlag(w) || null;
-      var eintritt = w.eintrittsdatum; delete w.eintrittsdatum;
-      var eingabe = {
-        mitglied: w, eintrittsdatum: eintritt, trotzDublette: trotz.checked,
-        abteilungen: abtWahl.filter(function (x) { return x.cb.checked; }).map(function (x) { return { abteilung_id: Number(x.cb.value), status: x.st.value }; })
-      };
+      // a) neues Konto
+      zahlung.neuBox = A.el('div', null, { className: 'mv-zahlteil' });
+      zahlung.inhaber = A.el('select', null, { id: 'mv-inhaber' });
+      zahlung.inhaberFehler = A.el('span', '', { className: 'feldfehler' });
+      zahlung.neuBox.appendChild(A.el('div', null, { className: 'feld breit' }, [A.el('label', 'Kontoinhaber *', { htmlFor: 'mv-inhaber' }), zahlung.inhaber, zahlung.inhaberFehler]));
+      zahlung.form = A.formular([
+        { name: 'kontoinhaber_name', titel: 'Name des Kontoinhabers', typ: 'text', hilfe: 'Nur nötig, wenn der Inhaber nicht im Antrag steht (z. B. Großeltern).' },
+        { name: 'zahlweg', titel: 'Zahlweg', typ: 'auswahl', liste: liste('zahlweg'), pflicht: true },
+        { name: 'iban', titel: 'IBAN', typ: 'text' },
+        { name: 'bic', titel: 'BIC', typ: 'text', hilfe: 'Bei deutscher IBAN nicht nötig.' },
+        { name: 'mandatsdatum', titel: 'Mandat unterschrieben am', typ: 'datum' }
+      ], { zahlweg: 'Lastschrift', mandatsdatum: heute() }, { schutz: true });
+      zahlung.neuBox.appendChild(zahlung.form.element);
+      zahlung.ibanInfo = A.el('div', null, { hidden: true });
+      zahlung.trotz = A.el('input', null, { type: 'checkbox' });
+      zahlung.form.feld('iban').parentNode.appendChild(zahlung.ibanInfo);
+      zahlung.neuBox.appendChild(A.el('p', 'Die Mandatsreferenz vergibt das System (TSV-Jahr-Mitgliedsnummer). Das unterschriebene Mandat bitte ablegen.', { className: 'leise' }));
+      zBox.appendChild(zahlung.neuBox);
+
+      // b) vorhandenes Konto
+      zahlung.kontoBox = A.el('div', null, { className: 'mv-zahlteil', hidden: true });
+      zahlung.kontoBox.appendChild(personSuche('Person suchen, über die gezahlt wird', function (m) {
+        if (!m.beitragskonto_id) { zahlung.kontoInfo.textContent = A.name(m) + ' hat noch kein Beitragskonto. Bitte ein anderes Konto wählen oder ein neues anlegen.'; zahlung.kontoInfo.className = 'mv-warnung'; return; }
+        zahlung.kontoWahl.value = String(m.beitragskonto_id);
+        zeigeKonto();
+      }));
+      zahlung.kontoWahl = A.el('select', null, { id: 'mv-kontowahl' });
+      waehleOptionen(zahlung.kontoWahl, [{ wert: '', text: '–' }].concat(fkOptionen('beitragskonto_id').map(function (o) { return { wert: String(o.wert), text: o.text }; })), '');
+      zahlung.kontoFehler = A.el('span', '', { className: 'feldfehler' });
+      zahlung.kontoBox.appendChild(A.el('div', null, { className: 'feld breit' }, [A.el('label', 'oder Konto direkt wählen', { htmlFor: 'mv-kontowahl' }), zahlung.kontoWahl, zahlung.kontoFehler]));
+      zahlung.kontoInfo = A.el('p', '', { className: 'leise' });
+      zahlung.kontoBox.appendChild(zahlung.kontoInfo);
+      zahlung.kontoWahl.addEventListener('change', zeigeKonto);
+      zBox.appendChild(zahlung.kontoBox);
+
+      zahlung.art.beiAenderung(function () { zeigeZahlung(); aktualisiere(); });
+      zahlung.form.feld('zahlweg').addEventListener('change', zeigeZahlung);
+      zahlung.inhaber.addEventListener('change', function () { zahlung.inhaberManuell = true; zeigeZahlung(); });
+      var iban = zahlung.form.feld('iban');
+      iban.setAttribute('autocomplete', 'off');
+      iban.addEventListener('change', pruefeIban);
+
+      // ---------------------------------------------------------------- 3. Familienbeitrag
+      gem = {};
+      gem.ueberschrift = A.el('h2', 'Familienbeitrag', { className: 'mv-neu-gruppe' });
+      gem.box = A.el('section', null, { className: 'karte mv-gemeinschaft' });
+      gem.art = radios('mv-gemart', [
+        { wert: 'keine', text: 'Kein Familienverbund – jede Person zahlt ihre eigene Beitragsart' },
+        { wert: 'neu', text: 'Als Familie (neue Beitragsgemeinschaft) führen' },
+        { wert: 'bestehend', text: 'In die bestehende Beitragsgemeinschaft aufnehmen' }
+      ], 'keine');
+      gem.box.appendChild(gem.art.element);
+      gem.form = A.formular([
+        { name: 'bezeichnung', titel: 'Bezeichnung', typ: 'text', pflicht: true },
+        { name: 'festbetrag', titel: 'Festbetrag (Familienpauschale)', typ: 'betrag', hilfe: 'Leer lassen, wenn jede Person ihren Einzeltarif zahlt.' }
+      ], {});
+      gem.box.appendChild(gem.form.element);
+      gem.bestehendInfo = A.el('p', '', { className: 'leise' });
+      gem.box.appendChild(gem.bestehendInfo);
+      gem.art.beiAenderung(function () { gem.manuell = true; zeigeGemeinschaft(); });
+      ziel.appendChild(gem.ueberschrift);
+      ziel.appendChild(gem.box);
+    }
+
+    function inhaberOptionen() {
+      var o = personen.map(function (p, i) { return { wert: 'p' + i, text: personName(p, i) + (minderjaehrig(p) ? ' (minderjährig)' : '') }; });
+      return o.concat([{ wert: 'frei', text: 'Jemand anderes (z. B. Großeltern) – Name eingeben' }]);
+    }
+    function ersterErwachsener() {
+      for (var i = 0; i < personen.length; i++) if (!minderjaehrig(personen[i])) return i;
+      return -1;
+    }
+
+    function zeigeZahlung() {
+      if (!zahlung) return;
+      var art = zahlung.art.wert();
+      zahlung.neuBox.hidden = art !== 'neu';
+      zahlung.kontoBox.hidden = art !== 'konto';
+      var e = ersterErwachsener();
+      var vorschlag = e >= 0 ? 'p' + e : 'frei';
+      waehleOptionen(zahlung.inhaber, inhaberOptionen(), zahlung.inhaberManuell ? zahlung.inhaber.value : vorschlag);
+      zahlung.form.feld('kontoinhaber_name').parentNode.hidden = zahlung.inhaber.value !== 'frei';
+      var lastschrift = zahlung.form.feld('zahlweg').value === 'Lastschrift';
+      zahlung.form.feld('mandatsdatum').parentNode.hidden = !lastschrift;
+      zahlung.form.feld('bic').parentNode.hidden = !lastschrift;
+    }
+
+    function konto(id) { return id ? A.daten.hole('konten', Number(id)) : null; }
+    function gemeinschaftVonKonto(kontoId) {
+      if (!kontoId) return null;
+      var m = A.daten.liste('mitglieder').filter(function (x) { return x.beitragskonto_id === Number(kontoId) && x.beitragsgemeinschaft_id && statusVon(x) === 'aktiv'; })[0];
+      return m ? A.daten.hole('gemeinschaften', m.beitragsgemeinschaft_id) : null;
+    }
+    function zeigeKonto() {
+      var k = konto(zahlung.kontoWahl.value);
+      zahlung.kontoInfo.className = 'leise';
+      if (!k) { zahlung.kontoInfo.textContent = ''; aktualisiere(); return; }
+      var mit = A.daten.liste('mitglieder').filter(function (x) { return x.beitragskonto_id === k.beitragskonto_id && statusVon(x) === 'aktiv'; });
+      zahlung.kontoInfo.textContent = kontoText(k) + (mit.length ? ' · zahlt bisher für: ' + mit.map(A.name).join('; ') : '');
+      aktualisiere();
+    }
+
+    function pruefeIban() {
+      var wert = zahlung.form.feld('iban').value.trim();
+      if (wert === zahlung.geprueft) return;   // z. B. erneutes „change“ beim Verlassen des Feldes – Hinweis stehen lassen
+      zahlung.geprueft = wert;
+      ibanTreffer = [];
+      A.leere(zahlung.ibanInfo);
+      zahlung.ibanInfo.hidden = true;
+      zahlung.trotz.checked = false;
+      if (!wert) return;
+      A.rufe('apiFinanzenIbanSuchen', wert, A.still).then(function (r) {
+        if (zahlung.form.feld('iban').value.trim() !== wert) return;   // inzwischen geändert
+        A.leere(zahlung.ibanInfo);
+        zahlung.ibanInfo.hidden = false;
+        if (!r.gueltig) { zahlung.ibanInfo.className = 'feldfehler'; zahlung.ibanInfo.textContent = r.fehler || 'Die IBAN ist ungültig.'; return; }
+        ibanTreffer = r.treffer.filter(function (t) { return t.aktiv; });
+        if (!ibanTreffer.length) {
+          var still = r.treffer.filter(function (t) { return !t.aktiv; });
+          zahlung.ibanInfo.className = 'leise';
+          zahlung.ibanInfo.textContent = still.length ? 'IBAN gültig. Sie gehörte zu einem stillgelegten Konto (' + still.map(function (t) { return 'Konto ' + t.beitragskonto_id + ' – ' + t.kontoinhaber_name; }).join('; ') + ') – es wird ein neues Konto angelegt.'
+            : 'IBAN gültig – noch kein Konto damit vorhanden.';
+          return;
+        }
+        zahlung.ibanInfo.className = 'mv-warnung mv-ibantreffer';
+        zahlung.ibanInfo.appendChild(A.el('strong', 'Diese IBAN gibt es schon.'));
+        ibanTreffer.forEach(function (t) {
+          var text = kontoText(t) + (t.zahler.length ? ' · zahlt für: ' + t.zahler.map(function (z) { return z.name; }).join('; ') : '') +
+            (t.gemeinschaften.length ? ' · Gemeinschaft „' + t.gemeinschaften.map(function (g) { return g.bezeichnung; }).join('“, „') + '“' : '');
+          zahlung.ibanInfo.appendChild(A.el('p', text));
+          zahlung.ibanInfo.appendChild(A.knopf('Dieses Konto verwenden', function () {
+            if (!zahlung.kontoWahl.querySelector('option[value="' + t.beitragskonto_id + '"]')) {
+              zahlung.kontoWahl.appendChild(A.el('option', kontoText(t), { value: String(t.beitragskonto_id) }));
+            }
+            gefundenesKonto = t;
+            zahlung.kontoWahl.value = String(t.beitragskonto_id);
+            zahlung.art.setze('konto');
+            zeigeKonto();
+            try { zahlung.kontoBox.scrollIntoView({ block: 'nearest' }); } catch (e) { /* egal */ }
+          }, 'klein'));
+        });
+        zahlung.ibanInfo.appendChild(A.el('label', null, null, [zahlung.trotz, A.el('span', ' Trotzdem ein eigenes, neues Konto anlegen')]));
+      }).catch(function () {});
+    }
+
+    function zeigeGemeinschaft() {
+      if (!gem) return;
+      var art = zahlung.art.wert();
+      var kontoId = art === 'konto' ? zahlung.kontoWahl.value : null;
+      var bestehend = gemeinschaftVonKonto(kontoId) ||
+        (gefundenesKonto && String(gefundenesKonto.beitragskonto_id) === String(kontoId) && gefundenesKonto.gemeinschaften[0] ? A.daten.hole('gemeinschaften', gefundenesKonto.gemeinschaften[0].beitragsgemeinschaft_id) : null);
+      gem.bestehend = bestehend;
+      var mehrere = personen.length > 1;
+      var sichtbar = art !== 'spaeter' && (mehrere || !!bestehend);
+      gem.ueberschrift.hidden = !sichtbar;
+      gem.box.hidden = !sichtbar;
+      gem.art.zeige('neu', mehrere && art !== 'spaeter');
+      gem.art.zeige('bestehend', !!bestehend);
+      if (!gem.manuell) gem.art.setze(bestehend ? 'bestehend' : mehrere ? 'neu' : 'keine', true);
+      if (gem.art.wert() === 'bestehend' && !bestehend) gem.art.setze('keine', true);
+      if (gem.art.wert() === 'neu' && !mehrere) gem.art.setze('keine', true);
+      var w = gem.art.wert();
+      gem.form.element.hidden = w !== 'neu';
+      gem.bestehendInfo.hidden = w !== 'bestehend' || !bestehend;
+      gem.bestehendInfo.textContent = bestehend ? 'Gemeinschaft „' + bestehend.bezeichnung + '“' + (bestehend.festbetrag ? ' – Festbetrag ' + A.betrag(bestehend.festbetrag) : ' – Einzeltarife') : '';
+      var bez = gem.form.feld('bezeichnung');
+      if (!bez.value || bez.dataset.auto === 'ja') {
+        var n = personen[0] && personen[0].form.werte().nachname;
+        bez.value = n ? 'Familie ' + n : '';
+        bez.dataset.auto = 'ja';
+      }
+    }
+
+    function aktualisiere() {
+      personen.forEach(function (p, i) {
+        p.titel.textContent = personen.length > 1 ? 'Person ' + (i + 1) + (personName(p, i) !== 'Person ' + (i + 1) ? ' – ' + personName(p, i) : '') : 'Person';
+        var mj = minderjaehrig(p);
+        p.vertretungBox.hidden = !mj;
+        if (mj) {
+          var opt = [{ wert: '', text: '– noch offen –' }];
+          personen.forEach(function (q, j) { if (j !== i && !minderjaehrig(q)) opt.push({ wert: 'p' + j, text: personName(q, j) + ' (aus diesem Antrag)' }); });
+          opt.push({ wert: 'mitglied', text: 'Ein Mitglied aus dem Bestand …' });
+          opt.push({ wert: 'frei', text: 'Jemand anderes (Name eingeben)' });
+          var e = ersterErwachsener();
+          var vorschlag = e >= 0 && e !== i ? 'p' + e : '';
+          var bisher = p.vertretungWahl.value;
+          var w = waehleOptionen(p.vertretungWahl, opt, p.vertretungGewaehltManuell ? bisher : vorschlag);
+          p.vertretungWahl.value = w;
+          zeigeVertretung(p);
+        }
+      });
+      weitere.hidden = personen.length >= 20;
+      anlegen.textContent = personen.length > 1 ? personen.length + ' Mitglieder anlegen' : 'Mitglied anlegen';
+      zeigeZahlung();
+      zeigeGemeinschaft();
+    }
+
+    var anlegen = A.knopf('Mitglied anlegen', speichern);
+    var leiste = A.el('div', null, { className: 'knopfleiste' }, [anlegen, A.knopf('Abbrechen', function () { A.zurueck(); }, 'zweit')]);
+
+    function eingabe() {
+      var e = { eintrittsdatum: kopf.werte().eintrittsdatum, personen: [] };
+      personen.forEach(function (p) {
+        var w = zahlenFK(p.form.werte(), 'Mitglied');
+        if (!w.briefanrede && p.form.feld('briefanrede')) w.briefanrede = briefanredeVorschlag(w) || null;
+        var v = null;
+        if (minderjaehrig(p)) {
+          var art = p.vertretungWahl.value;
+          if (/^p\d+$/.test(art)) v = { art: 'antrag', index: Number(art.slice(1)) };
+          else if (art === 'mitglied' && p.vertretungMitglied) v = { art: 'mitglied', mitglied_id: p.vertretungMitglied.mitglied_id };
+          else if (art === 'frei') v = { art: 'frei', name: p.vertretungFrei.werte().name, kontakt: p.vertretungFrei.werte().kontakt };
+        }
+        e.personen.push({ mitglied: w, abteilungen: p.abt.werte(), trotzDublette: p.trotz.checked, vertretung: v });
+      });
+      if (!zahlung) { e.zahlung = { art: 'spaeter' }; return e; }
+      var za = zahlung.art.wert();
+      if (za === 'neu') {
+        var k = zahlung.form.werte();
+        var inh = zahlung.inhaber.value;
+        if (inh !== 'frei') delete k.kontoinhaber_name;
+        if (k.zahlweg !== 'Lastschrift') { delete k.mandatsdatum; delete k.bic; }
+        e.zahlung = { art: 'neu', konto: k, inhaber: /^p\d+$/.test(inh) ? { art: 'antrag', index: Number(inh.slice(1)) } : null, trotzIban: zahlung.trotz.checked };
+      } else if (za === 'konto') e.zahlung = { art: 'konto', beitragskonto_id: zahlung.kontoWahl.value ? Number(zahlung.kontoWahl.value) : null };
+      else e.zahlung = { art: 'spaeter' };
+      var ga = gem.box.hidden ? 'keine' : gem.art.wert();
+      if (ga === 'neu') e.gemeinschaft = { art: 'neu', bezeichnung: gem.form.werte().bezeichnung, festbetrag: gem.form.werte().festbetrag };
+      else if (ga === 'bestehend' && gem.bestehend) e.gemeinschaft = { art: 'bestehend', beitragsgemeinschaft_id: gem.bestehend.beitragsgemeinschaft_id };
+      else e.gemeinschaft = { art: 'keine' };
+      return e;
+    }
+
+    function zeigeFehler(liste) {
+      kopf.setzeFehler(liste.filter(function (f) { return f.person === undefined && !f.bereich; }));
+      personen.forEach(function (p, i) {
+        var eigene = liste.filter(function (f) { return f.person === i; });
+        p.form.setzeFehler(eigene.filter(function (f) { return f.feld !== 'vertretung'; }));
+        var vf = eigene.filter(function (f) { return f.feld === 'vertretung'; })[0];
+        p.vertretungFehler.textContent = vf ? vf.meldung : '';
+        if (eigene.some(function (f) { return f.feld === 'nachname' && /Gleicher Name/.test(f.meldung); })) pruefeDublette(p);
+      });
+      if (zahlung) {
+        var zf = liste.filter(function (f) { return f.bereich === 'zahlung'; });
+        zahlung.form.setzeFehler(zf);
+        var inhF = zf.filter(function (f) { return f.feld === 'kontoinhaber_name' && zahlung.inhaber.value !== 'frei'; })[0];
+        zahlung.inhaberFehler.textContent = inhF ? inhF.meldung : '';
+        var kf = zf.filter(function (f) { return f.feld === 'beitragskonto_id'; })[0];
+        zahlung.kontoFehler.textContent = kf ? kf.meldung : '';
+        if (zf.some(function (f) { return f.feld === 'iban' && /bereits zu Konto/.test(f.meldung); })) { zahlung.geprueft = null; pruefeIban(); }
+        gem.form.setzeFehler(liste.filter(function (f) { return f.bereich === 'gemeinschaft'; }));
+        var gf = liste.filter(function (f) { return f.bereich === 'gemeinschaft' && f.feld === 'beitragsgemeinschaft_id'; })[0];
+        if (gf) gem.bestehendInfo.textContent = gf.meldung;
+      }
+    }
+
+    function speichern() {
+      var e = eingabe();
+      if (e.zahlung.art === 'konto' && !e.zahlung.beitragskonto_id) {
+        zahlung.kontoFehler.textContent = 'Bitte eine Person suchen oder ein Konto wählen.';
+        return null;
+      }
       anlegen.disabled = true;
-      f.setzeFehler([]);
-      return A.rufe('apiMitgliedAnlegen', eingabe).then(function (d) {
+      zeigeFehler([]);
+      return A.rufe('apiMitgliedAufnehmen', e).then(function (d) {
         A.daten.uebernehme(d);
-        f.gespeichert();
-        A.meldung('Angelegt mit Mitgliedsnummer ' + d.mitgliedsnummer + '.' + (d.hinweise && d.hinweise.length ? ' ' + d.hinweise.join(' ') : ''), d.hinweise && d.hinweise.length ? 'hinweis' : 'ok');
-        A.zeige('mitglied', { id: d.mitglied_id }, true);
+        kopf.gespeichert(); personen.forEach(function (p) { p.form.gespeichert(); });
+        if (zahlung) { zahlung.form.gespeichert(); gem.form.gespeichert(); }
+        var nr = d.mitglieder.map(function (m) { return m.mitgliedsnummer; }).join(', ');
+        A.meldung((d.mitglieder.length > 1 ? d.mitglieder.length + ' Mitglieder angelegt (Nr. ' + nr + ').' : 'Angelegt mit Mitgliedsnummer ' + nr + '.') +
+          (d.hinweise && d.hinweise.length ? ' ' + d.hinweise.join(' ') : ''), d.hinweise && d.hinweise.length ? 'hinweis' : 'ok');
+        A.zeige('mitglied', { id: d.mitglieder[0].mitglied_id }, true);
       }, function (err) {
         anlegen.disabled = false;
-        if (err.felder) f.setzeFehler(err.felder);
-        if (/Dublette/.test(err.message || '')) pruefeDublette();
+        if (err.felder) zeigeFehler(err.felder);
       });
-    });
-    ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [anlegen, A.knopf('Abbrechen', function () { A.zurueck(); }, 'zweit')]));
+    }
+
+    neuePerson(false);
+    ziel.appendChild(leiste);
+    aktualisiere();
   }
 
   // ================================================================== Dialoge

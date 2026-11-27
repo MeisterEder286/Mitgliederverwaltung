@@ -8,7 +8,7 @@ keine externen Schriften oder Bibliotheken. Mobil bedienbar, Rollen- und Feldrec
 | Bereich | Funktionen |
 |---|---|
 | **Start** | Kennzahlen je Rolle, Schnellsuche, „Zu erledigen“, Geburtstage der Woche |
-| **Mitglieder** | Liste mit Suche/Filter/Sortierung (lokal im Browser), Detail mit Reitern, Bearbeiten mit Versionsprüfung, Neuaufnahme mit Dublettenprüfung und automatischer Nummer, Austritt mit Konto-Guard (Waisen), Wiedereintritt, Sterbefall, Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck |
+| **Mitglieder** | Liste mit Suche/Filter/Sortierung (lokal im Browser), Detail mit Reitern, Bearbeiten mit Versionsprüfung, Neuaufnahme einzeln oder als Familie in einem Schritt (mit Zahler: neues Konto per IBAN mit Erkennung vorhandener Konten oder Konto einer anderen Person, Familienbeitrag, gesetzliche Vertretung nur unter 18), Dublettenprüfung und automatischer Nummer, Austritt mit Konto-Guard (Waisen), Wiedereintritt, Sterbefall, Listen (Kontakt, Jahrgang, Geburtstage, Passive) als CSV/Druck |
 | **Abteilungsleitung** | „Meine Abteilung“, Zuordnen per Exaktsuche (zwei Merkmale, Einmal-Token), Funktionen der eigenen Abteilung, FZ-Ampel und Einsicht erfassen |
 | **Funktionen** | Ämterhistorie mit von/bis, nie gelöscht; Nachweispflicht aus der Funktionsart |
 | **Familien** | Familienübersicht, wer aus dem Familienbeitrag herausfällt (Altersgrenze, Ende von Schule/Studium/Ausbildung mit prognostiziertem Datum), Verlängerung mit Nachweis, Umstellung auf Einzelbeitrag als Sammelaktion, Prognose der nächsten Jahre |

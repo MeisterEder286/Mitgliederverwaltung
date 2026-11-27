@@ -2,7 +2,8 @@
  * Mitglieder – Servermodul für Personen, Mitgliedschaft, Abteilungszugehörigkeiten und Funktionen.
  *
  * Zweck:      Fachliche Abläufe, die mehrere Tabs auf einmal betreffen und deshalb unter EINER Sperre laufen:
- *             Mitglied anlegen (Person + erster Zeitraum + Abteilungen), bearbeiten, Austritt mit Konto-Guard,
+ *             Mitglied anlegen (Person + erster Zeitraum + Abteilungen), Neuaufnahme einer Person oder Familie
+ *             samt Zahler (neues Konto / vorhandenes Konto, Beitragsgemeinschaft – aufnehmen), bearbeiten, Austritt mit Konto-Guard,
  *             Wiedereintritt, Sterbefall, Abteilungszugehörigkeit, Funktionen (Ämter), Exaktsuche des
  *             Abteilungsleiters, Protokollierung von Exporten.
  * Datenquelle: Lesen aus der Snapshot-Basis (Snapshot.basis().tabs – aktuell dank write-through, kein
@@ -244,6 +245,239 @@ var Mitglieder = (function () {
         hinweise.push('Noch kein Beitragskonto zugeordnet – Konto im Bereich Finanzen anlegen bzw. zuordnen.');
       }
       return antwort(ktx, aenderungen, protokoll, { mitglied_id: m.mitglied_id, mitgliedsnummer: m.mitgliedsnummer, hinweise: hinweise });
+    });
+  }
+
+  // ================================================================== Aufnahme (eine oder mehrere Personen + Zahlung)
+
+  var VERTRETUNG_FELDER = ['vertreter_mitglied_id', 'vertreter_name', 'vertreter_kontakt'];
+  var ZAHLUNG_FELDER = ['beitragskonto_id', 'beitragsgemeinschaft_id'];
+
+  /** Alter in vollen Jahren am Stichtag (beides 'JJJJ-MM-TT'); null ohne Geburtsdatum. */
+  function alterAm(geb, tag) {
+    if (!istDatum(geb) || !istDatum(tag)) return null;
+    return Number(tag.slice(0, 4)) - Number(geb.slice(0, 4)) - (tag.slice(5) < geb.slice(5) ? 1 : 0);
+  }
+
+  /**
+   * Neuaufnahme in EINER Sperre: eine Person oder eine ganze Familie, dazu wer zahlt und ggf. die Beitragsgemeinschaft.
+   * eingabe: {
+   *   eintrittsdatum, antrag_am?,
+   *   personen: [{ mitglied: {…}, abteilungen: [{ abteilung_id, status }], trotzDublette,
+   *                vertretung: null | { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | { art: 'frei', name, kontakt } }],
+   *   zahlung: { art: 'neu', konto: { zahlweg, iban, bic, mandatsdatum, kontoinhaber_name, abw_… }, inhaber: { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | null, trotzIban }
+   *          | { art: 'konto', beitragskonto_id } | { art: 'spaeter' },
+   *   gemeinschaft: { art: 'keine' } | { art: 'neu', bezeichnung, festbetrag } | { art: 'bestehend', beitragsgemeinschaft_id }
+   * }
+   * Feldfehler tragen { person: i } bzw. { bereich: 'zahlung' | 'gemeinschaft' }, damit der Browser sie zuordnen kann.
+   * Gesetzliche Vertretung wird nur bei Minderjährigen übernommen. Scheitert ein Schreibschritt, werden die bereits
+   * geschriebenen Zeilen wieder entfernt (alles oder nichts).
+   */
+  function aufnehmen(ktx, eingabe) {
+    eingabe = eingabe || {};
+    var personenRoh = Array.isArray(eingabe.personen) ? eingabe.personen : [];
+    if (!personenRoh.length) throw Fehler.fachlich('Bitte mindestens eine Person erfassen.');
+    if (personenRoh.length > 20) throw Fehler.fachlich('Höchstens 20 Personen in einem Antrag.');
+    var zahlung = eingabe.zahlung || { art: 'spaeter' };
+    var gemWahl = eingabe.gemeinschaft || { art: 'keine' };
+    if (['neu', 'konto', 'spaeter'].indexOf(zahlung.art) < 0) throw Fehler.fachlich('Bitte angeben, wer den Beitrag zahlt.');
+    if (['keine', 'neu', 'bestehend'].indexOf(gemWahl.art) < 0) throw Fehler.fachlich('Unbekannte Auswahl bei der Beitragsgemeinschaft.');
+    var finanzRecht = Rechte.darf(ktx, 'konto_bearbeiten');
+    if ((zahlung.art !== 'spaeter' || gemWahl.art !== 'keine') && !finanzRecht) throw Fehler.keinZugriff();
+
+    return DB.mitSperre(function () {
+      var h = heute();
+      var fehler = [], hinweise = [];
+      var eintritt = eingabe.eintrittsdatum;
+      if (!istDatum(eintritt)) fehler.push({ feld: 'eintrittsdatum', meldung: 'Eintrittsdatum: Angabe fehlt (TT.MM.JJJJ).' });
+
+      // 1. Personen prüfen
+      var personen = personenRoh.map(function (p, i) {
+        p = p || {};
+        var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', p.mitglied || {}));
+        ['status', 'mitgliedsnummer', 'sterbedatum'].concat(VERTRETUNG_FELDER, ZAHLUNG_FELDER).forEach(function (f) { delete felder[f]; });
+        var pr = plausibel(felder, {});
+        var fl = pr.fehler.slice();
+        felder.mitgliedsnummer = '0';
+        fl = fl.concat(Werte.pruefe('Mitglied', felder).filter(function (f) { return f.feld !== 'mitgliedsnummer'; }));
+        delete felder.mitgliedsnummer;
+        fl.forEach(function (f) { f.person = i; fehler.push(f); });
+        pr.warnungen.forEach(function (w) { hinweise.push((personenRoh.length > 1 ? (felder.vorname || 'Person ' + (i + 1)) + ': ' : '') + w); });
+        var d = dubletten(felder.nachname, felder.geburtsdatum);
+        if (d.length && p.trotzDublette !== true) {
+          fehler.push({ person: i, feld: 'nachname', meldung: 'Gleicher Name und Geburtsdatum vorhanden: ' +
+            d.map(function (x) { return x.name + ' (Nr. ' + x.mitgliedsnummer + ')'; }).join('; ') + '.' });
+        }
+        (p.abteilungen || []).forEach(function (a) { pruefeAbteilung(ktx, a.abteilung_id); });
+        var alter = alterAm(felder.geburtsdatum, h);
+        return { felder: felder, abteilungen: p.abteilungen || [], alter: alter, minderjaehrig: alter !== null && alter < 18, vertretung: p.vertretung || null };
+      });
+
+      // 2. Gesetzliche Vertretung (nur Minderjährige)
+      personen.forEach(function (p, i) {
+        var v = p.vertretung;
+        if (!p.minderjaehrig) { p.vertretung = null; return; }   // Volljährige: keine gesetzliche Vertretung
+        if (!v) { hinweise.push((p.felder.vorname || 'Person ' + (i + 1)) + ' ist minderjährig – gesetzliche Vertretung noch nicht erfasst.'); return; }
+        if (v.art === 'antrag') {
+          var j = Number(v.index);
+          var ziel = personen[j];
+          if (!ziel || j === i) fehler.push({ person: i, feld: 'vertretung', meldung: 'Gesetzliche Vertretung: Bitte eine andere Person aus diesem Antrag wählen.' });
+          else if (ziel.minderjaehrig) fehler.push({ person: i, feld: 'vertretung', meldung: 'Gesetzliche Vertretung: Die gewählte Person ist selbst minderjährig.' });
+          p.vertretung = { art: 'antrag', index: j };
+        } else if (v.art === 'mitglied') {
+          var vm = finde('Mitglied', 'mitglied_id', v.mitglied_id);
+          if (!vm || vm.anonymisiert === true) fehler.push({ person: i, feld: 'vertretung', meldung: 'Gesetzliche Vertretung: Das Mitglied wurde nicht gefunden.' });
+          p.vertretung = { art: 'mitglied', mitglied_id: vm ? vm.mitglied_id : null };
+        } else if (v.art === 'frei') {
+          var vn = String(v.name || '').trim().slice(0, 200);
+          if (!vn) fehler.push({ person: i, feld: 'vertretung', meldung: 'Gesetzliche Vertretung: Name fehlt.' });
+          p.vertretung = { art: 'frei', name: vn, kontakt: String(v.kontakt || '').trim().slice(0, 200) || null };
+        } else {
+          p.vertretung = null;
+          hinweise.push((p.felder.vorname || 'Person ' + (i + 1)) + ' ist minderjährig – gesetzliche Vertretung noch nicht erfasst.');
+        }
+      });
+
+      // 3. Zahlung
+      var kontoBestehend = null, kontoNeuWerte = null, inhaberIndex = null;
+      var kontenKlar = null;
+      if (zahlung.art === 'konto') {
+        kontoBestehend = finde('Beitragskonto', 'beitragskonto_id', zahlung.beitragskonto_id);
+        if (!kontoBestehend) fehler.push({ bereich: 'zahlung', feld: 'beitragskonto_id', meldung: 'Das gewählte Konto wurde nicht gefunden.' });
+        else if (kontoBestehend.aktiv === false) fehler.push({ bereich: 'zahlung', feld: 'beitragskonto_id', meldung: 'Das gewählte Konto ist stillgelegt.' });
+      } else if (zahlung.art === 'neu') {
+        var k = {};
+        Object.keys(zahlung.konto || {}).forEach(function (f) { k[f] = zahlung.konto[f]; });
+        delete k.mandatsreferenz; delete k.kontoinhaber_mitglied_id; delete k.aktiv;
+        var inh = zahlung.inhaber || null;
+        if (inh && inh.art === 'antrag') {
+          inhaberIndex = Number(inh.index);
+          var ip = personen[inhaberIndex];
+          if (!ip) fehler.push({ bereich: 'zahlung', feld: 'kontoinhaber_name', meldung: 'Kontoinhaber: Person nicht im Antrag.' });
+          else if (!k.kontoinhaber_name) k.kontoinhaber_name = [ip.felder.vorname, ip.felder.nachname].filter(Boolean).join(' ');
+        } else if (inh && inh.art === 'mitglied') {
+          var im = finde('Mitglied', 'mitglied_id', inh.mitglied_id);
+          if (!im) fehler.push({ bereich: 'zahlung', feld: 'kontoinhaber_name', meldung: 'Kontoinhaber: Mitglied nicht gefunden.' });
+          else { k.kontoinhaber_mitglied_id = im.mitglied_id; if (!k.kontoinhaber_name) k.kontoinhaber_name = [im.vorname, im.nachname].filter(Boolean).join(' '); }
+        }
+        if (k.zahlweg === 'Lastschrift') k.mandatsreferenz = 'TSV-PRUEFUNG';   // echte Referenz nach der Nummernvergabe
+        kontenKlar = DB.lese(['Beitragskonto']).Beitragskonto || [];
+        try { kontoNeuWerte = Finanzen.kontoPruefen(k, null, kontenKlar); } catch (e) {
+          if (Fehler.artVon(e) !== 'fachlich') throw e;
+          (e.felder || [{ feld: 'iban', meldung: e.meldung }]).forEach(function (f) { f.bereich = 'zahlung'; fehler.push(f); });
+        }
+        if (kontoNeuWerte && kontoNeuWerte.iban && zahlung.trotzIban !== true) {
+          var gleich = kontenKlar.filter(function (x) { return x.iban && x.aktiv !== false && Iban.normalisiere(x.iban) === kontoNeuWerte.iban; });
+          if (gleich.length) fehler.push({ bereich: 'zahlung', feld: 'iban', meldung: 'Diese IBAN gehört bereits zu Konto ' +
+            gleich.map(function (x) { return x.beitragskonto_id + ' (' + x.kontoinhaber_name + ')'; }).join(', ') + ' – bitte dieses Konto verwenden oder bestätigen, dass ein eigenes Konto nötig ist.' });
+        }
+      }
+
+      // 4. Beitragsgemeinschaft (alle Mitglieder einer Gemeinschaft zahlen über dasselbe Konto)
+      var gemBestehend = null, gemNeuWerte = null;
+      if (gemWahl.art === 'bestehend') {
+        gemBestehend = finde('Beitragsgemeinschaft', 'beitragsgemeinschaft_id', gemWahl.beitragsgemeinschaft_id);
+        if (!gemBestehend || gemBestehend.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsgemeinschaft_id', meldung: 'Die Beitragsgemeinschaft wurde nicht gefunden.' });
+        else {
+          var gKonto = ((daten().Mitglied || []).filter(function (m) { return m.beitragsgemeinschaft_id === gemBestehend.beitragsgemeinschaft_id && m.beitragskonto_id; })[0] || {}).beitragskonto_id;
+          var unserKonto = kontoBestehend ? kontoBestehend.beitragskonto_id : null;
+          if (gKonto && gKonto !== unserKonto) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsgemeinschaft_id', meldung: 'Alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto (Nr. ' + gKonto + ') – bitte dieses Konto als Zahler wählen.' });
+        }
+      } else if (gemWahl.art === 'neu') {
+        gemNeuWerte = { bezeichnung: String(gemWahl.bezeichnung || '').trim() || null, festbetrag: gemWahl.festbetrag === '' || gemWahl.festbetrag === undefined ? null : gemWahl.festbetrag, aktiv: true };
+        if (gemNeuWerte.festbetrag !== null) gemNeuWerte.festbetrag = Number(String(gemNeuWerte.festbetrag).replace(',', '.'));
+        if (!gemNeuWerte.bezeichnung) fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Bezeichnung: Angabe fehlt (z. B. „Familie Muster“).' });
+        if (gemNeuWerte.festbetrag !== null && !(gemNeuWerte.festbetrag >= 0)) fehler.push({ bereich: 'gemeinschaft', feld: 'festbetrag', meldung: 'Festbetrag: bitte einen Betrag ≥ 0 angeben.' });
+        if (zahlung.art === 'spaeter') fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Für eine Beitragsgemeinschaft muss feststehen, über welches Konto gezahlt wird.' });
+      }
+      feldfehler(fehler);
+
+      // 5. Schreiben – alles oder nichts
+      var geschrieben = [];
+      function rein(tab, obj) {
+        var neu = DB.einfuegen(tab, obj, ktx);
+        geschrieben.push({ tab: tab, id: neu[Schema.TABELLEN[tab].idSpalte] });
+        return neu;
+      }
+      try {
+        var aenderungen = [], protokoll = [];
+        var nummern = personen.map(function () { return naechsteMitgliedsnummer(); });
+        var konto = kontoBestehend;
+        if (kontoNeuWerte) {
+          if (kontoNeuWerte.zahlweg === 'Lastschrift') {
+            var vergeben = {};
+            kontenKlar.forEach(function (x) { if (x.mandatsreferenz) vergeben[x.mandatsreferenz] = true; });
+            var bezugNr = inhaberIndex !== null ? nummern[inhaberIndex] : nummern[0];
+            kontoNeuWerte.mandatsreferenz = Beitritt.mandatsreferenz(String(kontoNeuWerte.mandatsdatum || h).slice(0, 4), bezugNr, vergeben);
+          }
+          kontoNeuWerte.aktiv = true;
+          if (!kontoNeuWerte.bemerkung) kontoNeuWerte.bemerkung = 'Neuaufnahme ' + h;
+          konto = rein('Beitragskonto', kontoNeuWerte);
+          protokoll.push({ aktion: 'angelegt', tabelle: 'Beitragskonto', datensatz_id: konto.beitragskonto_id,
+            kommentar: 'Neuaufnahme: ' + konto.kontoinhaber_name + ' · ' + konto.zahlweg + (konto.iban ? ', IBAN ' + Iban.maskiere(konto.iban) : '') });
+          if (konto.mandatsreferenz) protokoll.push({ aktion: 'geändert', tabelle: 'Beitragskonto', datensatz_id: konto.beitragskonto_id, feld: 'mandatsreferenz', alt_wert: '', neu_wert: konto.mandatsreferenz });
+        }
+        var gem = gemBestehend;
+        if (gemNeuWerte) {
+          gem = rein('Beitragsgemeinschaft', gemNeuWerte);
+          aenderungen.push({ tab: 'Beitragsgemeinschaft', neu: gem });
+          protokoll.push({ aktion: 'angelegt', tabelle: 'Beitragsgemeinschaft', datensatz_id: gem.beitragsgemeinschaft_id, kommentar: gem.bezeichnung });
+        }
+        var neue = personen.map(function (p, i) {
+          var f = kopie(p.felder);
+          f.mitgliedsnummer = nummern[i];
+          f.status = Mitgliedschaft.status(f, [{ eintrittsdatum: eintritt, austrittsdatum: null }], h);
+          if (leer(f.land)) f.land = 'DE';
+          if (konto) f.beitragskonto_id = konto.beitragskonto_id;
+          if (gem) f.beitragsgemeinschaft_id = gem.beitragsgemeinschaft_id;
+          if (p.vertretung && p.vertretung.art === 'mitglied') f.vertreter_mitglied_id = p.vertretung.mitglied_id;
+          if (p.vertretung && p.vertretung.art === 'frei') { f.vertreter_name = p.vertretung.name; f.vertreter_kontakt = p.vertretung.kontakt; }
+          var m = rein('Mitglied', f);
+          var z = rein('Mitgliedschaftszeitraum', { mitglied_id: m.mitglied_id, eintrittsdatum: eintritt, antrag_am: istDatum(eingabe.antrag_am) ? eingabe.antrag_am : null });
+          aenderungen.push({ tab: 'Mitgliedschaftszeitraum', neu: z });
+          protokoll.push({ aktion: 'angelegt', tabelle: 'Mitglied', datensatz_id: m.mitglied_id, kommentar: 'Nr. ' + m.mitgliedsnummer + (personen.length > 1 ? ' (Aufnahme mit ' + personen.length + ' Personen)' : '') });
+          protokoll.push({ aktion: 'angelegt', tabelle: 'Mitgliedschaftszeitraum', datensatz_id: z.zeitraum_id, kommentar: 'Eintritt ' + z.eintrittsdatum });
+          p.abteilungen.forEach(function (a) {
+            var zug = rein('Abteilungszugehoerigkeit', { mitglied_id: m.mitglied_id, abteilung_id: Number(a.abteilung_id), status: a.status || 'aktiv', eintrittsdatum: eintritt });
+            aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: zug });
+            protokoll.push({ aktion: 'angelegt', tabelle: 'Abteilungszugehoerigkeit', datensatz_id: zug.zugehoerigkeit_id });
+          });
+          return m;
+        });
+        // Nachträge, die die neuen IDs brauchen: Vertretung innerhalb des Antrags, Kontoinhaber aus dem Antrag
+        neue = neue.map(function (m, i) {
+          var v = personen[i].vertretung;
+          if (!v || v.art !== 'antrag') return m;
+          var r = DB.aktualisieren('Mitglied', m.mitglied_id, { vertreter_mitglied_id: neue[v.index].mitglied_id }, m.version, ktx);
+          return r.neu;
+        });
+        neue.forEach(function (m) { aenderungen.push({ tab: 'Mitglied', neu: m }); });
+        if (kontoNeuWerte && inhaberIndex !== null) {
+          konto = DB.aktualisieren('Beitragskonto', konto.beitragskonto_id, { kontoinhaber_mitglied_id: neue[inhaberIndex].mitglied_id }, konto.version, ktx).neu;
+        }
+        if (kontoNeuWerte) {
+          aenderungen.push({ tab: 'Beitragskonto', neu: konto });
+          if (konto.zahlweg === 'Lastschrift') hinweise.push('Neues Mandat ' + konto.mandatsreferenz + ': Der erste Einzug läuft als Erstlastschrift (FRST).');
+        }
+        if (zahlung.art === 'spaeter' && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragskonto_id') >= 0) {
+          hinweise.push('Noch kein Beitragskonto zugeordnet – bitte im Bereich Finanzen nachtragen.');
+        }
+        neue.forEach(function (m) {
+          if (!m.beitragsart_id && !m.beitragsgemeinschaft_id && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragsart_id') >= 0) {
+            hinweise.push(name(m) + ': noch keine Beitragsart – bitte ergänzen (sonst Klärliste).');
+          }
+        });
+        return antwort(ktx, aenderungen, protokoll, {
+          mitglieder: neue.map(function (m) { return { mitglied_id: m.mitglied_id, mitgliedsnummer: m.mitgliedsnummer, name: name(m) }; }),
+          konto_id: konto ? konto.beitragskonto_id : null, gemeinschaft_id: gem ? gem.beitragsgemeinschaft_id : null,
+          hinweise: hinweise
+        });
+      } catch (e) {
+        for (var i = geschrieben.length - 1; i >= 0; i--) {
+          try { DB.entfernen(geschrieben[i].tab, [geschrieben[i].id]); } catch (e2) { console.error('Aufnahme: Zurückrollen ' + geschrieben[i].tab + ' fehlgeschlagen: ' + (e2 && e2.message)); }
+        }
+        throw e;
+      }
     });
   }
 
@@ -659,7 +893,7 @@ var Mitglieder = (function () {
 
   return {
     EXPORTARTEN: EXPORTARTEN,
-    speichern: speichern, adresseUngueltig: adresseUngueltig, dubletten: dubletten, anlegen: anlegen,
+    speichern: speichern, adresseUngueltig: adresseUngueltig, dubletten: dubletten, anlegen: anlegen, aufnehmen: aufnehmen,
     wiedereintritt: wiedereintritt, austrittVorbereiten: austrittVorbereiten, austritt: austritt, sterbefall: sterbefall,
     zugehoerigkeitSpeichern: zugehoerigkeitSpeichern, zugehoerigkeitBeenden: zugehoerigkeitBeenden,
     sucheExakt: sucheExakt, zuordnen: zuordnen,

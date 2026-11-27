@@ -64,14 +64,77 @@ test('Mitgliederverwalter: neues Mitglied mit Abteilung anlegen', async () => {
     await ui.page.getByLabel('Geburtsdatum', { exact: true }).fill('12.03.2012');
     await ui.page.getByLabel('Geburtsdatum', { exact: true }).dispatchEvent('change');
     await ui.page.locator('.mv-abteilungswahl label', { hasText: 'Turnen' }).locator('input').check();
+    // minderjährig → gesetzliche Vertretung wird abgefragt (hier: jemand außerhalb des Antrags)
+    await ui.page.getByLabel('Wer vertritt?').selectOption('frei');
+    await ui.page.locator('.mv-vertretung').getByLabel('Name', { exact: true }).fill('Petra Zollner');
+    // Wer zahlt: neues Konto; einzige Person ist minderjährig → Kontoinhaber „jemand anderes“ mit Namen
+    assert.strictEqual(await ui.page.getByLabel('Kontoinhaber *').inputValue(), 'frei');
+    await ui.page.getByLabel('Name des Kontoinhabers').fill('Petra Zollner');
+    await ui.page.getByLabel('IBAN', { exact: true }).fill('DE89 3704 0044 0532 0130 00');
+    await ui.page.getByLabel('IBAN', { exact: true }).dispatchEvent('change');
+    await ui.page.waitForSelector('text=noch kein Konto damit vorhanden');
     await ui.page.locator('button', { hasText: 'Mitglied anlegen' }).click();
     await ui.page.waitForSelector('.mv-kopf');
     const m = ui.objekte('Mitglied').find(x => x.nachname === 'Zollner');
     assert.ok(m, 'angelegt');
     assert.strictEqual(m.status, 'aktiv');
     assert.match(m.briefanrede || '', /Liebe Theresa/);
+    assert.strictEqual(m.vertreter_name, 'Petra Zollner');
     assert.ok(ui.objekte('Abteilungszugehoerigkeit').some(z => z.mitglied_id === m.mitglied_id && z.abteilung_id === 2));
     assert.ok(m.beitragsart_id, 'Beitragsart nach Alter vorgeschlagen');
+    const k = ui.objekte('Beitragskonto').find(x => x.beitragskonto_id === m.beitragskonto_id);
+    assert.ok(k, 'Konto angelegt und zugeordnet');
+    assert.strictEqual(k.kontoinhaber_name, 'Petra Zollner');
+    assert.strictEqual(k.zahlweg, 'Lastschrift');
+    assert.match(String(k.mandatsreferenz), /^TSV-\d{4}-/);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
+test('Mitgliederverwalter: Familie aufnehmen, vorhandene IBAN erkennen und Konto mitnutzen', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  const p = ui.page;
+  try {
+    await navigiere(ui, 'Mitglieder');
+    await p.locator('button', { hasText: 'Neues Mitglied' }).click();
+    await p.waitForSelector('text=Wer zahlt den Beitrag?');
+    await p.getByLabel('Vorname *').fill('Maria');
+    await p.getByLabel('Nachname *').fill('Familienprobe');
+    await p.getByLabel('Geburtsdatum', { exact: true }).fill('12.03.1984');
+    await p.getByLabel('Geburtsdatum', { exact: true }).dispatchEvent('change');
+    await p.getByLabel('Ort', { exact: true }).fill('Ergoldsbach');
+    // Volljährige: keine gesetzliche Vertretung
+    assert.strictEqual(await p.locator('.mv-person').first().locator('.mv-vertretung').isVisible(), false);
+    await p.locator('button', { hasText: 'Weitere Person' }).click();
+    const kind = p.locator('.mv-person').nth(1);
+    assert.strictEqual(await kind.getByLabel('Nachname *').inputValue(), 'Familienprobe', 'Nachname übernommen');
+    assert.strictEqual(await kind.getByLabel('Ort', { exact: true }).inputValue(), 'Ergoldsbach', 'Anschrift übernommen');
+    await kind.getByLabel('Vorname *').fill('Lena');
+    await kind.getByLabel('Geburtsdatum', { exact: true }).fill('01.05.2016');
+    await kind.getByLabel('Geburtsdatum', { exact: true }).dispatchEvent('change');
+    await kind.locator('.mv-vertretung').waitFor();
+    assert.strictEqual(await kind.getByLabel('Wer vertritt?').inputValue(), 'p0', 'Mutter aus dem Antrag vorgeschlagen');
+    // IBAN eines vorhandenen Kontos → Hinweis, Konto verwenden
+    const konto = ui.objekte('Beitragskonto').find(k => k.iban && (k.aktiv === true || k.aktiv === 'ja'));
+    await p.getByLabel('IBAN', { exact: true }).fill(konto.iban);
+    await p.getByLabel('IBAN', { exact: true }).dispatchEvent('change');
+    await p.waitForSelector('.mv-ibantreffer');
+    await p.locator('.mv-ibantreffer button', { hasText: 'Dieses Konto verwenden' }).click();
+    assert.strictEqual(await p.locator('#mv-kontowahl').inputValue(), String(konto.beitragskonto_id));
+    await keinUeberlauf(ui);
+    // Gehört das Konto schon zu einer Gemeinschaft, wird „bestehende“ vorgeschlagen, sonst eine neue Familie
+    const gemArt = await p.locator('input[name=mv-gemart]:checked').inputValue();
+    if (gemArt === 'neu') assert.strictEqual(await p.getByLabel('Bezeichnung *').inputValue(), 'Familie Familienprobe');
+    await p.locator('button', { hasText: '2 Mitglieder anlegen' }).click();
+    await p.waitForSelector('.mv-kopf');
+    const neu = ui.objekte('Mitglied').filter(x => x.nachname === 'Familienprobe');
+    assert.strictEqual(neu.length, 2);
+    const maria = neu.find(x => x.vorname === 'Maria'), lena = neu.find(x => x.vorname === 'Lena');
+    assert.strictEqual(maria.beitragskonto_id, konto.beitragskonto_id);
+    assert.strictEqual(lena.beitragskonto_id, konto.beitragskonto_id);
+    assert.strictEqual(lena.vertreter_mitglied_id, maria.mitglied_id);
+    assert.ok(!maria.vertreter_mitglied_id && !maria.vertreter_name);
+    assert.ok(lena.beitragsgemeinschaft_id && lena.beitragsgemeinschaft_id === maria.beitragsgemeinschaft_id, 'Familie als Gemeinschaft');
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });

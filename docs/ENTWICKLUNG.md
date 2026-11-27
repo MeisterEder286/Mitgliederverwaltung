@@ -283,7 +283,7 @@ Ansichten können sich in andere Ansichten einhängen, ohne deren Datei zu ände
 |---|---|---|
 | `mitglied.reiter` | `{ id, titel, sicht?, aktion?, zeichne(ziel, mitglied) }` | zusätzlicher Teil im Mitglied-Detail: steht seine `id` in `REITER_GRUPPEN` (client/ansicht_mitglieder), erscheint er als Abschnitt eines zusammengefassten Reiters, sonst als eigener Reiter am Ende |
 | `mitglied.knoepfe` | `function (mitglied) → Node\|null` | zusätzliche Knöpfe im Kopf des Mitglied-Details |
-| `mitglied.formular` | `function (formular, ziel, modus, mitglied)` | läuft nach Aufbau des Formulars „Bearbeiten“ (`modus = 'bearbeiten'`) bzw. „Neues Mitglied“ (`'neu'`) |
+| `mitglied.formular` | `function (formular, ziel, modus, mitglied)` | läuft nach Aufbau des Formulars „Bearbeiten“ (`modus = 'bearbeiten'`) bzw. „Neues Mitglied“ (`'neu'` für Person 1, `'neu_weitere'` für weitere Personen einer Familie; `ziel` ist dann die Personenkarte) |
 | `konto.abschnitt` | `function (ziel, konto)` | zusätzlicher Abschnitt am Ende des Konto-Details |
 
 Registrieren: `App.erweitere(ort, def)`. Fehler einer Erweiterung werden abgefangen und stören die Ansicht nicht.

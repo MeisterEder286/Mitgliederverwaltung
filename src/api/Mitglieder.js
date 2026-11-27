@@ -37,6 +37,17 @@ function apiMitgliedAnlegen(eingabe) {
   });
 }
 
+/**
+ * Neuaufnahme einer Person oder Familie mit Zahlung in einem Schritt (Ablauf „Neues Mitglied“):
+ * { eintrittsdatum, personen: [{ mitglied, abteilungen, trotzDublette, vertretung }], zahlung, gemeinschaft } –
+ * Einzelheiten bei Mitglieder.aufnehmen. Konto/Gemeinschaft verlangen zusätzlich konto_bearbeiten (prüft das Modul).
+ */
+function apiMitgliedAufnehmen(eingabe) {
+  return Api.ausfuehren('apiMitgliedAufnehmen', 'mitglied_anlegen', function (ktx) {
+    return Mitglieder.aufnehmen(ktx, eingabe);
+  });
+}
+
 /** Wiedereintritt: { eintrittsdatum, abteilungen: [{ abteilung_id, status }] }. */
 function apiMitgliedWiedereintritt(id, eingabe) {
   return Api.ausfuehren('apiMitgliedWiedereintritt', 'mitglied_anlegen', function (ktx) {

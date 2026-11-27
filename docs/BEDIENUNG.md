@@ -49,8 +49,20 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 - IBANs werden nur maskiert angezeigt; „aufdecken“ wird protokolliert.
 
 ## Mitgliederverwaltung / Vorstand
-- **Neues Mitglied:** Mitglieder → „Neues Mitglied“. Nummer wird automatisch vergeben; bei Namensgleichheit mit gleichem
-  Geburtsdatum erscheint ein Hinweis (oft ein Wiedereintritt → „Wiedereintritt“ statt neu anlegen).
+- **Neues Mitglied:** Mitglieder → „Neues Mitglied“. Ein Ablauf für eine einzelne Person oder eine ganze Familie:
+  1. **Wer tritt bei?** Person erfassen; mit „+ Weitere Person (Familie)“ kommen weitere dazu (Nachname, Anschrift und
+     Kontakt werden von Person 1 übernommen). Die Nummern vergibt das System. Bei gleichem Namen und Geburtsdatum
+     erscheint ein Hinweis (oft ein Wiedereintritt → „Wiedereintritt“ statt neu anlegen).
+     **Gesetzliche Vertretung** wird nur bei Personen unter 18 abgefragt; vorgeschlagen wird ein Erwachsener aus dem
+     Antrag, alternativ ein Mitglied aus dem Bestand oder ein freier Name.
+  2. **Wer zahlt den Beitrag?** „Neues Konto“ (Kontoinhaber, Zahlweg, IBAN, Mandatsdatum – die Mandatsreferenz vergibt
+     das System), „Zahlt über eine andere Person bzw. ein vorhandenes Konto“ (Person suchen oder Konto wählen) oder
+     „Noch offen“. Gibt es die eingegebene IBAN schon, erscheint sofort ein Hinweis mit Kontoinhaber und Zahlern:
+     „Dieses Konto verwenden“ oder bewusst „Trotzdem ein eigenes, neues Konto anlegen“.
+  3. **Familienbeitrag** (bei mehreren Personen oder wenn das gewählte Konto schon zu einer Familie gehört):
+     neue Beitragsgemeinschaft „Familie …“ (optional mit Festbetrag), Aufnahme in die bestehende oder keine.
+  Alles wird in einem Schritt gespeichert – entweder komplett oder gar nicht.
+  Beim **Bearbeiten** ist der Abschnitt „Gesetzliche Vertretung“ bei Volljährigen ausgeblendet (außer es ist noch etwas eingetragen).
 - **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
   bearbeiten). Eine oder mehrere Antrags-Dateien (XML wie bisher aus Access) auswählen – sie werden nur im Browser gelesen.
   Die Vorschau zeigt je Antrag die Personen mit vorläufiger Nummer, das Konto (IBAN nur maskiert), ggf. den

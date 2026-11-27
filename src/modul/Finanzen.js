@@ -167,6 +167,30 @@ var Finanzen = (function () {
     return { konto_id: id, iban: kt.iban ? Iban.formatiere(kt.iban) : null, bic: kt.bic || null };
   }
 
+  /**
+   * Konten mit dieser IBAN (Neuaufnahme: „Gibt es das Konto schon?“). Vergleich im Klartext nur hier auf dem Server,
+   * an den Browser geht die IBAN nur maskiert. Liefert { gueltig, fehler?, iban_maskiert, treffer: [...] }.
+   */
+  function ibanSuchen(ktx, iban) {
+    var pr = Iban.pruefe(String(iban || ''));
+    if (!pr.ok) return { gueltig: false, fehler: Iban.fehlertext(pr.fehler), treffer: [] };
+    var konten = DB.lese(['Beitragskonto']).Beitragskonto || [];
+    var b = basis().tabs;
+    var treffer = konten.filter(function (k) { return k.iban && Iban.normalisiere(k.iban) === pr.iban; }).map(function (k) {
+      var zahler = (b.Mitglied || []).filter(function (m) { return m.beitragskonto_id === k.beitragskonto_id && m.anonymisiert !== true && m.status !== 'ausgetreten' && m.status !== 'verstorben'; });
+      var gem = {};
+      zahler.forEach(function (m) { if (m.beitragsgemeinschaft_id) gem[m.beitragsgemeinschaft_id] = true; });
+      var gIx = nachId(b.Beitragsgemeinschaft || [], 'beitragsgemeinschaft_id');
+      return {
+        beitragskonto_id: k.beitragskonto_id, kontoinhaber_name: k.kontoinhaber_name, zahlweg: k.zahlweg, aktiv: k.aktiv !== false,
+        iban_maskiert: Iban.maskiere(k.iban),
+        zahler: zahler.map(function (m) { return { mitglied_id: m.mitglied_id, name: name(m) }; }),
+        gemeinschaften: Object.keys(gem).map(function (id) { var g = gIx[id]; return g && g.aktiv !== false ? { beitragsgemeinschaft_id: g.beitragsgemeinschaft_id, bezeichnung: g.bezeichnung } : null; }).filter(Boolean)
+      };
+    }).sort(function (a, c) { return (c.aktiv ? 1 : 0) - (a.aktiv ? 1 : 0); });
+    return { gueltig: true, iban_maskiert: Iban.maskiere(pr.iban), treffer: treffer };
+  }
+
   /** Vorschlag TSV-<Jahr>-<Mitgliedsnr>, eindeutig gegen vorhandene Referenzen. */
   function mandatsvorschlag(d, inhaberId, h) {
     var m = inhaberId ? nachId(d.Mitglied, 'mitglied_id')[inhaberId] : null;
@@ -724,7 +748,7 @@ var Finanzen = (function () {
   return {
     rechnungen: rechnungen, jahresuebersicht: jahresuebersicht,
     uebersicht: uebersicht, konto: konto, ibanAufdecken: ibanAufdecken,
-    kontoSpeichern: kontoSpeichern, kontoStilllegen: kontoStilllegen, personZuordnen: personZuordnen,
+    kontoSpeichern: kontoSpeichern, kontoPruefen: kontoPruefen, ibanSuchen: ibanSuchen, kontoStilllegen: kontoStilllegen, personZuordnen: personZuordnen,
     gemeinschaftSpeichern: gemeinschaftSpeichern, gemeinschaftMitglied: gemeinschaftMitglied, gemeinschaftAufloesen: gemeinschaftAufloesen,
     sollstellungPlanen: sollstellungPlanen, sollstellungAnlegen: sollstellungAnlegen, sollstellungStatus: sollstellungStatus,
     sammelBezahlt: sammelBezahlt,
