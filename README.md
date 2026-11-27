@@ -48,6 +48,7 @@ npm test          # Server- und Fachlogik-Tests (Node ≥ 20, keine Abhängigkei
 npm run test:ui   # Oberflächentests in Chromium gegen den echten Servercode (Playwright)
                   # einmalig vorher: npm install; npx playwright install chromium
 npm run vorschau  # Oberfläche lokal ansehen (--gross: 1.200 synthetische Mitglieder)
+npm run testdaten # synthetischen Verein als TSV je Tab für die Test-Tabelle in Google (docs/BETRIEB.md, 3)
 npm run push      # check + test + test:ui + clasp push
 npm run schema    # Datenmodell-CSV → src/lib/schema.js
 npm run push:eingang  # Eingangs-Skript (eigenes Projekt, eingang/.clasp.json)

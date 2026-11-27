@@ -5,7 +5,7 @@
  *             Datenmodells – so, wie die Daten nach der Migration im Google Sheet stehen würden.
  * Datenquelle: Schema und Startbelegung aus src/lib/ (erzeugt aus docs/daten/*.csv). Alle Personen, Adressen,
  *             IBANs und Beträge sind frei erfunden. Es gibt KEINE Verbindung zu echten Mitgliedern.
- * Wer darf was: – (nur Entwicklung; landet nie in Google).
+ * Wer darf was: – (nur Entwicklung; in Google höchstens in der Test-Tabelle über tools/testdaten-export.js).
  * Besonderheiten:
  *   - Deterministisch: gleicher seed → byte-gleiche Daten (eigener Zufallsgenerator mulberry32).
  *   - Zellformat wie im Sheet: Datum/Zeitpunkt als Seriennummer, ja/nein als 'ja'/'nein', Kopfzeile in

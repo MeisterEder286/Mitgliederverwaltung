@@ -7,3 +7,5 @@ migration/ausgabe/
 *.accdb
 *.mdb
 vorschau*.html
+# Synthetische Testdaten-Exporte (npm run testdaten) – erzeugt, nicht einchecken
+testdaten/
