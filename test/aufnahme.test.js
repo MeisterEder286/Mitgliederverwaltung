@@ -112,3 +112,59 @@ test('Bestehende Gemeinschaft nur mit deren Konto', () => {
   const neu = u.obj('Mitglied').find(x => x.mitglied_id === d.mitglieder[0].mitglied_id);
   assert.strictEqual(neu.beitragsgemeinschaft_id, m.beitragsgemeinschaft_id);
 });
+
+// ---------------------------------------------------------------- Bearbeiten: „Wer zahlt?“
+
+function aktivMitGemeinschaft(u) {
+  const ms = u.obj('Mitglied'), zr = u.obj('Mitgliedschaftszeitraum');
+  const aktiv = m => !m.sterbedatum && zr.some(z => z.mitglied_id === m.mitglied_id && !z.austrittsdatum && !z.austritt_wirksam);
+  const je = {};
+  ms.filter(m => m.beitragsgemeinschaft_id && aktiv(m)).forEach(m => (je[m.beitragsgemeinschaft_id] = je[m.beitragsgemeinschaft_id] || []).push(m));
+  return { ms, aktiv, familie: Object.values(je).find(l => l.length >= 3) };
+}
+
+test('Bearbeiten: neues Konto per IBAN für eine Einzelperson, Stammdaten in derselben Sperre', () => {
+  const u = als(MV);
+  const { ms, aktiv } = aktivMitGemeinschaft(u);
+  const m = ms.find(x => !x.beitragsgemeinschaft_id && x.beitragskonto_id && aktiv(x));
+  const d = ok(u.g.apiMitgliedSpeichern(m.mitglied_id, m.version, { ort: 'Neufahrn' },
+    { zahlung: { art: 'neu', inhaber: { art: 'selbst' }, konto: { zahlweg: 'Lastschrift', iban: 'DE02120300000000202051', mandatsdatum: '2026-11-01' } }, gemeinschaft: { art: 'unveraendert' } }));
+  const neu = u.obj('Mitglied').find(x => x.mitglied_id === m.mitglied_id);
+  assert.strictEqual(neu.ort, 'Neufahrn');
+  assert.notStrictEqual(neu.beitragskonto_id, m.beitragskonto_id);
+  const k = u.obj('Beitragskonto').find(x => x.beitragskonto_id === neu.beitragskonto_id);
+  assert.strictEqual(k.kontoinhaber_mitglied_id, m.mitglied_id);
+  assert.strictEqual(k.mandatsreferenz.startsWith('TSV-2026-'), true);
+  assert.ok(d.hinweise.some(h => /Erstlastschrift/.test(h)));
+});
+
+test('Bearbeiten: Familienmitglied wechselt das Konto – nur mit „ganze Familie“ oder Austritt aus der Gemeinschaft', () => {
+  const u = als(MV);
+  const { familie } = aktivMitGemeinschaft(u);
+  const [a] = familie;
+  const anderes = u.obj('Beitragskonto').find(k => k.aktiv === true && k.beitragskonto_id !== a.beitragskonto_id);
+  const f = fehler(u.g.apiMitgliedSpeichern(a.mitglied_id, a.version, {}, { zahlung: { art: 'konto', beitragskonto_id: anderes.beitragskonto_id }, gemeinschaft: { art: 'unveraendert' } }), 'fachlich');
+  assert.ok(f.felder.some(x => x.bereich === 'gemeinschaft'));
+  // ganze Familie wechselt mit
+  ok(u.g.apiMitgliedSpeichern(a.mitglied_id, a.version, {}, { zahlung: { art: 'konto', beitragskonto_id: anderes.beitragskonto_id }, mitGemeinschaft: true, gemeinschaft: { art: 'unveraendert' } }));
+  const nachher = u.obj('Mitglied').filter(x => familie.some(y => y.mitglied_id === x.mitglied_id));
+  assert.ok(nachher.every(x => x.beitragskonto_id === anderes.beitragskonto_id && x.beitragsgemeinschaft_id === a.beitragsgemeinschaft_id));
+});
+
+test('Bearbeiten: Person zahlt über eine andere Person, neue Familie mit deren Zahlern; ohne Kontorecht kein Zahlerwechsel', () => {
+  const u = als(MV);
+  const { ms, aktiv } = aktivMitGemeinschaft(u);
+  const einzel = ms.filter(x => !x.beitragsgemeinschaft_id && x.beitragskonto_id && aktiv(x));
+  const zahler = einzel[0], kind = einzel.find(x => x.beitragskonto_id !== zahler.beitragskonto_id);
+  const d = ok(u.g.apiMitgliedSpeichern(kind.mitglied_id, kind.version, {}, {
+    zahlung: { art: 'konto', beitragskonto_id: zahler.beitragskonto_id },
+    gemeinschaft: { art: 'neu', gemeinschaftsart_id: 1, bezeichnung: 'Familie Test', mit: [zahler.mitglied_id] }
+  }));
+  const k2 = u.obj('Mitglied').find(x => x.mitglied_id === kind.mitglied_id), z2 = u.obj('Mitglied').find(x => x.mitglied_id === zahler.mitglied_id);
+  assert.strictEqual(k2.beitragskonto_id, zahler.beitragskonto_id);
+  assert.ok(k2.beitragsgemeinschaft_id && k2.beitragsgemeinschaft_id === z2.beitragsgemeinschaft_id);
+  assert.strictEqual(u.obj('Beitragsgemeinschaft').find(g => g.beitragsgemeinschaft_id === k2.beitragsgemeinschaft_id).festbetrag, 180);
+  assert.ok(Array.isArray(d.hinweise));
+  const k = als(KASSIER);
+  fehler(k.g.apiMitgliedSpeichern(zahler.mitglied_id, z2.version, {}, { zahlung: { art: 'keine' } }), 'zugriff');
+});

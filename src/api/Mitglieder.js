@@ -9,10 +9,14 @@
  *             mit App.daten.uebernehme, ein zweiter Aufruf ist nicht nötig. Datumsangaben als 'JJJJ-MM-TT'.
  */
 
-/** Stammdaten eines Mitglieds ändern. werte: Felder aus dem Feldkatalog (nur sichtbare werden übernommen). */
-function apiMitgliedSpeichern(id, version, werte) {
+/**
+ * Stammdaten eines Mitglieds ändern. werte: Felder aus dem Feldkatalog (nur sichtbare werden übernommen).
+ * zahlung (optional): „Wer zahlt?“ in derselben Sperre ändern – Einzelheiten bei Mitglieder.zahlungPlanen;
+ * verlangt zusätzlich konto_bearbeiten (prüft das Modul).
+ */
+function apiMitgliedSpeichern(id, version, werte, zahlung) {
   return Api.ausfuehren('apiMitgliedSpeichern', 'mitglied_bearbeiten', function (ktx) {
-    return Mitglieder.speichern(ktx, Number(id), Number(version), werte);
+    return Mitglieder.speichern(ktx, Number(id), Number(version), werte, zahlung && typeof zahlung === 'object' ? zahlung : null);
   });
 }
 

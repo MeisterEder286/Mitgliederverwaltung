@@ -145,6 +145,47 @@ test('Mitgliederverwalter: Familie aufnehmen, vorhandene IBAN erkennen und Konto
   } finally { await ui.schliessen(); }
 });
 
+test('Bearbeiten: „Wer zahlt?“ statt Auswahlliste – neues Konto per IBAN; Familienmitglied braucht „ganze Familie“', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  const p = ui.page;
+  try {
+    const ms = ui.objekte('Mitglied'), zr = ui.objekte('Mitgliedschaftszeitraum');
+    const aktiv = m => !m.sterbedatum && zr.some(z => z.mitglied_id === m.mitglied_id && !z.austrittsdatum && !z.austritt_wirksam);
+    const einzel = ms.find(m => aktiv(m) && m.beitragskonto_id && !m.beitragsgemeinschaft_id && m.geburtsdatum);
+    await p.evaluate(id => App.zeige('mitglied', { id }), einzel.mitglied_id);
+    await p.locator('button', { hasText: 'Bearbeiten' }).first().click();
+    await p.waitForSelector('text=Wer zahlt den Beitrag?');
+    assert.strictEqual(await p.getByLabel('Beitragskonto', { exact: true }).count(), 0, 'keine Auswahlliste Beitragskonto mehr');
+    await p.locator('.mv-zahlung label', { hasText: 'Neues Konto anlegen' }).locator('input').check();
+    await p.locator('.mv-zahlung').getByLabel('IBAN', { exact: true }).fill('DE02 1203 0000 0000 2020 51');
+    await p.locator('.mv-zahlung').getByLabel('IBAN', { exact: true }).dispatchEvent('change');
+    await p.waitForSelector('text=noch kein Konto damit vorhanden');
+    await keinUeberlauf(ui);
+    await p.locator('.knopfleiste button', { hasText: 'Speichern' }).click();
+    await p.waitForSelector('.mv-kopf');
+    const neu = ui.objekte('Mitglied').find(m => m.mitglied_id === einzel.mitglied_id);
+    assert.notStrictEqual(neu.beitragskonto_id, einzel.beitragskonto_id);
+    const k = ui.objekte('Beitragskonto').find(x => x.beitragskonto_id === neu.beitragskonto_id);
+    assert.strictEqual(k.kontoinhaber_mitglied_id, einzel.mitglied_id);
+
+    // Familienmitglied: anderes Konto → „Ganze Familie wechselt mit“ wird angeboten
+    const je = {};
+    ms.filter(m => aktiv(m) && m.beitragsgemeinschaft_id).forEach(m => (je[m.beitragsgemeinschaft_id] = je[m.beitragsgemeinschaft_id] || []).push(m));
+    const fam = Object.values(je).find(l => l.length >= 2)[0];
+    await p.evaluate(id => App.zeige('mitglied', { id }), fam.mitglied_id);
+    await p.locator('button', { hasText: 'Bearbeiten' }).first().click();
+    await p.waitForSelector('text=Wer zahlt den Beitrag?');
+    await p.locator('.mv-zahlung label', { hasText: 'Zahlt über eine andere Person' }).locator('input').check();
+    await p.locator('#mv-bz-kontowahl').selectOption({ index: 1 });
+    await p.locator('#mv-bz-kontowahl').dispatchEvent('change');
+    if (await p.locator('#mv-bz-kontowahl').inputValue() !== String(fam.beitragskonto_id)) {
+      await p.waitForSelector('text=Ganze Familie wechselt mit');
+      assert.strictEqual(await p.locator('input[name=mv-bz-gemart]:checked').inputValue() !== 'unveraendert', true, 'ohne Familie: Gemeinschaft verlassen');
+    }
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
 test('Mitgliederverwalter: Austritt eines Kontoinhabers verlangt eine Entscheidung', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   try {

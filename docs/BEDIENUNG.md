@@ -68,6 +68,12 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
      diesem Datum zählen sie bis zur Altersgrenze der Regel (Standard 25) weiter als Kind im Familienbeitrag.
   Alles wird in einem Schritt gespeichert – entweder komplett oder gar nicht.
   Beim **Bearbeiten** ist der Abschnitt „Gesetzliche Vertretung“ bei Volljährigen ausgeblendet (außer es ist noch etwas eingetragen).
+- **Zahler ändern:** im Mitglied → „Bearbeiten“ → Abschnitt **„Wer zahlt den Beitrag?“** (statt der früheren Auswahllisten
+  Beitragskonto/Beitragsgemeinschaft): „Unverändert“, „Neues Konto anlegen“ (IBAN eingeben – vorhandene IBAN wird
+  erkannt), „Zahlt über eine andere Person bzw. ein vorhandenes Konto“ oder „Kein Konto“. Gehört die Person zu einer
+  Familie, wählt man „Ganze Familie wechselt mit“ oder sie verlässt die Gemeinschaft. Darunter: in die Gemeinschaft des
+  neuen Kontos aufnehmen oder eine neue nach Regel (Familien-/Ehegattenbeitrag) mit den übrigen Zahlern des Kontos
+  bilden. Wird ein altes Konto danach von niemandem mehr genutzt, erscheint ein Hinweis zum Stilllegen.
 - **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
   bearbeiten). Eine oder mehrere Antrags-Dateien (XML wie bisher aus Access) auswählen – sie werden nur im Browser gelesen.
   Die Vorschau zeigt je Antrag die Personen mit vorläufiger Nummer, das Konto (IBAN nur maskiert), ggf. den

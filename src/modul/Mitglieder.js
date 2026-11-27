@@ -145,13 +145,19 @@ var Mitglieder = (function () {
 
   // ================================================================== Bearbeiten
 
-  function speichern(ktx, id, version, werte) {
+  /**
+   * Stammdaten speichern; optional in derselben Sperre auch „Wer zahlt?“ ändern (zahlungEingabe, siehe zahlungAendern).
+   */
+  function speichern(ktx, id, version, werte, zahlungEingabe) {
+    var zahlungGeaendert = zahlungEingabe && ((zahlungEingabe.zahlung || {}).art || 'unveraendert') + '|' + ((zahlungEingabe.gemeinschaft || {}).art || 'unveraendert') !== 'unveraendert|unveraendert';
+    if (zahlungGeaendert && !Rechte.darf(ktx, 'konto_bearbeiten')) throw Fehler.keinZugriff();
     return DB.mitSperre(function () {
       Snapshot.pruefeMitglied(ktx, id);
       var alt = mitglied(id);
       var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', werte || {}));
       delete felder.status;          // Cache, nur vom Skript
       delete felder.mitgliedsnummer; // bleibt lebenslang gleich
+      if (zahlungEingabe) { delete felder.beitragskonto_id; delete felder.beitragsgemeinschaft_id; }   // laufen über zahlungAendern
       // Datenschutz-Status nur über den Datenschutz-Ablauf (Sperren/Anonymisieren mit Protokoll), nicht per
       // normalem Bearbeiten (Befund N2 der Sicherheitsprüfung).
       ['anonymisiert', 'anonymisiert_am', 'verarbeitung_eingeschraenkt', 'sperre_grund', 'loeschbar_ab']
@@ -159,12 +165,145 @@ var Mitglieder = (function () {
       pruefeSchema('Mitglied', felder, true);
       var p = plausibel(felder, alt);
       feldfehler(p.fehler);
+      var hinweise = p.warnungen.slice();
+      var plan = zahlungGeaendert ? zahlungPlanen(ktx, alt, zahlungEingabe) : null;   // prüft alles VOR dem ersten Schreiben
       var r = DB.aktualisieren('Mitglied', id, felder, version, ktx);
       var aenderungen = [{ tab: 'Mitglied', neu: r.neu }];
       var protokoll = Protokoll.ausDiff('Mitglied', id, r.diff);
       if (Object.prototype.hasOwnProperty.call(felder, 'sterbedatum')) statusNachziehen(ktx, r.neu, null, aenderungen, protokoll);
-      return antwort(ktx, aenderungen, protokoll, { hinweise: p.warnungen });
+      if (plan) zahlungSchreiben(ktx, plan, aenderungen[aenderungen.length - 1].neu, aenderungen, protokoll, hinweise);
+      return antwort(ktx, aenderungen, protokoll, { hinweise: hinweise });
     });
+  }
+
+  /**
+   * „Wer zahlt?“ für ein bestehendes Mitglied prüfen. eingabe: {
+   *   zahlung: { art: 'unveraendert' } | { art: 'neu', konto: {…}, inhaber: { art: 'selbst' } | { art: 'mitglied', mitglied_id } | null, trotzIban }
+   *          | { art: 'konto', beitragskonto_id } | { art: 'keine' },
+   *   mitGemeinschaft: true → die übrigen aktiven Mitglieder der bisherigen Gemeinschaft wechseln mit auf das neue Konto,
+   *   gemeinschaft: { art: 'unveraendert' | 'keine' } | { art: 'bestehend', beitragsgemeinschaft_id }
+   *              | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] (weitere Zahler des Kontos) } }
+   * Wirft Feldfehler (bereich 'zahlung' / 'gemeinschaft'); liefert den Plan für zahlungSchreiben.
+   */
+  function zahlungPlanen(ktx, m, eingabe) {
+    var h = heute(), fehler = [];
+    var z = eingabe.zahlung || { art: 'unveraendert' }, gw = eingabe.gemeinschaft || { art: 'unveraendert' };
+    if (['unveraendert', 'neu', 'konto', 'keine'].indexOf(z.art) < 0) throw Fehler.fachlich('Bitte angeben, wer den Beitrag zahlt.');
+    if (['unveraendert', 'keine', 'bestehend', 'neu'].indexOf(gw.art) < 0) throw Fehler.fachlich('Unbekannte Auswahl bei der Beitragsgemeinschaft.');
+    function aktiv(x) { return x.anonymisiert !== true && Mitgliedschaft.status(x, zeitraeume(x.mitglied_id), h) === 'aktiv'; }
+    var plan = { zielKonto: m.beitragskonto_id || null, kontoNeu: null, gemNeu: null, zielGem: m.beitragsgemeinschaft_id || null, mitziehen: [], aufnehmen: [] };
+
+    if (z.art === 'keine') plan.zielKonto = null;
+    else if (z.art === 'konto') {
+      var k = finde('Beitragskonto', 'beitragskonto_id', z.beitragskonto_id);
+      if (!k) fehler.push({ bereich: 'zahlung', feld: 'beitragskonto_id', meldung: 'Das gewählte Konto wurde nicht gefunden.' });
+      else if (k.aktiv === false) fehler.push({ bereich: 'zahlung', feld: 'beitragskonto_id', meldung: 'Das gewählte Konto ist stillgelegt.' });
+      else plan.zielKonto = k.beitragskonto_id;
+    } else if (z.art === 'neu') {
+      var zz = {};
+      Object.keys(z).forEach(function (f) { zz[f] = z[f]; });
+      if (zz.inhaber && zz.inhaber.art === 'selbst') zz.inhaber = { art: 'mitglied', mitglied_id: m.mitglied_id };
+      plan.kontoNeu = pruefeKontoNeu(zz, null, fehler);
+      plan.bezugNr = m.mitgliedsnummer;
+      if (zz.inhaber && zz.inhaber.art === 'mitglied') { var im = finde('Mitglied', 'mitglied_id', zz.inhaber.mitglied_id); if (im) plan.bezugNr = im.mitgliedsnummer; }
+      plan.zielKonto = 'neu';
+    }
+    var kontoWechsel = plan.zielKonto !== (m.beitragskonto_id || null);
+
+    // Bisherige Gemeinschaft: ganze Familie mitnehmen?
+    var altGem = m.beitragsgemeinschaft_id || null;
+    var andereAlt = altGem ? (daten().Mitglied || []).filter(function (x) { return x.mitglied_id !== m.mitglied_id && x.beitragsgemeinschaft_id === altGem && aktiv(x); }) : [];
+    if (kontoWechsel && eingabe.mitGemeinschaft === true && altGem) {
+      if (plan.zielKonto === null) fehler.push({ bereich: 'zahlung', feld: 'beitragskonto_id', meldung: 'Eine Familie kann nicht ohne Konto weitergeführt werden – bitte ein Konto wählen oder die Gemeinschaft verlassen.' });
+      plan.mitziehen = andereAlt;
+    }
+
+    if (gw.art === 'keine') plan.zielGem = null;
+    else if (gw.art === 'unveraendert') {
+      if (altGem && kontoWechsel && andereAlt.length && !plan.mitziehen.length) {
+        fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsgemeinschaft_id', meldung: 'Die Person gehört zu einer Beitragsgemeinschaft, deren übrige Mitglieder über Konto ' + m.beitragskonto_id +
+          ' zahlen. Bitte „ganze Familie wechselt mit“ wählen oder die Gemeinschaft verlassen.' });
+      }
+    } else if (gw.art === 'bestehend') {
+      var g = finde('Beitragsgemeinschaft', 'beitragsgemeinschaft_id', gw.beitragsgemeinschaft_id);
+      if (!g || g.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsgemeinschaft_id', meldung: 'Die Beitragsgemeinschaft wurde nicht gefunden.' });
+      else {
+        var gk = kontoDerGemeinschaft(g.beitragsgemeinschaft_id, m.mitglied_id);
+        if (gk && gk !== plan.zielKonto) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsgemeinschaft_id', meldung: 'Alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto (Nr. ' + gk + ') – bitte dieses Konto als Zahler wählen.' });
+        plan.zielGem = g.beitragsgemeinschaft_id;
+      }
+    } else if (gw.art === 'neu') {
+      plan.gemNeu = pruefeGemeinschaftNeu(gw, fehler);
+      if (plan.zielKonto === null) fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Für eine Beitragsgemeinschaft muss feststehen, über welches Konto gezahlt wird.' });
+      (Array.isArray(gw.mit) ? gw.mit : []).forEach(function (mid) {
+        var x = finde('Mitglied', 'mitglied_id', mid);
+        if (!x || x.mitglied_id === m.mitglied_id || !aktiv(x)) return;
+        var kontoX = plan.mitziehen.indexOf(x) >= 0 ? plan.zielKonto : x.beitragskonto_id;
+        if (kontoX !== plan.zielKonto) { fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: name(x) + ' zahlt über ein anderes Konto und kann nicht in diese Gemeinschaft.' }); return; }
+        if (x.beitragsgemeinschaft_id && x.beitragsgemeinschaft_id !== altGem) { fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: name(x) + ' gehört schon zu einer anderen Gemeinschaft.' }); return; }
+        plan.aufnehmen.push(x);
+      });
+      plan.zielGem = 'neu';
+    }
+    feldfehler(fehler);
+    plan.altKonto = m.beitragskonto_id || null;
+    plan.altGem = altGem;
+    plan.andereAlt = andereAlt;
+    plan.kontoWechsel = kontoWechsel;
+    return plan;
+  }
+
+  /** Plan aus zahlungPlanen schreiben (in derselben Sperre); m = aktuelle Zeile des Mitglieds nach dem Speichern der Stammdaten. */
+  function zahlungSchreiben(ktx, plan, m, aenderungen, protokoll, hinweise) {
+    var h = heute();
+    var konto = null;
+    if (plan.kontoNeu) {
+      konto = schreibeKontoNeu(ktx, plan.kontoNeu, plan.bezugNr, h, 'Zahlerwechsel ' + h, protokoll, function (tab, o) { return DB.einfuegen(tab, o, ktx); });
+      aenderungen.push({ tab: 'Beitragskonto', neu: konto });
+      if (konto.zahlweg === 'Lastschrift') hinweise.push('Neues Mandat ' + konto.mandatsreferenz + ': Der erste Einzug läuft als Erstlastschrift (FRST).');
+    }
+    var kontoId = plan.zielKonto === 'neu' ? konto.beitragskonto_id : plan.zielKonto;
+    var gem = null;
+    if (plan.gemNeu) {
+      gem = DB.einfuegen('Beitragsgemeinschaft', plan.gemNeu, ktx);
+      aenderungen.push({ tab: 'Beitragsgemeinschaft', neu: gem });
+      protokoll.push({ aktion: 'angelegt', tabelle: 'Beitragsgemeinschaft', datensatz_id: gem.beitragsgemeinschaft_id, kommentar: gem.bezeichnung });
+    }
+    var gemId = plan.zielGem === 'neu' ? gem.beitragsgemeinschaft_id : plan.zielGem;
+    var neu = {};   // mitglied_id → neue Zeile
+    function setze(x, werte) {
+      var aend = {};
+      Object.keys(werte).forEach(function (f) { if ((x[f] || null) !== (werte[f] || null)) aend[f] = werte[f]; });
+      if (!Object.keys(aend).length) { neu[x.mitglied_id] = x; return; }
+      var r = DB.aktualisieren('Mitglied', x.mitglied_id, aend, x.version, ktx);
+      neu[x.mitglied_id] = r.neu;
+      aenderungen.push({ tab: 'Mitglied', neu: r.neu });
+      Protokoll.ausDiff('Mitglied', x.mitglied_id, r.diff).forEach(function (pr) { pr.kommentar = 'Zahler geändert'; protokoll.push(pr); });
+    }
+    setze(m, { beitragskonto_id: kontoId, beitragsgemeinschaft_id: gemId });
+    plan.mitziehen.forEach(function (x) { setze(x, { beitragskonto_id: kontoId, beitragsgemeinschaft_id: plan.zielGem === 'neu' || plan.zielGem === plan.altGem ? gemId : x.beitragsgemeinschaft_id }); });
+    plan.aufnehmen.forEach(function (x) { setze(neu[x.mitglied_id] || x, { beitragsgemeinschaft_id: gemId }); });
+
+    // Hinweise: altes Konto, alte Gemeinschaft, Regel der neuen Gemeinschaft
+    var bewegt = {};
+    Object.keys(neu).forEach(function (k) { bewegt[k] = true; });
+    var alle = (daten().Mitglied || []).map(function (x) { return neu[x.mitglied_id] || x; });
+    function aktiv(x) { return x.anonymisiert !== true && Mitgliedschaft.status(x, zeitraeume(x.mitglied_id), h) === 'aktiv'; }
+    if (plan.altKonto && plan.altKonto !== kontoId) {
+      var rest = alle.filter(function (x) { return x.beitragskonto_id === plan.altKonto && aktiv(x); });
+      var altK = finde('Beitragskonto', 'beitragskonto_id', plan.altKonto);
+      if (!rest.length) hinweise.push('Über Konto ' + plan.altKonto + ' zahlt jetzt niemand mehr – in Finanzen stilllegen.');
+      else if (altK && altK.kontoinhaber_mitglied_id === m.mitglied_id) hinweise.push(name(m) + ' ist Inhaber von Konto ' + plan.altKonto + ', über das weiter ' + rest.map(name).join(', ') + ' zahlen – bitte prüfen, ob das so bleiben soll.');
+    }
+    if (plan.altGem && plan.altGem !== gemId) {
+      var restG = alle.filter(function (x) { return x.beitragsgemeinschaft_id === plan.altGem && aktiv(x); });
+      if (restG.length <= 1) hinweise.push('In der bisherigen Gemeinschaft ' + (restG.length ? 'bleibt nur ' + name(restG[0]) : 'bleibt niemand') + ' – in Finanzen auflösen bzw. Einzelbeitrag.');
+    }
+    if (gemId) {
+      var g = gem || finde('Beitragsgemeinschaft', 'beitragsgemeinschaft_id', gemId);
+      regelHinweise(g, konto || finde('Beitragskonto', 'beitragskonto_id', kontoId), h, hinweise, alle);
+    }
+    if (!kontoId && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragskonto_id') >= 0) hinweise.push('Kein Beitragskonto – Zahlweg offen (Klärliste).');
   }
 
   function adresseUngueltig(ktx, id, version, ungueltig) {
@@ -260,6 +399,94 @@ var Mitglieder = (function () {
   }
 
   /**
+   * Neues Beitragskonto prüfen (gemeinsam für Neuaufnahme und Bearbeiten). inhaberName(index) liefert den Namen
+   * einer Person aus dem Antrag (nur Neuaufnahme). Feldfehler landen mit bereich 'zahlung' in fehler.
+   * Liefert { werte, inhaberIndex, kontenKlar } – werte null, wenn die Prüfung scheiterte.
+   */
+  function pruefeKontoNeu(zahlung, inhaberName, fehler) {
+    var k = {};
+    Object.keys(zahlung.konto || {}).forEach(function (f) { k[f] = zahlung.konto[f]; });
+    delete k.mandatsreferenz; delete k.kontoinhaber_mitglied_id; delete k.aktiv;
+    var inh = zahlung.inhaber || null, inhaberIndex = null;
+    if (inh && inh.art === 'antrag' && inhaberName) {
+      inhaberIndex = Number(inh.index);
+      var n = inhaberName(inhaberIndex);
+      if (n === null) fehler.push({ bereich: 'zahlung', feld: 'kontoinhaber_name', meldung: 'Kontoinhaber: Person nicht im Antrag.' });
+      else if (!k.kontoinhaber_name) k.kontoinhaber_name = n;
+    } else if (inh && inh.art === 'mitglied') {
+      var im = finde('Mitglied', 'mitglied_id', inh.mitglied_id);
+      if (!im) fehler.push({ bereich: 'zahlung', feld: 'kontoinhaber_name', meldung: 'Kontoinhaber: Mitglied nicht gefunden.' });
+      else { k.kontoinhaber_mitglied_id = im.mitglied_id; if (!k.kontoinhaber_name) k.kontoinhaber_name = [im.vorname, im.nachname].filter(Boolean).join(' '); }
+    }
+    if (k.zahlweg === 'Lastschrift') k.mandatsreferenz = 'TSV-PRUEFUNG';   // echte Referenz erst beim Schreiben
+    var kontenKlar = DB.lese(['Beitragskonto']).Beitragskonto || [];
+    var werte = null;
+    try { werte = Finanzen.kontoPruefen(k, null, kontenKlar); } catch (e) {
+      if (Fehler.artVon(e) !== 'fachlich') throw e;
+      (e.felder || [{ feld: 'iban', meldung: e.meldung }]).forEach(function (f) { f.bereich = 'zahlung'; fehler.push(f); });
+    }
+    if (werte && werte.iban && zahlung.trotzIban !== true) {
+      var gleich = kontenKlar.filter(function (x) { return x.iban && x.aktiv !== false && Iban.normalisiere(x.iban) === werte.iban; });
+      if (gleich.length) fehler.push({ bereich: 'zahlung', feld: 'iban', meldung: 'Diese IBAN gehört bereits zu Konto ' +
+        gleich.map(function (x) { return x.beitragskonto_id + ' (' + x.kontoinhaber_name + ')'; }).join(', ') + ' – bitte dieses Konto verwenden oder bestätigen, dass ein eigenes Konto nötig ist.' });
+    }
+    return { werte: werte, inhaberIndex: inhaberIndex, kontenKlar: kontenKlar };
+  }
+
+  /** Neues Konto schreiben: Mandatsreferenz TSV-<Jahr>-<Mitgliedsnr> vergeben, einfügen, Protokoll vormerken. */
+  function schreibeKontoNeu(ktx, plan, bezugNr, h, bemerkung, protokoll, einfuegen) {
+    var w = plan.werte;
+    if (w.zahlweg === 'Lastschrift') {
+      var vergeben = {};
+      plan.kontenKlar.forEach(function (x) { if (x.mandatsreferenz) vergeben[x.mandatsreferenz] = true; });
+      w.mandatsreferenz = Beitritt.mandatsreferenz(String(w.mandatsdatum || h).slice(0, 4), bezugNr, vergeben);
+    } else w.mandatsreferenz = null;
+    w.aktiv = true;
+    if (!w.bemerkung) w.bemerkung = bemerkung;
+    var konto = einfuegen('Beitragskonto', w);
+    protokoll.push({ aktion: 'angelegt', tabelle: 'Beitragskonto', datensatz_id: konto.beitragskonto_id,
+      kommentar: bemerkung + ': ' + konto.kontoinhaber_name + ' · ' + konto.zahlweg + (konto.iban ? ', IBAN ' + Iban.maskiere(konto.iban) : '') });
+    if (konto.mandatsreferenz) protokoll.push({ aktion: 'geändert', tabelle: 'Beitragskonto', datensatz_id: konto.beitragskonto_id, feld: 'mandatsreferenz', alt_wert: '', neu_wert: konto.mandatsreferenz });
+    return konto;
+  }
+
+  /** Neue Beitragsgemeinschaft prüfen (mit Regel: Betrag der Regel, falls kein eigener Festbetrag). Liefert Werte oder null. */
+  function pruefeGemeinschaftNeu(gemWahl, fehler) {
+    var w = { bezeichnung: String(gemWahl.bezeichnung || '').trim() || null, festbetrag: gemWahl.festbetrag === '' || gemWahl.festbetrag === undefined ? null : gemWahl.festbetrag, aktiv: true };
+    if (w.festbetrag !== null) w.festbetrag = Number(String(w.festbetrag).replace(',', '.'));
+    if (!leer(gemWahl.gemeinschaftsart_id)) {
+      var gArt = finde('Gemeinschaftsart', 'gemeinschaftsart_id', gemWahl.gemeinschaftsart_id);
+      if (!gArt || gArt.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'gemeinschaftsart_id', meldung: 'Die gewählte Regel (Familien-/Ehegattenbeitrag) gibt es nicht (mehr).' });
+      else {
+        w.gemeinschaftsart_id = gArt.gemeinschaftsart_id;
+        if (w.festbetrag === null && !leer(gArt.betrag)) w.festbetrag = Number(gArt.betrag);
+      }
+    }
+    if (!w.bezeichnung) fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Bezeichnung: Angabe fehlt (z. B. „Familie Muster“).' });
+    if (w.festbetrag !== null && !(w.festbetrag >= 0)) fehler.push({ bereich: 'gemeinschaft', feld: 'festbetrag', meldung: 'Festbetrag: bitte einen Betrag ≥ 0 angeben.' });
+    return w;
+  }
+
+  /** Konto, über das die (aktiven) Mitglieder einer Gemeinschaft zahlen – oder null. */
+  function kontoDerGemeinschaft(gid, ohne) {
+    var m = (daten().Mitglied || []).filter(function (x) { return x.beitragsgemeinschaft_id === gid && x.beitragskonto_id && x.mitglied_id !== ohne && x.anonymisiert !== true; })[0];
+    return m ? m.beitragskonto_id : null;
+  }
+
+  /** Regel einer Gemeinschaft prüfen und Abweichungen als Hinweise anhängen. */
+  function regelHinweise(gem, konto, h, hinweise, alle) {
+    if (!gem) return;
+    var konfig = Konfig.alle();
+    var art = !leer(gem.gemeinschaftsart_id) ? finde('Gemeinschaftsart', 'gemeinschaftsart_id', gem.gemeinschaftsart_id) : null;
+    var mitglieder = (alle || daten().Mitglied || []).filter(function (m) {
+      return m.beitragsgemeinschaft_id === gem.beitragsgemeinschaft_id && m.anonymisiert !== true && Mitgliedschaft.status(m, zeitraeume(m.mitglied_id), h) === 'aktiv';
+    });
+    if (!mitglieder.length) return;
+    Familie.pruefeGemeinschaft(gem, art, mitglieder, konto, Familie.stichtag(konfig, Number(h.slice(0, 4))), h, konfig)
+      .abweichungen.forEach(function (a) { if (a.regel !== 'nachweis_faellig') hinweise.push('Abweichung: ' + a.meldung); });
+  }
+
+  /**
    * Neuaufnahme in EINER Sperre: eine Person oder eine ganze Familie, dazu wer zahlt und ggf. die Beitragsgemeinschaft.
    * eingabe: {
    *   eintrittsdatum, antrag_am?,
@@ -347,31 +574,8 @@ var Mitglieder = (function () {
         if (!kontoBestehend) fehler.push({ bereich: 'zahlung', feld: 'beitragskonto_id', meldung: 'Das gewählte Konto wurde nicht gefunden.' });
         else if (kontoBestehend.aktiv === false) fehler.push({ bereich: 'zahlung', feld: 'beitragskonto_id', meldung: 'Das gewählte Konto ist stillgelegt.' });
       } else if (zahlung.art === 'neu') {
-        var k = {};
-        Object.keys(zahlung.konto || {}).forEach(function (f) { k[f] = zahlung.konto[f]; });
-        delete k.mandatsreferenz; delete k.kontoinhaber_mitglied_id; delete k.aktiv;
-        var inh = zahlung.inhaber || null;
-        if (inh && inh.art === 'antrag') {
-          inhaberIndex = Number(inh.index);
-          var ip = personen[inhaberIndex];
-          if (!ip) fehler.push({ bereich: 'zahlung', feld: 'kontoinhaber_name', meldung: 'Kontoinhaber: Person nicht im Antrag.' });
-          else if (!k.kontoinhaber_name) k.kontoinhaber_name = [ip.felder.vorname, ip.felder.nachname].filter(Boolean).join(' ');
-        } else if (inh && inh.art === 'mitglied') {
-          var im = finde('Mitglied', 'mitglied_id', inh.mitglied_id);
-          if (!im) fehler.push({ bereich: 'zahlung', feld: 'kontoinhaber_name', meldung: 'Kontoinhaber: Mitglied nicht gefunden.' });
-          else { k.kontoinhaber_mitglied_id = im.mitglied_id; if (!k.kontoinhaber_name) k.kontoinhaber_name = [im.vorname, im.nachname].filter(Boolean).join(' '); }
-        }
-        if (k.zahlweg === 'Lastschrift') k.mandatsreferenz = 'TSV-PRUEFUNG';   // echte Referenz nach der Nummernvergabe
-        kontenKlar = DB.lese(['Beitragskonto']).Beitragskonto || [];
-        try { kontoNeuWerte = Finanzen.kontoPruefen(k, null, kontenKlar); } catch (e) {
-          if (Fehler.artVon(e) !== 'fachlich') throw e;
-          (e.felder || [{ feld: 'iban', meldung: e.meldung }]).forEach(function (f) { f.bereich = 'zahlung'; fehler.push(f); });
-        }
-        if (kontoNeuWerte && kontoNeuWerte.iban && zahlung.trotzIban !== true) {
-          var gleich = kontenKlar.filter(function (x) { return x.iban && x.aktiv !== false && Iban.normalisiere(x.iban) === kontoNeuWerte.iban; });
-          if (gleich.length) fehler.push({ bereich: 'zahlung', feld: 'iban', meldung: 'Diese IBAN gehört bereits zu Konto ' +
-            gleich.map(function (x) { return x.beitragskonto_id + ' (' + x.kontoinhaber_name + ')'; }).join(', ') + ' – bitte dieses Konto verwenden oder bestätigen, dass ein eigenes Konto nötig ist.' });
-        }
+        var kp = pruefeKontoNeu(zahlung, function (i) { var ip = personen[i]; return ip ? [ip.felder.vorname, ip.felder.nachname].filter(Boolean).join(' ') : null; }, fehler);
+        kontoNeuWerte = kp.werte; inhaberIndex = kp.inhaberIndex; kontenKlar = kp.kontenKlar;
       }
 
       // 4. Beitragsgemeinschaft (alle Mitglieder einer Gemeinschaft zahlen über dasselbe Konto)
@@ -385,18 +589,7 @@ var Mitglieder = (function () {
           if (gKonto && gKonto !== unserKonto) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsgemeinschaft_id', meldung: 'Alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto (Nr. ' + gKonto + ') – bitte dieses Konto als Zahler wählen.' });
         }
       } else if (gemWahl.art === 'neu') {
-        gemNeuWerte = { bezeichnung: String(gemWahl.bezeichnung || '').trim() || null, festbetrag: gemWahl.festbetrag === '' || gemWahl.festbetrag === undefined ? null : gemWahl.festbetrag, aktiv: true };
-        if (gemNeuWerte.festbetrag !== null) gemNeuWerte.festbetrag = Number(String(gemNeuWerte.festbetrag).replace(',', '.'));
-        if (!leer(gemWahl.gemeinschaftsart_id)) {
-          var gArt = finde('Gemeinschaftsart', 'gemeinschaftsart_id', gemWahl.gemeinschaftsart_id);
-          if (!gArt || gArt.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'gemeinschaftsart_id', meldung: 'Die gewählte Regel (Familien-/Ehegattenbeitrag) gibt es nicht (mehr).' });
-          else {
-            gemNeuWerte.gemeinschaftsart_id = gArt.gemeinschaftsart_id;
-            if (gemNeuWerte.festbetrag === null && !leer(gArt.betrag)) gemNeuWerte.festbetrag = Number(gArt.betrag);
-          }
-        }
-        if (!gemNeuWerte.bezeichnung) fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Bezeichnung: Angabe fehlt (z. B. „Familie Muster“).' });
-        if (gemNeuWerte.festbetrag !== null && !(gemNeuWerte.festbetrag >= 0)) fehler.push({ bereich: 'gemeinschaft', feld: 'festbetrag', meldung: 'Festbetrag: bitte einen Betrag ≥ 0 angeben.' });
+        gemNeuWerte = pruefeGemeinschaftNeu(gemWahl, fehler);
         if (zahlung.art === 'spaeter') fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Für eine Beitragsgemeinschaft muss feststehen, über welches Konto gezahlt wird.' });
       }
       feldfehler(fehler);
@@ -413,18 +606,8 @@ var Mitglieder = (function () {
         var nummern = personen.map(function () { return naechsteMitgliedsnummer(); });
         var konto = kontoBestehend;
         if (kontoNeuWerte) {
-          if (kontoNeuWerte.zahlweg === 'Lastschrift') {
-            var vergeben = {};
-            kontenKlar.forEach(function (x) { if (x.mandatsreferenz) vergeben[x.mandatsreferenz] = true; });
-            var bezugNr = inhaberIndex !== null ? nummern[inhaberIndex] : nummern[0];
-            kontoNeuWerte.mandatsreferenz = Beitritt.mandatsreferenz(String(kontoNeuWerte.mandatsdatum || h).slice(0, 4), bezugNr, vergeben);
-          }
-          kontoNeuWerte.aktiv = true;
-          if (!kontoNeuWerte.bemerkung) kontoNeuWerte.bemerkung = 'Neuaufnahme ' + h;
-          konto = rein('Beitragskonto', kontoNeuWerte);
-          protokoll.push({ aktion: 'angelegt', tabelle: 'Beitragskonto', datensatz_id: konto.beitragskonto_id,
-            kommentar: 'Neuaufnahme: ' + konto.kontoinhaber_name + ' · ' + konto.zahlweg + (konto.iban ? ', IBAN ' + Iban.maskiere(konto.iban) : '') });
-          if (konto.mandatsreferenz) protokoll.push({ aktion: 'geändert', tabelle: 'Beitragskonto', datensatz_id: konto.beitragskonto_id, feld: 'mandatsreferenz', alt_wert: '', neu_wert: konto.mandatsreferenz });
+          konto = schreibeKontoNeu(ktx, { werte: kontoNeuWerte, kontenKlar: kontenKlar }, inhaberIndex !== null ? nummern[inhaberIndex] : nummern[0], h,
+            'Neuaufnahme ' + h, protokoll, rein);
         }
         var gem = gemBestehend;
         if (gemNeuWerte) {

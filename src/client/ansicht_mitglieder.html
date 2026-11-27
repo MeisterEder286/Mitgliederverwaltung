@@ -65,6 +65,8 @@
   .mv-treffer li button { width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--flaeche); font: inherit; cursor: pointer; }
   .mv-treffer li button:hover, .mv-treffer li button:focus { background: #eef4fb; }
   .mv-ibantreffer p { margin: 6px 0; }
+  .mv-checkzeile { display: flex; gap: 8px; align-items: center; min-height: 44px; }
+  #mv-bz-inhaber, #mv-bz-kontowahl { min-height: 44px; padding: 4px 8px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); max-width: 100%; }
   .mv-regelpruefung ul { margin: 6px 0 0; padding-left: 20px; }
   .mv-ausbildung-hinweis { margin: 4px 0; }
   .mv-ibantreffer label { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
@@ -839,7 +841,10 @@
     if (!m) { A.zeige('mitglieder', null, true); return; }
     ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
     ziel.appendChild(A.el('h1', A.name(m) + ' bearbeiten'));
-    var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status']);
+    // Wer Konten bearbeiten darf, wählt den Zahler unten im Abschnitt „Wer zahlt?“ statt über Auswahllisten
+    var mitZahlung = A.sieht('finanz') && A.darf('konto_bearbeiten') && A.daten.geladen('finanzen');
+    var spalten = bearbeitbar('Mitglied', ['mitgliedsnummer', 'sterbedatum', 'adresse_ungueltig', 'adresse_ungueltig_am', 'status']
+      .concat(mitZahlung ? ['beitragskonto_id', 'beitragsgemeinschaft_id'] : []));
     var f = A.formular(mitGruppen(spalten.map(function (sp) { return feldDef(sp); })), m, { schutz: true });
     var warnung = A.el('div', null, { className: 'mv-warnung', hidden: true });
     ziel.appendChild(warnung);
@@ -855,23 +860,224 @@
     }
     f.element.addEventListener('change', pruefeHinweise);
     briefanredeKnopf(f);
+    var zahlung = mitZahlung ? zahlungBearbeiten(ziel, m) : null;
     var speichern = A.knopf('Speichern', function () {
       var w = zahlenFK(f.werte(), 'Mitglied');
+      if (zahlung && !zahlung.pruefe()) return null;
       speichern.disabled = true;
-      return A.rufe('apiMitgliedSpeichern', m.mitglied_id, m.version, w).then(function (d) {
+      f.setzeFehler([]);
+      if (zahlung) zahlung.zeigeFehler([]);
+      return A.rufe('apiMitgliedSpeichern', m.mitglied_id, m.version, w, zahlung ? zahlung.eingabe() : null).then(function (d) {
         A.daten.uebernehme(d);
         f.gespeichert();
+        if (zahlung) zahlung.gespeichert();
         A.meldung('Gespeichert.', 'ok');
         hinweiseZeigen(d);
         A.zeige('mitglied', { id: m.mitglied_id }, true);
       }, function (err) {
         speichern.disabled = false;
-        if (err.felder) f.setzeFehler(err.felder);
+        if (err.felder) {
+          f.setzeFehler(err.felder.filter(function (x) { return !x.bereich; }));
+          if (zahlung) zahlung.zeigeFehler(err.felder);
+        }
       });
     });
     ziel.appendChild(A.el('div', null, { className: 'knopfleiste' }, [speichern, A.knopf('Abbrechen', function () { A.zurueck(); }, 'zweit')]));
     pruefeHinweise();
   }
+
+  /**
+   * Bearbeiten: Abschnitt „Wer zahlt den Beitrag?“ (statt der Auswahllisten Beitragskonto/Beitragsgemeinschaft).
+   * Unverändert · neues Konto per IBAN (mit Abgleich vorhandener Konten) · zahlt über eine andere Person bzw. ein
+   * vorhandenes Konto · kein Konto. Dazu Familien-/Ehegattenbeitrag: unverändert, keine, Gemeinschaft des Zielkontos
+   * oder neue Gemeinschaft nach Regel mit den übrigen Zahlern des Kontos. Liefert { eingabe(), zeigeFehler(liste), gespeichert() }.
+   */
+  function zahlungBearbeiten(ziel, m) {
+    var aktiveMitglieder = A.daten.liste('mitglieder').filter(function (x) { return statusVon(x) === 'aktiv'; });
+    var altKonto = m.beitragskonto_id ? A.daten.hole('konten', m.beitragskonto_id) : null;
+    var altGem = m.beitragsgemeinschaft_id ? A.daten.hole('gemeinschaften', m.beitragsgemeinschaft_id) : null;
+    var familie = altGem ? aktiveMitglieder.filter(function (x) { return x.beitragsgemeinschaft_id === altGem.beitragsgemeinschaft_id && x.mitglied_id !== m.mitglied_id; }) : [];
+    function zahlerVon(kontoId) { return aktiveMitglieder.filter(function (x) { return x.beitragskonto_id === Number(kontoId) && x.mitglied_id !== m.mitglied_id; }); }
+    function gemVonKonto(kontoId) {
+      var x = zahlerVon(kontoId).filter(function (y) { return y.beitragsgemeinschaft_id; })[0];
+      return x ? A.daten.hole('gemeinschaften', x.beitragsgemeinschaft_id) : null;
+    }
+    function regelName(g) { var r = g && g.gemeinschaftsart_id ? A.daten.hole('gemeinschaftsarten', g.gemeinschaftsart_id) : null; return r ? ' (' + r.bezeichnung + ')' : ''; }
+
+    ziel.appendChild(A.el('h2', 'Wer zahlt den Beitrag?'));
+    var box = A.el('section', null, { className: 'karte mv-zahlung' });
+    ziel.appendChild(box);
+    var mit = altKonto ? zahlerVon(altKonto.beitragskonto_id) : [];
+    box.appendChild(A.el('p', 'Bisher: ' + (altKonto ? kontoText(altKonto) + (mit.length ? ' · zahlt auch für: ' + mit.map(A.name).join('; ') : '') : 'kein Beitragskonto (Zahlweg offen)')));
+    if (altGem) box.appendChild(A.el('p', 'Gemeinschaft: „' + altGem.bezeichnung + '“' + regelName(altGem) + (familie.length ? ' mit ' + familie.map(function (x) { return x.vorname || A.name(x); }).join(', ') : ''), { className: 'leise' }));
+    var z = {};
+    z.art = radios('mv-bz-zahlart', [
+      { wert: 'unveraendert', text: 'Unverändert' },
+      { wert: 'neu', text: 'Neues Konto anlegen (IBAN bzw. Zahlweg eingeben)' },
+      { wert: 'konto', text: 'Zahlt über eine andere Person bzw. ein vorhandenes Konto' },
+      { wert: 'keine', text: 'Kein Konto – Zahlweg offen' }
+    ], 'unveraendert');
+    box.appendChild(z.art.element);
+    if (!altKonto) z.art.zeige('keine', false);
+
+    // neues Konto
+    z.neuBox = A.el('div', null, { className: 'mv-zahlteil', hidden: true });
+    z.inhaber = A.el('select', null, { id: 'mv-bz-inhaber' });
+    waehleOptionen(z.inhaber, [{ wert: 'selbst', text: A.name(m) + ' (diese Person)' }, { wert: 'frei', text: 'Jemand anderes – Name eingeben' }], (m.alter !== undefined && m.alter < 18) ? 'frei' : 'selbst');
+    z.inhaberFehler = A.el('span', '', { className: 'feldfehler' });
+    z.neuBox.appendChild(A.el('div', null, { className: 'feld breit' }, [A.el('label', 'Kontoinhaber *', { htmlFor: 'mv-bz-inhaber' }), z.inhaber, z.inhaberFehler]));
+    z.form = A.formular([
+      { name: 'kontoinhaber_name', titel: 'Name des Kontoinhabers', typ: 'text' },
+      { name: 'zahlweg', titel: 'Zahlweg', typ: 'auswahl', liste: liste('zahlweg'), pflicht: true },
+      { name: 'iban', titel: 'IBAN', typ: 'text' },
+      { name: 'bic', titel: 'BIC', typ: 'text', hilfe: 'Bei deutscher IBAN nicht nötig.' },
+      { name: 'mandatsdatum', titel: 'Mandat unterschrieben am', typ: 'datum' }
+    ], { zahlweg: 'Lastschrift', mandatsdatum: heute() }, { schutz: true });
+    z.neuBox.appendChild(z.form.element);
+    z.ibanInfo = A.el('div', null, { hidden: true });
+    z.trotz = A.el('input', null, { type: 'checkbox' });
+    z.form.feld('iban').parentNode.appendChild(z.ibanInfo);
+    z.form.feld('iban').setAttribute('autocomplete', 'off');
+    z.neuBox.appendChild(A.el('p', 'Die Mandatsreferenz vergibt das System. Neuer Kontoinhaber = neues, unterschriebenes Mandat.', { className: 'leise' }));
+    box.appendChild(z.neuBox);
+
+    // vorhandenes Konto
+    z.kontoBox = A.el('div', null, { className: 'mv-zahlteil', hidden: true });
+    z.kontoBox.appendChild(personSuche('Person suchen, über die gezahlt wird', function (x) {
+      if (!x.beitragskonto_id) { z.kontoInfo.className = 'mv-warnung'; z.kontoInfo.textContent = A.name(x) + ' hat noch kein Beitragskonto.'; return; }
+      z.kontoWahl.value = String(x.beitragskonto_id);
+      zeige();
+    }));
+    z.kontoWahl = A.el('select', null, { id: 'mv-bz-kontowahl' });
+    waehleOptionen(z.kontoWahl, [{ wert: '', text: '–' }].concat(fkOptionen('beitragskonto_id').map(function (o) { return { wert: String(o.wert), text: o.text }; })), '');
+    z.kontoFehler = A.el('span', '', { className: 'feldfehler' });
+    z.kontoBox.appendChild(A.el('div', null, { className: 'feld breit' }, [A.el('label', 'oder Konto direkt wählen', { htmlFor: 'mv-bz-kontowahl' }), z.kontoWahl, z.kontoFehler]));
+    z.kontoInfo = A.el('p', '', { className: 'leise' });
+    z.kontoBox.appendChild(z.kontoInfo);
+    box.appendChild(z.kontoBox);
+
+    // ganze Familie mitnehmen?
+    z.mitFamilie = A.el('input', null, { type: 'checkbox', id: 'mv-bz-familie' });
+    z.mitFamilieBox = A.el('label', null, { htmlFor: 'mv-bz-familie', className: 'mv-checkzeile', hidden: true },
+      [z.mitFamilie, A.el('span', ' Ganze Familie wechselt mit (' + familie.map(function (x) { return x.vorname || A.name(x); }).join(', ') + ')')]);
+    box.appendChild(z.mitFamilieBox);
+
+    // Familien-/Ehegattenbeitrag
+    var regeln = regelnAktiv();
+    var gemUeberschrift = A.el('h3', 'Familien-/Ehegattenbeitrag', { className: 'feldgruppe' });
+    box.appendChild(gemUeberschrift);
+    var g = {};
+    g.art = radios('mv-bz-gemart', [
+      { wert: 'unveraendert', text: altGem ? 'Bleibt in „' + altGem.bezeichnung + '“' : 'Unverändert (keine Gemeinschaft)' },
+      { wert: 'keine', text: altGem ? 'Verlässt die Gemeinschaft – zahlt die eigene Beitragsart' : 'Keine Gemeinschaft' },
+      { wert: 'bestehend', text: 'In die Gemeinschaft des gewählten Kontos aufnehmen' }
+    ].concat(regeln.map(function (r) { return { wert: 'r' + r.gemeinschaftsart_id, text: 'Neu: ' + r.bezeichnung + ' (' + A.betrag(r.betrag) + ')' }; })), 'unveraendert');
+    box.appendChild(g.art.element);
+    g.info = A.el('p', '', { className: 'leise' });
+    box.appendChild(g.info);
+    g.form = A.formular([{ name: 'bezeichnung', titel: 'Bezeichnung', typ: 'text', pflicht: true }, { name: 'festbetrag', titel: 'Festbetrag', typ: 'betrag', hilfe: 'Leer = Betrag der Regel.' }], {});
+    box.appendChild(g.form.element);
+    g.form.feld('bezeichnung').addEventListener('input', function () { g.form.feld('bezeichnung').dataset.auto = 'nein'; });
+
+    function zielKonto() {
+      var a = z.art.wert();
+      if (a === 'unveraendert') return altKonto ? String(altKonto.beitragskonto_id) : null;
+      if (a === 'konto') return z.kontoWahl.value || null;
+      if (a === 'neu') return 'neu';
+      return null;
+    }
+    function zeige() {
+      var a = z.art.wert();
+      z.neuBox.hidden = a !== 'neu';
+      z.kontoBox.hidden = a !== 'konto';
+      z.form.feld('kontoinhaber_name').parentNode.hidden = z.inhaber.value !== 'frei';
+      var ls = z.form.feld('zahlweg').value === 'Lastschrift';
+      z.form.feld('mandatsdatum').parentNode.hidden = !ls;
+      z.form.feld('bic').parentNode.hidden = !ls;
+      var ziel = zielKonto();
+      var wechsel = ziel !== (altKonto ? String(altKonto.beitragskonto_id) : null);
+      if (a === 'konto') {
+        var k = ziel ? A.daten.hole('konten', Number(ziel)) : null;
+        var zz = k ? zahlerVon(k.beitragskonto_id) : [];
+        z.kontoInfo.className = 'leise';
+        z.kontoInfo.textContent = k ? kontoText(k) + (zz.length ? ' · zahlt bisher für: ' + zz.map(A.name).join('; ') : '') : '';
+      }
+      z.mitFamilieBox.hidden = !(wechsel && familie.length && ziel);
+      // Gemeinschaft: was ist möglich?
+      var zielGem = ziel && ziel !== 'neu' ? gemVonKonto(ziel) : null;
+      if (zielGem && altGem && zielGem.beitragsgemeinschaft_id === altGem.beitragsgemeinschaft_id) zielGem = null;
+      var andereZahler = ziel && ziel !== 'neu' ? zahlerVon(ziel).filter(function (x) { return !x.beitragsgemeinschaft_id || (altGem && x.beitragsgemeinschaft_id === altGem.beitragsgemeinschaft_id); }) : [];
+      var mitzieher = z.mitFamilie.checked && !z.mitFamilieBox.hidden ? familie : [];
+      var bleibtMoeglich = !altGem || !wechsel || !familie.length || z.mitFamilie.checked;
+      g.art.zeige('unveraendert', bleibtMoeglich);
+      g.art.zeige('bestehend', !!zielGem);
+      var neuMoeglich = !!ziel && (andereZahler.length + mitzieher.length > 0 || ziel === 'neu');
+      regeln.forEach(function (r) { g.art.zeige('r' + r.gemeinschaftsart_id, neuMoeglich); });
+      var w = g.art.wert();
+      if (!g.manuell || (w === 'unveraendert' && !bleibtMoeglich) || (w === 'bestehend' && !zielGem) || (/^r/.test(w) && !neuMoeglich)) {
+        g.art.setze(zielGem ? 'bestehend' : bleibtMoeglich ? 'unveraendert' : 'keine', true);
+        w = g.art.wert();
+      }
+      g.zielGem = zielGem;
+      g.mit = andereZahler.concat(mitzieher).filter(function (x, i, l) { return l.indexOf(x) === i; });
+      gemUeberschrift.hidden = false;
+      g.form.element.hidden = !/^r/.test(w);
+      g.info.textContent = w === 'bestehend' && zielGem ? '„' + zielGem.bezeichnung + '“' + regelName(zielGem) + (zielGem.festbetrag ? ' – Festbetrag ' + A.betrag(zielGem.festbetrag) : '')
+        : /^r/.test(w) ? (g.mit.length ? 'Zusammen mit: ' + g.mit.map(A.name).join('; ') + ' (zahlen über dasselbe Konto).' : 'Weitere Personen kommen über „In die Gemeinschaft aufnehmen“ dazu.')
+        : w === 'unveraendert' && altGem && wechsel && familie.length ? 'Die ganze Familie wechselt auf das neue Konto.' : '';
+      var bez = g.form.feld('bezeichnung');
+      if (/^r/.test(w) && (!bez.value || bez.dataset.auto !== 'nein')) {
+        var r = A.daten.hole('gemeinschaftsarten', Number(w.slice(1)));
+        bez.value = ((r && Number(r.max_kinder) === 0 && r.max_kinder !== undefined) ? 'Ehepaar ' : 'Familie ') + (m.nachname || '');
+        bez.dataset.auto = 'ja';
+      }
+    }
+    z.art.beiAenderung(zeige);
+    g.art.beiAenderung(function () { g.manuell = true; zeige(); });
+    [z.inhaber, z.kontoWahl, z.mitFamilie, z.form.feld('zahlweg')].forEach(function (e) { e.addEventListener('change', zeige); });
+    z.form.feld('iban').addEventListener('change', function () {
+      ibanPruefen(z, function (t) {
+        if (!z.kontoWahl.querySelector('option[value="' + t.beitragskonto_id + '"]')) z.kontoWahl.appendChild(A.el('option', kontoText(t), { value: String(t.beitragskonto_id) }));
+        z.kontoWahl.value = String(t.beitragskonto_id);
+        z.art.setze('konto');
+      });
+    });
+    zeige();
+
+    return {
+      eingabe: function () {
+        var a = z.art.wert(), w = g.art.wert(), e = { zahlung: { art: a }, mitGemeinschaft: z.mitFamilie.checked && !z.mitFamilieBox.hidden, gemeinschaft: { art: w } };
+        if (a === 'neu') {
+          var k = z.form.werte();
+          if (z.inhaber.value !== 'frei') delete k.kontoinhaber_name;
+          if (k.zahlweg !== 'Lastschrift') { delete k.mandatsdatum; delete k.bic; }
+          e.zahlung = { art: 'neu', konto: k, inhaber: z.inhaber.value === 'selbst' ? { art: 'selbst' } : null, trotzIban: z.trotz.checked };
+        } else if (a === 'konto') e.zahlung = { art: 'konto', beitragskonto_id: z.kontoWahl.value ? Number(z.kontoWahl.value) : null };
+        if (w === 'bestehend' && g.zielGem) e.gemeinschaft = { art: 'bestehend', beitragsgemeinschaft_id: g.zielGem.beitragsgemeinschaft_id };
+        else if (/^r\d+$/.test(w)) e.gemeinschaft = { art: 'neu', gemeinschaftsart_id: Number(w.slice(1)), bezeichnung: g.form.werte().bezeichnung, festbetrag: g.form.werte().festbetrag, mit: g.mit.map(function (x) { return x.mitglied_id; }) };
+        return e;
+      },
+      pruefe: function () {
+        if (z.art.wert() === 'konto' && !z.kontoWahl.value) { z.kontoFehler.textContent = 'Bitte eine Person suchen oder ein Konto wählen.'; return false; }
+        return true;
+      },
+      zeigeFehler: function (l) {
+        var zf = l.filter(function (f) { return f.bereich === 'zahlung'; });
+        z.form.setzeFehler(zf);
+        var inh = zf.filter(function (f) { return f.feld === 'kontoinhaber_name' && z.inhaber.value !== 'frei'; })[0];
+        z.inhaberFehler.textContent = inh ? inh.meldung : '';
+        var kf = zf.filter(function (f) { return f.feld === 'beitragskonto_id'; })[0];
+        z.kontoFehler.textContent = kf ? kf.meldung : '';
+        if (zf.some(function (f) { return f.feld === 'iban' && /bereits zu Konto/.test(f.meldung); })) { z.geprueft = null; z.form.feld('iban').dispatchEvent(new Event('change')); }
+        var gf = l.filter(function (f) { return f.bereich === 'gemeinschaft'; });
+        g.form.setzeFehler(gf);
+        var gm = gf.filter(function (f) { return f.feld === 'beitragsgemeinschaft_id'; })[0];
+        if (gm) { g.info.className = 'feldfehler'; g.info.textContent = gm.meldung; } else g.info.className = 'leise';
+      },
+      gespeichert: function () { z.form.gespeichert(); g.form.gespeichert(); }
+    };
+  }
+
 
   // ================================================================== Neues Mitglied (Person oder Familie + Zahlung)
 
@@ -970,6 +1176,44 @@
     regelnAktiv().forEach(function (r) { var e = regelGrenzen(r); if (e.ausbildungBis !== null) { max = Math.max(max || 0, e.ausbildungBis); min = min === null ? e.kinderBis : Math.min(min, e.kinderBis); } });
     if (max === null) { max = konfigZahl('familie_ausbildung_bis_alter', 25); min = konfigZahl('familie_kinder_bis_alter', 17); }
     return alter !== null && alter > min && alter <= max;
+  }
+
+  /**
+   * IBAN beim Verlassen des Feldes prüfen (Server: apiFinanzenIbanSuchen, Treffer nur maskiert). z = { form, ibanInfo,
+   * trotz, geprueft }. Gibt es die IBAN schon, erscheint „Dieses Konto verwenden“ (beiVerwenden(treffer)) und der Haken
+   * „Trotzdem ein eigenes, neues Konto anlegen“.
+   */
+  function ibanPruefen(z, beiVerwenden) {
+    var wert = z.form.feld('iban').value.trim();
+    if (wert === z.geprueft) return;   // z. B. erneutes „change“ beim Verlassen des Feldes – Hinweis stehen lassen
+    z.geprueft = wert;
+    A.leere(z.ibanInfo);
+    z.ibanInfo.hidden = true;
+    z.trotz.checked = false;
+    if (!wert) return;
+    A.rufe('apiFinanzenIbanSuchen', wert, A.still).then(function (r) {
+      if (z.form.feld('iban').value.trim() !== wert) return;   // inzwischen geändert
+      A.leere(z.ibanInfo);
+      z.ibanInfo.hidden = false;
+      if (!r.gueltig) { z.ibanInfo.className = 'feldfehler'; z.ibanInfo.textContent = r.fehler || 'Die IBAN ist ungültig.'; return; }
+      var treffer = r.treffer.filter(function (t) { return t.aktiv; });
+      if (!treffer.length) {
+        var still = r.treffer.filter(function (t) { return !t.aktiv; });
+        z.ibanInfo.className = 'leise';
+        z.ibanInfo.textContent = still.length ? 'IBAN gültig. Sie gehörte zu einem stillgelegten Konto (' + still.map(function (t) { return 'Konto ' + t.beitragskonto_id + ' – ' + t.kontoinhaber_name; }).join('; ') + ') – es wird ein neues Konto angelegt.'
+          : 'IBAN gültig – noch kein Konto damit vorhanden.';
+        return;
+      }
+      z.ibanInfo.className = 'mv-warnung mv-ibantreffer';
+      z.ibanInfo.appendChild(A.el('strong', 'Diese IBAN gibt es schon.'));
+      treffer.forEach(function (t) {
+        var text = kontoText(t) + (t.zahler.length ? ' · zahlt für: ' + t.zahler.map(function (x) { return x.name; }).join('; ') : '') +
+          (t.gemeinschaften.length ? ' · Gemeinschaft „' + t.gemeinschaften.map(function (g) { return g.bezeichnung; }).join('“, „') + '“' : '');
+        z.ibanInfo.appendChild(A.el('p', text));
+        z.ibanInfo.appendChild(A.knopf('Dieses Konto verwenden', function () { beiVerwenden(t); }, 'klein'));
+      });
+      z.ibanInfo.appendChild(A.el('label', null, null, [z.trotz, A.el('span', ' Trotzdem ein eigenes, neues Konto anlegen')]));
+    }).catch(function () {});
   }
 
   function kontoText(k) {
@@ -1113,7 +1357,7 @@
     }
 
     // ---------------------------------------------------------------- 2. Wer zahlt?
-    var zahlung = null, gem = null, gefundenesKonto = null, ibanTreffer = [];
+    var zahlung = null, gem = null, gefundenesKonto = null;
     if (finanzen) {
       ziel.appendChild(A.el('h2', 'Wer zahlt den Beitrag?'));
       var zBox = A.el('section', null, { className: 'karte mv-zahlung' });
@@ -1234,46 +1478,16 @@
     }
 
     function pruefeIban() {
-      var wert = zahlung.form.feld('iban').value.trim();
-      if (wert === zahlung.geprueft) return;   // z. B. erneutes „change“ beim Verlassen des Feldes – Hinweis stehen lassen
-      zahlung.geprueft = wert;
-      ibanTreffer = [];
-      A.leere(zahlung.ibanInfo);
-      zahlung.ibanInfo.hidden = true;
-      zahlung.trotz.checked = false;
-      if (!wert) return;
-      A.rufe('apiFinanzenIbanSuchen', wert, A.still).then(function (r) {
-        if (zahlung.form.feld('iban').value.trim() !== wert) return;   // inzwischen geändert
-        A.leere(zahlung.ibanInfo);
-        zahlung.ibanInfo.hidden = false;
-        if (!r.gueltig) { zahlung.ibanInfo.className = 'feldfehler'; zahlung.ibanInfo.textContent = r.fehler || 'Die IBAN ist ungültig.'; return; }
-        ibanTreffer = r.treffer.filter(function (t) { return t.aktiv; });
-        if (!ibanTreffer.length) {
-          var still = r.treffer.filter(function (t) { return !t.aktiv; });
-          zahlung.ibanInfo.className = 'leise';
-          zahlung.ibanInfo.textContent = still.length ? 'IBAN gültig. Sie gehörte zu einem stillgelegten Konto (' + still.map(function (t) { return 'Konto ' + t.beitragskonto_id + ' – ' + t.kontoinhaber_name; }).join('; ') + ') – es wird ein neues Konto angelegt.'
-            : 'IBAN gültig – noch kein Konto damit vorhanden.';
-          return;
+      ibanPruefen(zahlung, function (t) {
+        if (!zahlung.kontoWahl.querySelector('option[value="' + t.beitragskonto_id + '"]')) {
+          zahlung.kontoWahl.appendChild(A.el('option', kontoText(t), { value: String(t.beitragskonto_id) }));
         }
-        zahlung.ibanInfo.className = 'mv-warnung mv-ibantreffer';
-        zahlung.ibanInfo.appendChild(A.el('strong', 'Diese IBAN gibt es schon.'));
-        ibanTreffer.forEach(function (t) {
-          var text = kontoText(t) + (t.zahler.length ? ' · zahlt für: ' + t.zahler.map(function (z) { return z.name; }).join('; ') : '') +
-            (t.gemeinschaften.length ? ' · Gemeinschaft „' + t.gemeinschaften.map(function (g) { return g.bezeichnung; }).join('“, „') + '“' : '');
-          zahlung.ibanInfo.appendChild(A.el('p', text));
-          zahlung.ibanInfo.appendChild(A.knopf('Dieses Konto verwenden', function () {
-            if (!zahlung.kontoWahl.querySelector('option[value="' + t.beitragskonto_id + '"]')) {
-              zahlung.kontoWahl.appendChild(A.el('option', kontoText(t), { value: String(t.beitragskonto_id) }));
-            }
-            gefundenesKonto = t;
-            zahlung.kontoWahl.value = String(t.beitragskonto_id);
-            zahlung.art.setze('konto');
-            zeigeKonto();
-            try { zahlung.kontoBox.scrollIntoView({ block: 'nearest' }); } catch (e) { /* egal */ }
-          }, 'klein'));
-        });
-        zahlung.ibanInfo.appendChild(A.el('label', null, null, [zahlung.trotz, A.el('span', ' Trotzdem ein eigenes, neues Konto anlegen')]));
-      }).catch(function () {});
+        gefundenesKonto = t;
+        zahlung.kontoWahl.value = String(t.beitragskonto_id);
+        zahlung.art.setze('konto');
+        zeigeKonto();
+        try { zahlung.kontoBox.scrollIntoView({ block: 'nearest' }); } catch (e) { /* egal */ }
+      });
     }
 
     function regel(id) { return gem ? gem.regeln.filter(function (r) { return String(r.gemeinschaftsart_id) === String(id); })[0] || null : null; }
