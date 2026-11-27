@@ -1,7 +1,36 @@
 <!--
   start – startet die Oberfläche, nachdem kern und alle Ansichten geladen sind (letztes include in index).
-  Zweck: App.starte() aufrufen. Datenquelle/Rechte: siehe client/kern. Keine weitere Logik hier.
+  Zweck: App.starte() aufrufen und danach selten sofort gebrauchte Snapshot-Bereiche im Hintergrund vorladen, damit
+         Mitglied-Details, Datenschutz und Schriftverkehr beim ersten Öffnen ohne Wartezeit erscheinen.
+         App.nachlauf: Meldet der Server nachlauf (wartende Protokolleinträge), wird apiNachlauf still angestoßen –
+         die Übertragung ins Protokoll läuft, während der Nutzer schon weiterarbeitet.
+  Datenquelle/Rechte: siehe client/kern – der Server liefert je Bereich nur, was die Rolle sehen darf.
+  Besonderheit: Vorladen still (ohne Fehlermeldung) und erst kurz nach dem Start, damit es den Start nicht bremst;
+         „finanzen“ lädt die Startseite für Finanzrollen ohnehin sofort. Schlägt der Nachlauf fehl, überträgt der
+         Trigger protokollNachtragen spätestens nach 5 Minuten.
 -->
 <script>
-window.App.starte();
+(function () {
+  var A = window.App, vorgeladen = false, nachlaufGeplant = null;
+
+  A.nachlauf = function () {
+    if (nachlaufGeplant) return;   // mehrere Schreibaufrufe kurz hintereinander → ein Nachlauf
+    nachlaufGeplant = setTimeout(function () {
+      nachlaufGeplant = null;
+      A.rufe('apiNachlauf', A.still).catch(function () { /* still – der Trigger holt es nach */ });
+    }, 300);
+  };
+  A.daten.beobachte(function () {
+    if (vorgeladen || !A.startdaten) return;
+    vorgeladen = true;
+    var bereiche = ['historie'];
+    if (A.sieht('finanz')) bereiche.push('korrespondenz');
+    setTimeout(function naechster() {
+      var b = bereiche.shift();
+      if (!b) return;
+      A.daten.lade(b, A.still).catch(function () { /* still – die Ansicht lädt bei Bedarf erneut */ }).then(naechster);
+    }, 1500);
+  });
+  A.starte();
+})();
 </script>

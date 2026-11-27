@@ -85,6 +85,14 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 - `einfuegen(tab, obj, ktx)` → neues Objekt (ID aus `_Konfig.next_id_<Tab>`, `version = 1`, `geaendert_*`). Nur in `mitSperre`.
 - `aktualisieren(tab, id, aenderungen, erwarteteVersion, ktx)` → `{ alt, neu, diff }`; bei Versionskonflikt `Fehler.konflikt(aktuellerDatensatz)`. Nur in `mitSperre`.
 - `neueId(tab)` – Zähler in `_Konfig` (nur in `mitSperre`)
+- `zaehlerWert(schluessel)` / `zaehlerSetzen(schluessel, wert, beschreibung?)` – skriptverwaltete Zähler in `_Konfig`
+  (`next_id_*`, `mitgliedsnummer_naechste`); `_Konfig` wird je Sperre nur einmal gelesen. Wer `_Konfig` daran vorbei
+  schreibt, ruft `konfigVergessen()` (macht `Konfig.setze` selbst).
+- `sperre()` → Nummer der gerade gehaltenen Sperre oder 0 (Snapshot erkennt damit „unter dieser Sperre geladen“)
+- Beschleunigungen beim Einzelschreiben: Blatt und Kopfzeile je Ausführung gemerkt (bewusst nicht länger – Spalten
+  können im Sheet verschoben werden); Zeilenposition je ID im Script-Cache (`zeilen:<Tab>`), vor dem Schreiben wird die
+  ID in der gelesenen Zeile geprüft, sonst neu gesucht; Eindeutigkeit liest nur die Schlüsselspalten (ein `batchGet`)
+  plus die in derselben Sperre geschriebenen Datensätze – bewusst nie aus einem Cache.
 - `zaehler()` → `{ sheets: n }` Zahl der Tabellenzugriffe seit Ausführungsbeginn; `zaehlerZuruecksetzen()`; `zaehle(n)` für Module mit eigenem Blattzugriff
 - `blatt(tab)` → Sheet-Objekt; `anhaengen(blatt, zeilen, letzte?)` – ein `setValues` unter die letzte Zeile, vergrößert das Raster bei Bedarf (neue Tabs haben nur 1000 Zeilen)
 - **Massenschreiben** (nur in `mitSperre`, feste Zahl an Tabellenzugriffen – gemessen 16 für `einfuegenViele` und 6 für
@@ -101,7 +109,7 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 - `jetzt()` → `"JJJJ-MM-TTThh:mm:ss"` in der Zeitzone des Skripts
 
 ### `Konfig` (`src/Konfig.js`)
-`wert(schluessel)`, `alle()` (aus CacheService, 10 min), `vergessen()` (Cache leeren nach Änderung),
+`wert(schluessel)`, `alle()` (aus CacheService, 1 h), `vergessen()` (Cache leeren nach Änderung),
 `setze(schluessel, wert, beschreibung?)` (nur in `DB.mitSperre`; legt fehlende Schlüssel an, liefert den alten Wert).
 
 ### `Rechte` (`src/lib/rechte.js`, rein)
@@ -121,14 +129,19 @@ Lesend sind die Konverter tolerant (z. B. `"17.08.2026"` als Text).
 ### `Protokoll` (`src/Protokoll.js`)
 `schreibe(ktx, eintraege)` – `eintraege = [{ aktion, tabelle, datensatz_id, feld?, alt_wert?, neu_wert?, kommentar? }]`,
 ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)` → Einträge.
+Nachgelagert (Standard): Einträge warten in den Script Properties (`protwarte:*`), `nachtragen()` überträgt sie unter der
+Sperre (aufgerufen von `apiNachlauf`, Trigger `protokollNachtragen`, `DB.lese` mit `_Protokoll`); `wartet()` → die
+Antwort trägt `nachlauf: true`, und der Browser (`App.nachlauf` in `client/start`) ruft still `apiNachlauf` auf.
+`_Konfig.protokoll_nachgelagert = nein` schreibt wie früher sofort. Tests übertragen standardmäßig sofort
+(`test/hilfe/projekt.js`); den echten Ablauf mit `globale.__protokollNachgelagert = true`.
 
 ### `Messung` (`src/Messung.js`)
 `start(name)` → Handle; `ende(handle, {ok, cache, rollen})` → `{ server_ms, sheets }` und Puffer im Cache;
 `schreibePuffer()` (Trigger, stündlich) → `_Messung`; `auswertung()` → Median/P90 je Funktion.
 
 ### Öffentliche Funktionen (`src/Einstieg.js`)
-`doGet(e)`, `apiStart()`, `apiPing()`, `apiMessungen()`, `apiClientMessungen(liste)`; für den Eigentümer im Editor:
-`setup()`, `triggerEinrichten()`; Trigger: `messungSchreiben()`.
+`doGet(e)`, `apiStart()`, `apiPing()`, `apiNachlauf()`, `apiMessungen()`, `apiClientMessungen(liste)`; für den Eigentümer im Editor:
+`setup()`, `triggerEinrichten()`; Trigger: `messungSchreiben()`, `protokollNachtragen()`, `snapshotWarmhalten()`.
 
 ### Client (`src/client/`)
 `index.html` (Gerüst), `stil.html`, `app.html`. Startdaten kommen als `<script type="application/json" id="startdaten">`.
@@ -150,7 +163,8 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 `volleMonate`, `volleJahre`, `plusMonate`, `plusTage`.
 
 ### Snapshot (`src/lib/snapshot.js` rein, `src/Snapshot.js`, `src/Cache.js`)
-- **Basis** (nur Server, im CacheService, gzip + Teilstücke ≤ 100 KB, Generationszähler): Rohzeilen der Tabs
+- **Basis** (nur Server, im CacheService, gzip + Teilstücke ≤ 100 KB, Generationszähler, **je Tab ein Eintrag** unter
+  einem gemeinsamen Kopf – `Cache.speichereMehrteilig`: beim write-through werden nur die geänderten Tabs neu gepackt): Rohzeilen der Tabs
   `Mitglied, Mitgliedschaftszeitraum, Abteilung, Abteilungszugehoerigkeit, Funktionsart, Funktion, Beitragsart,
   Beitragsgemeinschaft, Beitragskonto, Sollstellung, Qualifikationsart, Qualifikation, Ehrungsregel, Ehrung, Einwilligung`
   plus benötigte `_Konfig`-Werte. **Ohne** IBAN/BIC im Klartext (nur `iban_maskiert`, `iban_ok`). Nicht in der Basis:
@@ -167,12 +181,19 @@ ein einziger Schreibzugriff; `protokoll_id` fortlaufend. `ausDiff(tab, id, diff)
 - `Snapshot.schreibe(ktx, aenderungen)` mit `aenderungen = [{ tab, neu: zeile } | { tab, entfernt: id }]` – nur
   innerhalb `DB.mitSperre`, aktualisiert die Basis (write-through) und liefert die Client-Antwort
   `{ aktualisiert: { liste: [datensaetze] }, entfernt: { liste: [ids] } }` (inkl. neu abgeleiteter Mitglieder).
+  Abgeleitet werden dabei nur die betroffenen Zeilen (`SnapshotKern.fuer(basis, ktx, heute, nur)`), und eine unter
+  derselben Sperre schon geladene Basis wird weiterverwendet (kein zweites Entpacken).
+- `Snapshot.warmhalten()` (Trigger `snapshotWarmhalten`, stündlich, bei `cache_warmhalten = ja`): Konfig-Cache
+  auffrischen, Basis unter der Sperre neu bauen, wenn sie fehlt oder ihr letzter Neubau aus der Tabelle
+  (`aus_tabelle_am`, wird beim write-through NICHT erneuert) älter als 4 h ist. Scheitert das Ablegen im Cache,
+  wird der alte Eintrag verworfen.
 - `Snapshot.pruefeMitglied(ktx, mitgliedId)` wirft `Fehler.keinZugriff()`, wenn die Person für ktx nicht sichtbar ist
   (Zeilenschutz bei Schreibzugriffen, z. B. Abteilungsleiter).
 - `Snapshot.verwerfen()` – Cache ungültig machen (z. B. nach Setup, Massenänderung).
 - **Bereiche und Spaltenform:** `apiStart()` liefert nur den Bereich `kern`. `finanzen` (konten, gemeinschaften,
   sollstellungen) und `historie` (zeitraeume, einwilligungen) holt der Browser einmal je Sitzung über
-  `App.daten.lade('finanzen')` → `apiSnapshot(['finanzen'])`. Übertragen wird in Spaltenform
+  `App.daten.lade('finanzen')` → `apiSnapshot(['finanzen'])`. `client/start` lädt `historie` (und für Rollen mit
+  Finanzsicht `korrespondenz`) kurz nach dem Start still im Hintergrund vor (`App.daten.lade(b, App.still)`). Übertragen wird in Spaltenform
   `{ bereiche, listen: { name: { k: [schlüssel], z: [[werte]] } } }` (`SnapshotKern.packe`), der Browser packt in
   `App.daten.setze` wieder aus. Gemessen mit 1.200 synthetischen Mitgliedern (Rolle Mitgliederverwalter): Start
   638 KB (gzip 82 KB) statt 2,8 MB für alles; finanzen 452 KB, historie 323 KB.

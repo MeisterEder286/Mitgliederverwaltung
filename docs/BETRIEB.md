@@ -31,9 +31,16 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
      ausgetretener Mitglieder, am Monatsersten Protokoll-Bereinigung, Messwerte älter als 3 Monate entfernen,
      Snapshot neu bauen. Bricht ein Lauf an der Laufzeitgrenze ab, setzt ein einmaliger Trigger `wartungFortsetzen`
      ihn nach einer Minute fort (legt sich selbst an und räumt sich selbst weg).
-   - `snapshotWarmhalten` – alle 5 Stunden, nur wenn `_Konfig.cache_warmhalten = ja`
+   - `snapshotWarmhalten` – stündlich; wirkt nur bei `_Konfig.cache_warmhalten = ja` (Standard). Frischt den
+     Einstellungs-Cache auf und baut den Snapshot neu aus der Tabelle, wenn er fehlt oder sein letzter Neubau aus der
+     Tabelle älter als 4 Stunden ist – so trifft niemand auf einen langsamen Kaltstart, und direkte Eingriffe in die
+     Tabelle sind spätestens nach rund 5 Stunden im Snapshot.
+   - `protokollNachtragen` – alle 5 Minuten: überträgt Protokolleinträge, die noch in den Script Properties warten
+     (`protwarte:*`). Normalerweise erledigt das der Browser direkt nach dem Speichern (`apiNachlauf`); der Trigger
+     ist das Sicherheitsnetz. Diese Properties nicht von Hand löschen. Mit `_Konfig.protokoll_nachgelagert = nein`
+     wird wie früher sofort beim Speichern ins Protokoll geschrieben.
    Ergebnis jedes Wartungslaufs: ein Eintrag im `_Protokoll` (Tabelle „Wartung“), Details im Ausführungsprotokoll.
-   Nach Änderung von `cache_warmhalten` `triggerEinrichten` erneut ausführen.
+   `cache_warmhalten` kann jederzeit umgeschaltet werden, ohne `triggerEinrichten` erneut auszuführen.
 10. **Deployment:** Bereitstellen → Neue Bereitstellung → Web-App, „Ausführen als: **Ich**“, „Zugriff:
     **Jeder in [Domain]**“. Die Deployment-ID und die exec-URL im zentralen Register (`docs/REGISTER.md`)
     eintragen.

@@ -203,9 +203,16 @@ var SnapshotKern = (function () {
     return beste <= Mitgliedschaft.plusMonate(heute, 3) ? 'gelb' : 'gruen';
   }
 
+  // Merker je Ausführung: Index und Personenkreis hängen nur von der (unveränderlichen) Basis ab – aenderungAnwenden
+  // liefert eine NEUE Basis, damit verfällt der Merker von selbst. Spart bei pruefeMitglied/mitgliedSichtbar in
+  // Schleifen das wiederholte Indizieren des ganzen Bestands.
+  var ixMerker = { basis: null, ix: null };
+  var kreisMerker = { basis: null, ktx: null, heute: null, kreis: null };
+
   function indexiere(basis) {
+    if (ixMerker.basis === basis) return ixMerker.ix;
     var t = basis.tabs;
-    return {
+    var ix = {
       konfig: basis.konfig || {},
       zeitraeumeJe: nachFeld(t.Mitgliedschaftszeitraum, 'mitglied_id'),
       zugehJe: nachFeld(t.Abteilungszugehoerigkeit, 'mitglied_id'),
@@ -214,6 +221,16 @@ var SnapshotKern = (function () {
       funktionsart: nachId(t.Funktionsart, 'funktionsart_id'),
       qualifikationsart: nachId(t.Qualifikationsart, 'qualifikationsart_id')
     };
+    ixMerker = { basis: basis, ix: ix };
+    return ix;
+  }
+
+  function personenkreisGemerkt(basis, ix, ktx, heute) {
+    var m = kreisMerker;
+    if (m.basis === basis && m.ktx === ktx && m.heute === heute) return m.kreis;
+    var kreis = personenkreis(basis, ix, ktx, heute);
+    kreisMerker = { basis: basis, ktx: ktx, heute: heute, kreis: kreis };
+    return kreis;
   }
 
   /**
@@ -268,18 +285,29 @@ var SnapshotKern = (function () {
 
   // ------------------------------------------------------------------ Client-Sicht
 
-  /** Rollenbeschnittener Client-Snapshot (siehe Kopfkommentar). */
-  function fuer(basis, ktx, heute) {
+  /**
+   * Rollenbeschnittener Client-Snapshot (siehe Kopfkommentar).
+   * nur (optional): { Tab: { id: true } } – nur diese Zeilen ableiten (Tabs ohne Eintrag bleiben leer, sichtbare
+   * Listen existieren aber weiterhin). Für die Schreibantwort: gleiche Regeln, ohne den ganzen Bestand abzuleiten.
+   */
+  function fuer(basis, ktx, heute, nur) {
     var ix = indexiere(basis);
-    var kreis = personenkreis(basis, ix, ktx, heute);
+    var kreis = personenkreisGemerkt(basis, ix, ktx, heute);
     var sicht = ktx.sicht || [];
     var aus = {};
+    function gefiltert(tab, zeilen) {
+      if (!nur) return zeilen || [];
+      var ids = nur[tab];
+      if (!ids) return [];
+      var feld = idSpalte(tab);
+      return (zeilen || []).filter(function (z) { return ids[String(z[feld])]; });
+    }
 
     TABS.forEach(function (tab) {
       var liste = LISTEN[tab];
       if (hat(FINANZ, tab) && !hat(sicht, 'finanz')) return;
       if (tab === 'Qualifikation' && !hat(sicht, 'hochsensibel')) return;
-      var zeilen = basis.tabs[tab];
+      var zeilen = gefiltert(tab, basis.tabs[tab]);
       if (hat(STAMMDATEN, tab)) {
         aus[liste] = zeilen.map(function (z) { return schnitt(ktx, tab, z); });
         return;
@@ -310,7 +338,7 @@ var SnapshotKern = (function () {
       }
       if (tab === 'Beitragskonto' || tab === 'Beitragsgemeinschaft' || tab === 'Sollstellung') {
         var ab = abJahr(ix.konfig, heute);
-        aus[liste] = finanzZeilen(basis, tab, kreis).filter(function (z) {
+        aus[liste] = gefiltert(tab, finanzZeilen(basis, tab, kreis)).filter(function (z) {
           return tab !== 'Sollstellung' || Number(z.jahr) >= ab;
         }).map(function (z) {
           var o = schnitt(ktx, tab, z);
@@ -323,7 +351,7 @@ var SnapshotKern = (function () {
         .map(function (z) { return schnitt(ktx, tab, z); });
     });
 
-    aus.mitglieder = basis.tabs.Mitglied.filter(function (m) { return kreis.ids[m.mitglied_id]; })
+    aus.mitglieder = gefiltert('Mitglied', basis.tabs.Mitglied).filter(function (m) { return kreis.ids[m.mitglied_id]; })
       .map(function (m) { return mitgliedFuer(m, ix, kreis, ktx, heute); });
     return aus;
   }
@@ -371,7 +399,7 @@ var SnapshotKern = (function () {
   /** Ist die Person für den Kontext sichtbar (Zeilenschutz bei Schreibzugriffen)? */
   function mitgliedSichtbar(basis, ktx, heute, id) {
     var ix = indexiere(basis);
-    return !!personenkreis(basis, ix, ktx, heute).ids[Number(id)];
+    return !!personenkreisGemerkt(basis, ix, ktx, heute).ids[Number(id)];
   }
 
   // ------------------------------------------------------------------ Write-through
@@ -405,24 +433,34 @@ var SnapshotKern = (function () {
    * durch die Änderung unsichtbar wurden, stehen unter entfernt.
    */
   function antwortFuer(basisNeu, ktx, heute, aenderungen) {
-    var sicht = fuer(basisNeu, ktx, heute);
     var aktualisiert = {}, entfernt = {};
     var betroffen = {};
+    var nur = {};
     function merke(liste, z) { (aktualisiert[liste] = aktualisiert[liste] || []).push(z); }
     function weg(liste, id) { (entfernt[liste] = entfernt[liste] || []).push(id); }
+    function vormerken(tab, id) { (nur[tab] = nur[tab] || {})[String(id)] = true; }
 
-    (aenderungen || []).forEach(function (a) {
-      var liste = LISTEN[a.tab];
-      if (!liste) return;
-      var feld = idSpalte(a.tab);
+    // 1. Was ist betroffen? Nur diese Zeilen werden abgeleitet (statt des ganzen Bestands).
+    var relevant = (aenderungen || []).filter(function (a) { return LISTEN[a.tab]; });
+    relevant.forEach(function (a) {
       if (a.tab === 'Mitglied') {
         betroffen[a.neu ? a.neu.mitglied_id : a.entfernt] = true;
         return;
       }
+      vormerken(a.tab, a.neu ? a.neu[idSpalte(a.tab)] : a.entfernt);
       if (a.neu && a.neu.mitglied_id !== undefined && a.neu.mitglied_id !== null) betroffen[a.neu.mitglied_id] = true;
       if (a.tab === 'Beitragskonto' && a.neu) {
         basisNeu.tabs.Mitglied.forEach(function (m) { if (m.beitragskonto_id === a.neu.beitragskonto_id) betroffen[m.mitglied_id] = true; });
       }
+    });
+    Object.keys(betroffen).forEach(function (id) { vormerken('Mitglied', id); });
+    var sicht = fuer(basisNeu, ktx, heute, nur);
+
+    // 2. Antwort zusammenstellen
+    relevant.forEach(function (a) {
+      if (a.tab === 'Mitglied') return;
+      var liste = LISTEN[a.tab];
+      var feld = idSpalte(a.tab);
       if (!sicht[liste]) return;   // Liste für diese Rolle nicht sichtbar
       var id = a.neu ? a.neu[feld] : a.entfernt;
       var gefunden = sicht[liste].filter(function (z) { return String(z[feld]) === String(id); })[0];

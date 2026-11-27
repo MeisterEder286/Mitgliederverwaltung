@@ -16,7 +16,7 @@ function apiSnapshot(bereiche) {
   });
 }
 
-/** Zeit-Trigger (optional, alle 5 h): Snapshot-Basis neu bauen, bevor der Cache abläuft. */
+/** Zeit-Trigger (stündlich): Konfig auffrischen, Snapshot-Basis neu bauen, wenn sie fehlt oder altert. */
 function snapshotWarmhalten() {
   try {
     Zugriff.nurFunktionskonto();

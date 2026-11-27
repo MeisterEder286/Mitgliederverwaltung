@@ -18,12 +18,15 @@
  *    Version mit, die er gesehen hat. Passt sie nicht mehr, gibt es Fehler.konflikt mit dem aktuellen Stand.
  *  - Massenschreiben (einfuegenViele, aktualisiereViele) mit fester Zahl an Tabellenzugriffen, unabhängig von
  *    der Zahl der Datensätze; entfernen nur für Löschkonzept und technische Bereinigung.
+ *  - Eindeutigkeitsprüfung beim Einzelschreiben liest nur die Schlüsselspalten (ein batchGet) und ergänzt die in
+ *    derselben Sperre geschriebenen Datensätze – bewusst nie aus einem Cache.
  *  - Der Zähler sheets zählt jeden Aufruf an SpreadsheetApp bzw. die Sheets-API (Messung, Auftragspunkt 8).
  */
 var DB = (function () {
   var datei_ = null;
   var sheetsAufrufe = 0;
   var gesperrt = false;
+  var sperrNr = 0;   // zählt jedes Betreten von mitSperre; erkennt „unter DIESER Sperre gelesen“ (Snapshot)
 
   function intern(meldung) { return new Error('DB: ' + meldung); }
 
@@ -47,21 +50,31 @@ var DB = (function () {
     return t;
   }
 
+  // Blätter und Kopfzeilen werden je Ausführung gemerkt (nicht über Ausführungen hinweg: wer im Sheet Spalten
+  // verschiebt, muss beim nächsten Aufruf sofort wirken, sonst landeten Werte in falschen Spalten).
+  var blattMerker = {};
+  var kopfMerker = [];   // [{ blatt, kopf }] – Zuordnung über die Objektidentität des Blatts
+
   function blatt(tab) {
     tabSchema(tab);
+    if (blattMerker[tab]) return blattMerker[tab];
     var b = datei().getSheetByName(tab);
     sheetsAufrufe++;
     if (!b) throw intern('Tab fehlt in der Datenbank: ' + tab + ' (setup() ausführen)');
+    blattMerker[tab] = b;
     return b;
   }
 
+  /** Kopfzeile (getrimmte Spaltennamen) – je Ausführung einmal gelesen. Liefert eine Kopie. */
   function kopfLesen(b) {
+    for (var i = 0; i < kopfMerker.length; i++) if (kopfMerker[i].blatt === b) return kopfMerker[i].kopf.slice();
     var spalten = b.getLastColumn();
     sheetsAufrufe++;
     if (spalten < 1) throw intern('Kopfzeile fehlt in ' + b.getName());
     var kopf = b.getRange(1, 1, 1, spalten).getValues()[0].map(function (k) { return String(k).trim(); });
     sheetsAufrufe++;
-    return kopf;
+    kopfMerker.push({ blatt: b, kopf: kopf });
+    return kopf.slice();
   }
 
   function nurInSperre(wer) {
@@ -83,6 +96,13 @@ var DB = (function () {
   function lese(tabs) {
     tabs.forEach(tabSchema);
     if (!tabs.length) return {};
+    // Wartende Protokolleinträge (Protokoll.schreibe, nachgelagert) erst übertragen – Leser sehen das vollständige Protokoll.
+    // Nur kurz auf die Sperre warten: Ein reines Lesen darf nicht an einer langen fremden Speicherung scheitern; dann
+    // wird der aktuelle Blattstand gelesen (die wartenden Einträge bleiben erhalten und folgen später).
+    if (tabs.indexOf('_Protokoll') >= 0 && !Object.prototype.hasOwnProperty.call(vorrat, '_Protokoll') &&
+      typeof Protokoll !== 'undefined' && Protokoll.nachtragen) {
+      try { Protokoll.nachtragen(2000); } catch (e) { console.warn('DB.lese: Protokoll-Nachtrag übersprungen – ' + (e && (e.meldung || e.message))); }
+    }
     var fehlend = tabs.filter(function (t) { return !Object.prototype.hasOwnProperty.call(vorrat, t); });
     if (fehlend.length) {
       var neu = leseVomSheet(fehlend);
@@ -116,8 +136,8 @@ var DB = (function () {
     return ergebnis;
   }
 
-  /** Zeilennummer (1-basiert) des Datensatzes mit dieser ID oder -1. Liest nur die ID-Spalte. */
-  function findeZeile(b, kopf, idSpalte, id) {
+  /** Zeilennummer (1-basiert) des Datensatzes mit dieser ID oder -1. Liest nur die ID-Spalte und merkt alle Positionen. */
+  function findeZeile(b, kopf, idSpalte, id, tab) {
     var spalte = kopf.indexOf(idSpalte);
     if (spalte < 0) throw intern('ID-Spalte ' + idSpalte + ' fehlt in ' + b.getName());
     var letzte = b.getLastRow();
@@ -125,10 +145,104 @@ var DB = (function () {
     if (letzte < 2) return -1;
     var ids = b.getRange(2, spalte + 1, letzte - 1, 1).getValues();
     sheetsAufrufe++;
+    var karte = {}, gefunden = -1;
     for (var i = 0; i < ids.length; i++) {
-      if (ids[i][0] !== '' && String(ids[i][0]) === String(id)) return i + 2;
+      if (ids[i][0] === '') continue;
+      karte[String(ids[i][0])] = i + 2;
+      if (gefunden < 0 && String(ids[i][0]) === String(id)) gefunden = i + 2;
     }
-    return -1;
+    if (tab) zeilenKarteSpeichern(tab, karte);
+    return gefunden;
+  }
+
+  // Zeilenpositionen je Tab (id → Zeilennummer) im Script-Cache. Nur ein Hinweis: Vor dem Schreiben wird die ID in
+  // der gelesenen Zeile geprüft; passt sie nicht (Zeilen gelöscht, sortiert, verschoben), wird neu gesucht.
+  var ZEILEN_CACHE_S = 21600;
+  var zeilenMerker = {};
+  function zeilenKarte(tab) {
+    if (zeilenMerker[tab]) return zeilenMerker[tab];
+    var m = null;
+    try { var roh = CacheService.getScriptCache().get('zeilen:' + tab); m = roh ? JSON.parse(roh) : null; } catch (e) { m = null; }
+    zeilenMerker[tab] = m || {};
+    return zeilenMerker[tab];
+  }
+  function zeilenKarteSpeichern(tab, karte) {
+    zeilenMerker[tab] = karte;
+    try { CacheService.getScriptCache().put('zeilen:' + tab, JSON.stringify(karte), ZEILEN_CACHE_S); } catch (e) { /* nur Beschleunigung */ }
+  }
+
+  /** Liest die Zeile mit dieser ID: { nr, werte } oder null. Mit gültigem Positionshinweis EIN Lesezugriff statt drei. */
+  function zeileMitId(tab, b, kopf, idSpalte, id) {
+    var sp = kopf.indexOf(idSpalte);
+    if (sp < 0) throw intern('ID-Spalte ' + idSpalte + ' fehlt in ' + b.getName());
+    var vermutet = zeilenKarte(tab)[String(id)];
+    if (vermutet >= 2) {
+      try {
+        var z = b.getRange(vermutet, 1, 1, kopf.length).getValues()[0];
+        sheetsAufrufe++;
+        if (z[sp] !== '' && String(z[sp]) === String(id)) return { nr: vermutet, werte: z };
+      } catch (e) { /* Zeile gibt es nicht mehr → suchen */ }
+    }
+    var nr = findeZeile(b, kopf, idSpalte, id, tab);
+    if (nr < 0) return null;
+    var werte = b.getRange(nr, 1, 1, kopf.length).getValues()[0];
+    sheetsAufrufe++;
+    return { nr: nr, werte: werte };
+  }
+
+  /**
+   * Bestand für die Eindeutigkeitsprüfung: nur die Schlüsselspalten (und die ID) des Tabs mit EINEM batchGet –
+   * immer aus der Tabelle, nie aus einem Cache (Dubletten z. B. bei Mandatsreferenzen dürfen nicht durchrutschen).
+   * Dazu die in DIESER Sperre geschriebenen Datensätze: Die Sheets-API sieht noch nicht übertragene Schreibvorgänge
+   * von SpreadsheetApp nicht zuverlässig.
+   */
+  function bestandFuerPruefung(tab, gruppen) {
+    var t = tabSchema(tab);
+    var felder = t.idSpalte ? [t.idSpalte] : [];
+    gruppen.forEach(function (g) { g.forEach(function (f) { if (felder.indexOf(f) < 0) felder.push(f); }); });
+    var kopf = kopfLesen(blatt(tab));
+    var bestand;
+    if (felder.some(function (f) { return kopf.indexOf(f) < 0; })) {
+      bestand = lese([tab])[tab];
+    } else {
+      var name = "'" + tab.replace(/'/g, "''") + "'!";
+      var antwort = Sheets.Spreadsheets.Values.batchGet(dbId(), {
+        ranges: felder.map(function (f) { var s = spaltenBuchstabe(kopf.indexOf(f) + 1); return name + s + ':' + s; }),
+        majorDimension: 'COLUMNS',
+        valueRenderOption: 'UNFORMATTED_VALUE',
+        dateTimeRenderOption: 'SERIAL_NUMBER'
+      });
+      sheetsAufrufe++;
+      var spalten = ((antwort && antwort.valueRanges) || []).map(function (r) { return ((r.values || [])[0] || []).slice(1); });
+      var n = spalten.reduce(function (m, s) { return Math.max(m, s.length); }, 0);
+      bestand = [];
+      for (var i = 0; i < n; i++) {
+        var zeile = spalten.map(function (s) { return s[i] === undefined ? '' : s[i]; });
+        if (!zeileLeer(zeile)) bestand.push(Werte.zeileZuObjekt(felder, zeile, tab));
+      }
+    }
+    var eig = t.idSpalte && gesperrt && eigene.sperre === sperrNr ? (eigene.tabs[tab] || {}) : {};
+    var ids = Object.keys(eig);
+    if (!ids.length) return bestand;
+    return bestand.filter(function (z) { return !Object.prototype.hasOwnProperty.call(eig, String(z[t.idSpalte])); })
+      .concat(ids.map(function (k) { return eig[k]; }).filter(Boolean));
+  }
+
+  function spaltenBuchstabe(n) {
+    var s = '';
+    while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  }
+
+  // In der laufenden Sperre geschriebene Datensätze je Tab: { id: objekt } bzw. { id: null } für entfernte.
+  var eigene = { sperre: 0, tabs: {} };
+  function merkeEigene(tab, objekte, entfernteIds) {
+    var idSpalte = tabSchema(tab).idSpalte;
+    if (!idSpalte || !gesperrt) return;
+    if (eigene.sperre !== sperrNr) eigene = { sperre: sperrNr, tabs: {} };
+    var m = eigene.tabs[tab] = eigene.tabs[tab] || {};
+    (objekte || []).forEach(function (o) { m[String(o[idSpalte])] = o; });
+    (entfernteIds || []).forEach(function (id) { m[String(id)] = null; });
   }
 
   /** Wirft einen fachlichen Fehler, wenn obj eine Eindeutigkeitsregel des Tabs verletzt. */
@@ -138,7 +252,7 @@ var DB = (function () {
       return !nurGruppenMit || g.some(function (f) { return nurGruppenMit.indexOf(f) >= 0; });
     });
     if (!gruppen.length) return;
-    var bestand = lese([tab])[tab];
+    var bestand = bestandFuerPruefung(tab, gruppen);
     gruppen.forEach(function (g) {
       // Sind ALLE Schlüsselfelder des neuen Datensatzes leer (z. B. Überweisungskonto ohne Mandatsreferenz),
       // gibt es nichts zu vergleichen. Bei teilweise leeren Gruppen (Benutzer ohne abteilung_id) gilt leer = leer.
@@ -181,30 +295,68 @@ var DB = (function () {
     return tabSchema(tab).spalten.some(function (sp) { return sp.name === name; });
   }
 
+  // _Konfig-Zeilen, gelesen unter der laufenden Sperre: Weitere Zähler derselben Sperre (z. B. Mitglied, Zeitraum,
+  // Zugehörigkeit beim Anlegen) kommen ohne erneutes Lesen aus. Wer _Konfig an diesen Hilfen vorbei schreibt
+  // (Konfig.setze, Einstellungen), ruft konfigVergessen().
+  var konfigStand = null;   // { sperre, b, kopf, iS, iW, zeilen }
+
+  function konfigUnterSperre() {
+    if (konfigStand && gesperrt && konfigStand.sperre === sperrNr) return konfigStand;
+    var k = blatt('_Konfig');
+    var kopf = kopfLesen(k);
+    var letzte = k.getLastRow();
+    sheetsAufrufe++;
+    var zeilen = [];
+    if (letzte >= 2) { zeilen = k.getRange(2, 1, letzte - 1, kopf.length).getValues(); sheetsAufrufe++; }
+    konfigStand = { sperre: sperrNr, b: k, kopf: kopf, iS: kopf.indexOf('schluessel'), iW: kopf.indexOf('wert'), zeilen: zeilen };
+    return konfigStand;
+  }
+
+  function konfigVergessen() { konfigStand = null; }
+
+  /** Wert eines skriptverwalteten Zählers in _Konfig (Rohwert) oder null. Nur in mitSperre. */
+  function zaehlerWert(schluessel) {
+    nurInSperre('zaehlerWert');
+    var k = konfigUnterSperre();
+    for (var i = 0; i < k.zeilen.length; i++) {
+      if (String(k.zeilen[i][k.iS]).trim() === schluessel) return k.zeilen[i][k.iW];
+    }
+    return null;
+  }
+
+  /** Setzt (bzw. legt an) einen skriptverwalteten Zähler in _Konfig – ein Schreibzugriff, kein Lesen. Nur in mitSperre. */
+  function zaehlerSetzen(schluessel, wert, beschreibung) {
+    nurInSperre('zaehlerSetzen');
+    var k = konfigUnterSperre();
+    for (var i = 0; i < k.zeilen.length; i++) {
+      if (String(k.zeilen[i][k.iS]).trim() === schluessel) {
+        k.b.getRange(i + 2, k.iW + 1).setValue(String(wert));
+        sheetsAufrufe++;
+        k.zeilen[i][k.iW] = String(wert);
+        return;
+      }
+    }
+    var neu = k.kopf.map(function (h) {
+      return h === 'schluessel' ? schluessel : h === 'wert' ? String(wert) : h === 'beschreibung' ? (beschreibung || '') : '';
+    });
+    k.b.appendRow(neu);
+    sheetsAufrufe++;
+    k.zeilen.push(neu);
+  }
+
   /** Nächste freie ID eines Tabs aus _Konfig (next_id_<Tab>). Nur in mitSperre. */
   function neueId(tab) {
     vorratLeeren();
     nurInSperre('neueId');
     var t = tabSchema(tab);
     if (!t.idSpalte) throw intern('Tab ' + tab + ' hat keine ID-Spalte');
-    var k = blatt('_Konfig');
-    var kopf = kopfLesen(k);
-    var sSchluessel = kopf.indexOf('schluessel'), sWert = kopf.indexOf('wert');
-    var letzte = k.getLastRow();
-    sheetsAufrufe++;
     var name = 'next_id_' + tab;
-    if (letzte >= 2) {
-      var zeilen = k.getRange(2, 1, letzte - 1, kopf.length).getValues();
-      sheetsAufrufe++;
-      for (var i = 0; i < zeilen.length; i++) {
-        if (String(zeilen[i][sSchluessel]).trim() === name) {
-          var id = Number(zeilen[i][sWert]);
-          if (!(id > 0) || Math.floor(id) !== id) throw intern('Zähler ' + name + ' ist keine ganze Zahl');
-          k.getRange(i + 2, sWert + 1).setValue(String(id + 1));
-          sheetsAufrufe++;
-          return id;
-        }
-      }
+    var roh = zaehlerWert(name);
+    if (roh !== null) {
+      var id = Number(roh);
+      if (!(id > 0) || Math.floor(id) !== id) throw intern('Zähler ' + name + ' ist keine ganze Zahl');
+      zaehlerSetzen(name, id + 1);
+      return id;
     }
     // Zähler fehlt: aus dem Bestand ableiten und anlegen
     var max = 0;
@@ -212,14 +364,7 @@ var DB = (function () {
       var v = Number(z[t.idSpalte]);
       if (v > max) max = v;
     });
-    var neu = kopf.map(function (h) {
-      if (h === 'schluessel') return name;
-      if (h === 'wert') return String(max + 2);
-      if (h === 'beschreibung') return 'ID-Zähler — nur vom Skript erhöhen';
-      return '';
-    });
-    k.appendRow(neu);
-    sheetsAufrufe++;
+    zaehlerSetzen(name, max + 2, 'ID-Zähler — nur vom Skript erhöhen');
     return max + 1;
   }
 
@@ -259,10 +404,9 @@ var DB = (function () {
     fachlichAusPruefung(Werte.pruefe(tab, sauber, { teilweise: true }));
     var b = blatt(tab);
     var kopf = kopfLesen(b);
-    var nr = findeZeile(b, kopf, t.idSpalte, id);
-    if (nr < 0) throw Fehler.fachlich('Der Datensatz wurde nicht gefunden. Bitte die Ansicht neu laden.');
-    var alteZeile = b.getRange(nr, 1, 1, kopf.length).getValues()[0];
-    sheetsAufrufe++;
+    var gelesen = zeileMitId(tab, b, kopf, t.idSpalte, id);
+    if (!gelesen) throw Fehler.fachlich('Der Datensatz wurde nicht gefunden. Bitte die Ansicht neu laden.');
+    var nr = gelesen.nr, alteZeile = gelesen.werte;
     var alt = Werte.zeileZuObjekt(kopf, alteZeile, tab);
     if (hatSpalte(tab, 'version') && Number(alt.version || 0) !== Number(erwarteteVersion)) {
       throw Fehler.konflikt(alt);
@@ -282,12 +426,12 @@ var DB = (function () {
     return { alt: alt, neu: Werte.zeileZuObjekt(kopf, zeile, tab), diff: aenderung };
   }
 
-  /** Führt fn unter der Skriptsperre aus (wiedereintrittsfähig). Liefert das Ergebnis von fn. */
-  function mitSperre(fn) {
+  /** Führt fn unter der Skriptsperre aus (wiedereintrittsfähig). Liefert das Ergebnis von fn. wartezeitMs optional (sonst _Konfig). */
+  function mitSperre(fn, wartezeitMs) {
     if (gesperrt) return fn();
     vorratLeeren();
     var wartezeit = 10000;
-    try { wartezeit = Number(Konfig.wert('sperre_wartezeit_ms')) || 10000; } catch (e) { /* Standardwert */ }
+    try { wartezeit = Number(wartezeitMs) || Number(Konfig.wert('sperre_wartezeit_ms')) || 10000; } catch (e) { /* Standardwert */ }
     var sperre = LockService.getScriptLock();
     try {
       sperre.waitLock(wartezeit);
@@ -295,6 +439,7 @@ var DB = (function () {
       throw Fehler.fachlich('Gerade speichert jemand anderes. Bitte in einigen Sekunden erneut versuchen.');
     }
     gesperrt = true;
+    sperrNr++;
     try {
       return fn();
     } finally {
@@ -344,6 +489,7 @@ var DB = (function () {
 
   /** Reserviert `anzahl` fortlaufende IDs aus _Konfig.next_id_<Tab> (nie kleiner als größte vorhandene ID + 1). */
   function reserviereIds(tab, anzahl, bestand) {
+    konfigVergessen();   // liest und schreibt _Konfig selbst
     var idSpalte = tabSchema(tab).idSpalte;
     var maxBestand = 0;
     (bestand || []).forEach(function (z) { var v = Number(z[idSpalte]); if (v > maxBestand) maxBestand = v; });
@@ -566,18 +712,34 @@ var DB = (function () {
     lese: lese,
     vorratLeeren: vorratLeeren,
     mitSperre: mitSperre,
-    // Nach jedem Schreibzugriff ist der Vorrat veraltet → leeren (auch im Fehlerfall).
-    einfuegen: function (tab, obj, ktx) { try { return einfuegen(tab, obj, ktx); } finally { vorratLeeren(); } },
-    aktualisieren: function (tab, id, a, v, ktx) { try { return aktualisieren(tab, id, a, v, ktx); } finally { vorratLeeren(); } },
+    /** Nummer der gerade gehaltenen Sperre oder 0 (außerhalb von mitSperre). */
+    sperre: function () { return gesperrt ? sperrNr : 0; },
+    // Nach jedem Schreibzugriff ist der Vorrat veraltet → leeren (auch im Fehlerfall). Geschriebenes merken (Eindeutigkeit).
+    einfuegen: function (tab, obj, ktx) {
+      try { var neu = einfuegen(tab, obj, ktx); merkeEigene(tab, [neu]); return neu; } finally { vorratLeeren(); }
+    },
+    aktualisieren: function (tab, id, a, v, ktx) {
+      try { var r = aktualisieren(tab, id, a, v, ktx); merkeEigene(tab, [r.neu]); return r; } finally { vorratLeeren(); }
+    },
     neueId: function (tab) { try { return neueId(tab); } finally { vorratLeeren(); } },
-    einfuegenViele: function (tab, o, ktx) { try { return einfuegenViele(tab, o, ktx); } finally { vorratLeeren(); } },
-    aktualisiereViele: function (tab, l, ktx) { try { return aktualisiereViele(tab, l, ktx); } finally { vorratLeeren(); } },
-    entfernen: function (tab, ids) { try { return entfernen(tab, ids); } finally { vorratLeeren(); } },
+    zaehlerWert: zaehlerWert,
+    zaehlerSetzen: function (s, w, b) { try { return zaehlerSetzen(s, w, b); } finally { vorratLeeren(); } },
+    konfigVergessen: konfigVergessen,
+    einfuegenViele: function (tab, o, ktx) {
+      try { var neu = einfuegenViele(tab, o, ktx); merkeEigene(tab, neu); return neu; } finally { vorratLeeren(); }
+    },
+    aktualisiereViele: function (tab, l, ktx) {
+      try { var r = aktualisiereViele(tab, l, ktx); merkeEigene(tab, r.map(function (x) { return x.neu; })); return r; } finally { vorratLeeren(); }
+    },
+    entfernen: function (tab, ids) {
+      try { var n = entfernen(tab, ids); merkeEigene(tab, [], Array.isArray(ids) ? ids : [ids]); return n; } finally { vorratLeeren(); }
+    },
     zeilenEntfernen: function (b, zeilen) { nurInSperre('zeilenEntfernen'); try { return zeilenEntfernen(b, zeilen); } finally { vorratLeeren(); } },
     zaehler: zaehler,
     zaehlerZuruecksetzen: zaehlerZuruecksetzen,
     zaehle: zaehle,
     blatt: blatt,
+    kopf: kopfLesen,
     anhaengen: anhaengen,
     jetzt: jetzt
   };

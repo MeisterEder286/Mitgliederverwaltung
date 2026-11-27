@@ -43,6 +43,7 @@ function umgebung({ email = 'al@tsv.de', effektiv = 'owner@tsv.de', benutzer } =
     lese: (tabs) => { leseAufrufe++; sheets++; return tabs.includes('Benutzer') ? { Benutzer: benutzer || [
       { email: 'al@tsv.de', rolle: 'Abteilungsleiter', abteilung_id: 1, aktiv: true }] } : { _Messung: [] }; },
     blatt: (tab) => (tab === '_Protokoll' ? protokoll : messungBlatt),
+    kopf: (b) => { sheets += 2; return b.getRange(1, 1, 1, b.getLastColumn()).getValues()[0].map(String); },
     jetzt: () => '2026-10-25T12:00:00',
     zaehler: () => ({ sheets }),
     zaehlerZuruecksetzen: () => { sheets = 0; },

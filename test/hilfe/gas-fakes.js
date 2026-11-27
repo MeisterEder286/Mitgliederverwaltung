@@ -210,6 +210,16 @@ function erzeugeFakes(opt) {
             valueRanges: (optionen.ranges || []).map(r => {
               const name = tabAusBereich(r);
               if (!tabs[name]) throw new Error('Unable to parse range: ' + r);
+              // Spaltenbereich 'Tab'!C:C mit majorDimension COLUMNS → [[Zellen der Spalte]] (leere am Ende abgeschnitten)
+              const sp = /!([A-Z]+):\1$/.exec(r);
+              if (sp && optionen.majorDimension === 'COLUMNS') {
+                const idx = sp[1].split('').reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
+                const spalte = tabs[name].map(z => (z[idx] === null || z[idx] === undefined ? '' : z[idx]));
+                let n = spalte.length;
+                while (n > 0 && spalte[n - 1] === '') n--;
+                return n ? { range: r, values: [spalte.slice(0, n)] } : { range: r };
+              }
+              if (sp || optionen.majorDimension) throw new Error('Fake: Bereich/majorDimension nicht unterstützt: ' + r);
               // Wie die echte API: leere Zeilen/Zellen am Ende werden abgeschnitten
               const d = tabs[name].slice(0, letzteZeile(tabs[name])).map(z => {
                 const zeile = z.map(v => (v === null || v === undefined ? '' : v));
@@ -382,6 +392,7 @@ function erzeugeFakes(opt) {
       const b = {
         timeBased() { t.art = 'zeit'; return b; },
         everyHours(n) { t.stunden = n; return b; },
+        everyMinutes(n) { t.minuten = n; return b; },
         everyMinutes(n) { t.minuten = n; return b; },
         everyDays(n) { t.tage = n; return b; },
         atHour(h) { t.stunde = h; return b; },

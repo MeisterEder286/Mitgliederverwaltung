@@ -143,6 +143,7 @@
       var runner = google.script.run
         .withSuccessHandler(function (antwort) {
           merke(name, performance.now() - t0, antwort);
+          if (antwort && antwort.nachlauf && name !== 'apiNachlauf' && App.nachlauf) App.nachlauf();
           if (antwort && antwort.ok) { resolve(antwort.daten); return; }
           var f = (antwort && antwort.fehler) || { art: 'intern', meldung: 'Unerwartete Antwort vom Server.' };
           if (!still) {
@@ -226,13 +227,17 @@
     /**
      * Bereich nachladen (einmal je Sitzung), z. B. App.daten.lade('finanzen').then(…).
      * Bereiche: 'kern' (beim Start), 'finanzen' (konten, gemeinschaften, sollstellungen), 'historie' (zeitraeume, einwilligungen).
+     * Letztes Argument App.still: ohne Fehlermeldung (Vorladen im Hintergrund).
      */
     lade: function () {
-      var gewuenscht = Array.prototype.slice.call(arguments).filter(function (b) { return App.daten.bereiche.indexOf(b) < 0; });
+      var args = Array.prototype.slice.call(arguments);
+      var still = args.length && args[args.length - 1] === App.still;
+      if (still) args.pop();
+      var gewuenscht = args.filter(function (b) { return App.daten.bereiche.indexOf(b) < 0; });
       if (!gewuenscht.length) return Promise.resolve(App.daten.snapshot);
       var schluessel = gewuenscht.join(',');
       if (!bereichLaedt[schluessel]) {
-        bereichLaedt[schluessel] = App.rufe('apiSnapshot', gewuenscht).then(function (snap) {
+        bereichLaedt[schluessel] = (still ? App.rufe('apiSnapshot', gewuenscht, App.still) : App.rufe('apiSnapshot', gewuenscht)).then(function (snap) {
           App.daten.setze(snap, true);
           return App.daten.snapshot;
         }).then(function (s) { delete bereichLaedt[schluessel]; return s; }, function (e) { delete bereichLaedt[schluessel]; throw e; });

@@ -131,6 +131,11 @@ function apiPing() {
   return Api.ausfuehren('apiPing', 'start', function () { return { pong: true }; });
 }
 
+/** Nachlauf nach einem Schreibaufruf (vom Browser still angestoßen): wartende Protokolleinträge ins Blatt übertragen. */
+function apiNachlauf() {
+  return Api.ausfuehren('apiNachlauf', 'start', function () { return { eintraege: Protokoll.nachtragen() }; });
+}
+
 /** Auswertung der Server-Messwerte für die Admin-Ansicht. */
 function apiMessungen() {
   return Api.ausfuehren('apiMessungen', 'messung_lesen', function () { return Messung.auswertung(); });
@@ -158,18 +163,19 @@ function setup() {
 function triggerEinrichten() {
   Zugriff.nurFunktionskonto();
   // Vorhandene Trigger dieser Funktionen erst entfernen – so entstehen bei wiederholtem Aufruf keine Doppelten.
-  var verwaltet = ['messungSchreiben', 'wartungNachts', 'wartungFortsetzen', 'snapshotWarmhalten', 'protokollBereinigenTrigger'];
+  var verwaltet = ['messungSchreiben', 'wartungNachts', 'wartungFortsetzen', 'snapshotWarmhalten', 'protokollBereinigenTrigger', 'protokollNachtragen'];
   ScriptApp.getProjectTriggers().forEach(function (tr) {
     if (verwaltet.indexOf(tr.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(tr);
   });
   ScriptApp.newTrigger('messungSchreiben').timeBased().everyHours(1).create();
   // Nächtliche Pflege (Status-Cache, Fristen, Löschbarkeit, Protokoll-Bereinigung am Monatsersten, Messwerte, Snapshot)
   ScriptApp.newTrigger('wartungNachts').timeBased().everyDays(1).atHour(2).inTimezone('Europe/Berlin').create();
-  var text = 'Trigger eingerichtet: messungSchreiben (stündlich), wartungNachts (täglich gegen 02:00).';
-  if (Konfig.wert('cache_warmhalten') === 'ja') {
-    ScriptApp.newTrigger('snapshotWarmhalten').timeBased().everyHours(5).create();
-    text += ' snapshotWarmhalten (alle 5 Stunden).';
-  }
+  // Immer anlegen: snapshotWarmhalten prüft _Konfig.cache_warmhalten selbst – Umschalten braucht so kein neues triggerEinrichten.
+  ScriptApp.newTrigger('snapshotWarmhalten').timeBased().everyHours(1).create();
+  // Sicherheitsnetz für nachgelagerte Protokolleinträge (normalerweise überträgt sie apiNachlauf sofort)
+  ScriptApp.newTrigger('protokollNachtragen').timeBased().everyMinutes(5).create();
+  var text = 'Trigger eingerichtet: messungSchreiben (stündlich), wartungNachts (täglich gegen 02:00), ' +
+    'snapshotWarmhalten (stündlich, wirkt nur bei cache_warmhalten = ja), protokollNachtragen (alle 5 Minuten).';
   console.log(text);
   return text;
 }
@@ -181,5 +187,15 @@ function messungSchreiben() {
     Messung.schreibePuffer();
   } catch (err) {
     console.error('messungSchreiben fehlgeschlagen', err);
+  }
+}
+
+/** Zeit-Trigger (alle 5 Minuten): wartende Protokolleinträge ins Blatt übertragen, falls kein Browser-Nachlauf kam. */
+function protokollNachtragen() {
+  try {
+    Zugriff.nurFunktionskonto();
+    Protokoll.nachtragen();
+  } catch (err) {
+    console.error('protokollNachtragen fehlgeschlagen', err);
   }
 }

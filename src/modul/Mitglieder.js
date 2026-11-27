@@ -122,15 +122,8 @@ var Mitglieder = (function () {
 
   /** Nächste freie Mitgliedsnummer (Text, mind. 4-stellig wie der Bestand) und Zähler erhöhen. Nur in der Sperre. */
   function naechsteMitgliedsnummer() {
-    var b = DB.blatt('_Konfig');
-    var werte = b.getDataRange().getValues();
-    DB.zaehle(2);
-    var kopf = werte[0].map(String);
-    var iS = kopf.indexOf('schluessel'), iW = kopf.indexOf('wert');
-    var zeile = -1, start = 1;
-    for (var i = 1; i < werte.length; i++) {
-      if (String(werte[i][iS]) === 'mitgliedsnummer_naechste') { zeile = i; start = Number(String(werte[i][iW]).replace(/\D/g, '')) || 1; break; }
-    }
+    var roh = DB.zaehlerWert('mitgliedsnummer_naechste');   // _Konfig je Sperre nur einmal gelesen
+    var start = roh === null ? 1 : Number(String(roh).replace(/\D/g, '')) || 1;
     var belegt = {};
     var laenge = 4;
     (daten().Mitglied || []).forEach(function (m) {
@@ -144,14 +137,7 @@ var Mitglieder = (function () {
     while (text.length < laenge) text = '0' + text;
     var naechste = String(n + 1);
     while (naechste.length < laenge) naechste = '0' + naechste;
-    if (zeile > 0) {
-      b.getRange(zeile + 1, iW + 1).setValue(naechste);
-    } else {
-      b.appendRow(kopf.map(function (h) {
-        return h === 'schluessel' ? 'mitgliedsnummer_naechste' : h === 'wert' ? naechste : h === 'beschreibung' ? 'Nächste freie Mitgliedsnummer' : '';
-      }));
-    }
-    DB.zaehle(1);
+    DB.zaehlerSetzen('mitgliedsnummer_naechste', naechste, 'Nächste freie Mitgliedsnummer');
     try { Konfig.vergessen(); } catch (e) { /* Cache-Fehler sind unkritisch */ }
     return text;
   }
@@ -233,7 +219,8 @@ var Mitglieder = (function () {
       (eingabe.abteilungen || []).forEach(function (a) { pruefeAbteilung(ktx, a.abteilung_id); });
 
       felder.mitgliedsnummer = naechsteMitgliedsnummer();
-      felder.status = 'aktiv';
+      // Status gleich richtig schreiben (statt Einfügen + zweitem Änderungslauf an derselben Zeile)
+      felder.status = Mitgliedschaft.status(felder, [{ eintrittsdatum: eingabe.eintrittsdatum, austrittsdatum: null }], heute());
       if (leer(felder.land)) felder.land = 'DE';
       var m = DB.einfuegen('Mitglied', felder, ktx);
       var z = DB.einfuegen('Mitgliedschaftszeitraum', { mitglied_id: m.mitglied_id, eintrittsdatum: eingabe.eintrittsdatum, antrag_am: eingabe.antrag_am || null, aufnahme_beschluss_am: eingabe.aufnahme_beschluss_am || null }, ktx);
@@ -249,7 +236,6 @@ var Mitglieder = (function () {
         aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: zug });
         protokoll.push({ aktion: 'angelegt', tabelle: 'Abteilungszugehoerigkeit', datensatz_id: zug.zugehoerigkeit_id });
       });
-      statusNachziehen(ktx, m, [z], aenderungen, protokoll);
       var hinweise = p.warnungen.slice();
       if (!m.beitragsart_id && !m.beitragsgemeinschaft_id && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragsart_id') >= 0) {
         hinweise.push('Noch keine Beitragsart und keine Beitragsgemeinschaft – bitte ergänzen (sonst Klärliste).');

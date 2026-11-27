@@ -55,6 +55,7 @@ function lade(optionen) {
         const b = {
           timeBased() { return b; },
           everyHours(h) { t.takt = h + 'h'; return b; },
+          everyMinutes(m) { t.takt = m + 'min'; return b; },
           everyDays(d) { t.takt = d + 'd'; return b; },
           atHour(h) { t.takt += '@' + h; return b; },
           inTimezone() { return b; },
@@ -123,7 +124,7 @@ test('setup und triggerEinrichten nur für das Funktionskonto', () => {
   const eigen = lade();
   assert.strictEqual(eigen.g.setup(), 'Bericht');
   eigen.g.triggerEinrichten();
-  assert.deepStrictEqual(rein(eigen.protokoll.trigger), [['geloescht', 'alt'], ['neu', 'messungSchreiben', '1h'], ['neu', 'wartungNachts', '1d@2']]);
+  assert.deepStrictEqual(rein(eigen.protokoll.trigger), [['geloescht', 'alt'], ['neu', 'messungSchreiben', '1h'], ['neu', 'wartungNachts', '1d@2'], ['neu', 'snapshotWarmhalten', '1h'], ['neu', 'protokollNachtragen', '5min']]);
 });
 
 test('messungSchreiben wirft nie (Trigger), auch ohne Berechtigung', () => {

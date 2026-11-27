@@ -55,3 +55,25 @@ test('neue Generation ersetzt die alte vollständig', () => {
   assert.notStrictEqual(k1, k2);
   assert.deepStrictEqual(rein(g.Cache.lade('z')), { v: 2 });
 });
+
+test('mehrteilig: nur geänderte Einträge neu gepackt, fehlender Teil oder altes Format → null', () => {
+  const { f, g } = aufbau();
+  const c = f.globale.CacheService.getScriptCache();
+  const k1 = g.Cache.speichereMehrteilig('m', { v: 1 }, { a: { x: 1 }, b: gross(40000) }, null, null, 600);
+  assert.ok(k1.eintraege.b.teile >= 2);
+  const k2 = g.Cache.speichereMehrteilig('m', { v: 2 }, { a: { x: 2 }, b: gross(40000) }, k1, ['a'], 600);
+  assert.notStrictEqual(k2.eintraege.a.generation, k1.eintraege.a.generation);
+  assert.deepStrictEqual(k2.eintraege.b, k1.eintraege.b, 'b weiterverwendet');
+  const r = rein(g.Cache.ladeMehrteilig('m'));
+  assert.deepStrictEqual(r.daten, { v: 2 });
+  assert.deepStrictEqual(r.eintraege.a, { x: 2 });
+  assert.deepStrictEqual(r.eintraege.b, gross(40000));
+  // alte Einträge (älter als 3 h) werden trotzdem neu geschrieben, damit sie nicht vor dem Kopf verfallen
+  const alt = JSON.parse(JSON.stringify(k2)); alt.eintraege.b.am = 0;
+  const k3 = g.Cache.speichereMehrteilig('m', { v: 3 }, { a: { x: 3 }, b: { y: 1 } }, alt, ['a'], 600);
+  assert.notStrictEqual(k3.eintraege.b.generation, k2.eintraege.b.generation);
+  c.remove('m:a:g' + k3.eintraege.a.generation + ':0');
+  assert.strictEqual(g.Cache.ladeMehrteilig('m'), null);
+  g.Cache.speichere('alt', { a: 1 }, 600);
+  assert.strictEqual(g.Cache.ladeMehrteilig('alt'), null, 'altes Einteil-Format → neu bauen');
+});

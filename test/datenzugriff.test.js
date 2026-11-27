@@ -100,6 +100,17 @@ test('neueId: fehlender Zähler wird aus dem Bestand angelegt', () => {
   assert.strictEqual(g.DB.mitSperre(() => g.DB.neueId('Funktion')), 17);
 });
 
+test('neueId: _Konfig wird je Sperre nur einmal gelesen, Konfig.setze dazwischen wird beachtet', () => {
+  const { f, g } = aufbau();
+  const ids = g.DB.mitSperre(() => [g.DB.neueId('Funktion'), g.DB.neueId('Abteilung'), g.DB.neueId('Funktion')]);
+  assert.deepStrictEqual(ids, [16, 6, 17]);
+  assert.strictEqual(f.zaehler.getLastRow, 1, 'einmal gelesen');
+  assert.strictEqual(f.daten('_Konfig').find(z => z[0] === 'next_id_Funktion')[1], '18');
+  const id = g.DB.mitSperre(() => { g.Konfig.setze('next_id_Funktion', '100'); return g.DB.neueId('Funktion'); });
+  assert.strictEqual(id, 100);
+  assert.strictEqual(g.DB.mitSperre(() => g.DB.neueId('Funktion')), 101, 'neue Sperre liest frisch');
+});
+
 test('aktualisieren: Version, Diff, Schutz technischer Felder', () => {
   const { f, g } = aufbau();
   const vorher = g.DB.lese(['Abteilung']).Abteilung.find(a => a.abteilung_id === 3);
@@ -131,6 +142,38 @@ test('aktualisieren: ohne Änderung kein Schreiben, unbekannte ID fachlich', () 
   assert.strictEqual(r.diff.length, 0);
   assert.strictEqual(f.zaehler.setValues || 0, vorher);
   wirft(() => g.DB.mitSperre(() => g.DB.aktualisieren('Abteilung', 4711, { bemerkung: 'x' }, 0, KTX)), 'fachlich');
+});
+
+test('Blatt und Kopfzeile werden je Ausführung nur einmal gelesen', () => {
+  const { f, g } = aufbau();
+  g.DB.mitSperre(() => {
+    g.DB.aktualisieren('Abteilung', 2, { bemerkung: 'A' }, 0, KTX);
+    g.DB.aktualisieren('Abteilung', 3, { bemerkung: 'B' }, 0, KTX);
+    g.DB.einfuegen('Abteilung', { bezeichnung: 'Boule', meldepflichtig: false, aktiv: true }, KTX);
+  });
+  assert.strictEqual(f.zaehler.getSheetByName, 2, 'Abteilung + _Konfig');
+  assert.strictEqual(f.zaehler.getLastColumn, 2, 'je Blatt eine Kopfzeile');
+  // neue Ausführung liest wieder frisch (Spalten könnten im Sheet verschoben worden sein)
+  const g2 = ladeProjekt(f.globale);
+  g2.DB.mitSperre(() => g2.DB.aktualisieren('Abteilung', 2, { bemerkung: 'C' }, 1, KTX));
+  assert.strictEqual(f.zaehler.getLastColumn, 3);
+});
+
+test('aktualisieren: Zeilenposition aus dem Cache spart das Suchen, verschobene Zeilen werden trotzdem richtig getroffen', () => {
+  const { f, g } = aufbau();
+  g.DB.mitSperre(() => g.DB.aktualisieren('Abteilung', 3, { bemerkung: 'A' }, 0, KTX));
+  const g2 = ladeProjekt(f.globale);   // neue Ausführung, gleicher Cache
+  const vorher = f.zaehler.getLastRow || 0;
+  g2.DB.mitSperre(() => g2.DB.aktualisieren('Abteilung', 3, { bemerkung: 'B' }, 1, KTX));
+  assert.strictEqual(f.zaehler.getLastRow || 0, vorher, 'keine Suche über die ID-Spalte');
+  // Jemand fügt im Sheet oben eine Zeile ein → gemerkte Position stimmt nicht mehr
+  const daten = f.daten('Abteilung');
+  daten.splice(1, 0, daten[0].map(() => ''));
+  const g3 = ladeProjekt(f.globale);
+  g3.DB.mitSperre(() => g3.DB.aktualisieren('Abteilung', 3, { bemerkung: 'C' }, 2, KTX));
+  const kopf = daten[0];
+  assert.strictEqual(daten.find(z => z[0] === 3)[kopf.indexOf('bemerkung')], 'C');
+  assert.strictEqual(daten.filter(z => z[kopf.indexOf('bemerkung')] === 'C').length, 1, 'keine fremde Zeile überschrieben');
 });
 
 test('aktualisieren: Eindeutigkeit auch bei Änderung', () => {
@@ -261,4 +304,64 @@ test('entfernen: Zeilen über ID löschen, zusammenhängende in einem Schritt; a
   assert.strictEqual(f.zaehler.deleteRows, 1);
   assert.strictEqual(g.DB.mitSperre(() => g.DB.entfernen('Einwilligung', ids)), ids.length);
   assert.strictEqual(f.daten('Einwilligung').length, 1, 'nur die Kopfzeile bleibt');
+});
+
+// ---------------------------------------------------------------- Protokoll nachgelagert (echter Ablauf)
+
+function nachgelagert() {
+  const f = erzeugeFakes({ tabs: beispielTabs(['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
+    'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation', 'Ehrungsregel', 'Ehrung',
+    'Einwilligung', 'Vorlage', 'Dokument', 'Anschreiben', 'Notiz', '_Konfig', 'Benutzer', '_Protokoll', '_Messung']), email: 'verwaltung@tsv-ergoldsbach.de' });
+  f.globale.__protokollNachgelagert = true;
+  return { f, g: ladeProjekt(f.globale) };
+}
+const warteKeys = (f) => Object.keys(f.globale.PropertiesService.getScriptProperties().getProperties()).filter(k => k.startsWith('protwarte:'));
+
+test('Protokoll nachgelagert: Antwort meldet nachlauf, Blatt erst nach apiNachlauf, Warteschlange danach leer', () => {
+  const { f, g } = nachgelagert();
+  const vorher = f.daten('_Protokoll').length;
+  const a = g.Api.ausfuehren('apiTest', 'start', (ktx) => { g.Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: 'Mitglied', datensatz_id: 7, feld: 'ort', alt_wert: 'A', neu_wert: '=B' }]); return 1; });
+  assert.strictEqual(a.nachlauf, true);
+  assert.strictEqual(f.daten('_Protokoll').length, vorher, 'noch nicht im Blatt');
+  assert.strictEqual(warteKeys(f).length, 1);
+  const n = ladeProjekt(f.globale).apiNachlauf();
+  assert.strictEqual(n.daten.eintraege, 1);
+  assert.ok(!n.nachlauf, 'Nachlauf meldet keinen weiteren Nachlauf');
+  const d = f.daten('_Protokoll'), kopf = d[0], z = d[d.length - 1];
+  assert.strictEqual(d.length, vorher + 1);
+  assert.strictEqual(z[kopf.indexOf('protokoll_id')], vorher);
+  assert.strictEqual(z[kopf.indexOf('neu_wert')], "'=B", 'Formelschutz bleibt');
+  assert.strictEqual(z[kopf.indexOf('benutzer_email')], 'verwaltung@tsv-ergoldsbach.de');
+  assert.strictEqual(warteKeys(f).length, 0);
+});
+
+test('Protokoll nachgelagert: Lesen von _Protokoll überträgt zuerst; sofortiges Schreiben hält die Reihenfolge', () => {
+  const { f, g } = nachgelagert();
+  const ktx = { email: 'mv@tsv.de' };
+  g.Protokoll.schreibe(ktx, [{ aktion: 'eingesehen', tabelle: 'Mitglied', datensatz_id: 1 }]);
+  const prot = g.DB.lese(['_Protokoll'])._Protokoll;
+  assert.strictEqual(prot[prot.length - 1].aktion, 'eingesehen');
+  assert.strictEqual(warteKeys(f).length, 0);
+  // wartender Eintrag + danach ein zu großer (sofort geschrieben) → der wartende bekommt die kleinere ID
+  g.Protokoll.schreibe(ktx, [{ aktion: 'angelegt', tabelle: 'Mitglied', datensatz_id: 2 }]);
+  const gross = Array.from({ length: 30 }, (_, i) => ({ aktion: 'geändert', tabelle: 'Mitglied', datensatz_id: 3, kommentar: 'x'.repeat(400) + i }));
+  g.Protokoll.schreibe(ktx, gross);
+  const d = f.daten('_Protokoll'), kopf = d[0];
+  const ids = d.slice(-31).map(z => [z[kopf.indexOf('protokoll_id')], z[kopf.indexOf('datensatz_id')]]);
+  assert.deepStrictEqual(ids.map(x => String(x[1])), ['2'].concat(Array(30).fill('3')));
+  ids.forEach((x, i) => { if (i) assert.strictEqual(x[0], ids[i - 1][0] + 1); });
+  assert.strictEqual(warteKeys(f).length, 0);
+});
+
+test('Protokoll nachgelagert: Lesen scheitert nicht an einer belegten Sperre – wartende Einträge bleiben erhalten', () => {
+  const { f, g } = nachgelagert();
+  g.Protokoll.schreibe({ email: 'mv@tsv.de' }, [{ aktion: 'eingesehen', tabelle: 'Mitglied', datensatz_id: 1 }]);
+  const vorher = f.daten('_Protokoll').length;
+  const lock = f.globale.LockService.getScriptLock();
+  f.globale.LockService = { getScriptLock: () => Object.assign({}, lock, { waitLock() { throw new Error('Lock timeout'); } }) };
+  const orig = console.warn; console.warn = () => {};
+  let prot;
+  try { prot = ladeProjekt(f.globale).DB.lese(['_Protokoll'])._Protokoll; } finally { console.warn = orig; }
+  assert.strictEqual(prot.length, vorher - 1, 'aktueller Blattstand gelesen');
+  assert.strictEqual(warteKeys(f).length, 1, 'Eintrag wartet weiter');
 });
