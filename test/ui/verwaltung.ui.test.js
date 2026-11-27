@@ -55,6 +55,19 @@ test('Mitgliederverwalter: Benutzer, Einstellungen, Stammdaten, Datenqualität, 
     await p.locator('dialog').getByRole('button', { name: 'Speichern' }).click();
     await p.getByRole('cell', { name: 'Volleyball', exact: true }).waitFor();
     assert.ok(await p.evaluate(() => App.daten.liste('abteilungen').some(a => a.bezeichnung === 'Volleyball')), 'Snapshot im Browser aktualisiert');
+    // Gliederung: Beitragsarten in Einzel- und Familienbeiträge; Familienfelder nur bei „als Gemeinschaft“
+    const arten = p.getByRole('navigation', { name: 'Arten der Stammdaten' });
+    await arten.getByRole('button', { name: 'Beitragsarten' }).click();
+    await p.getByRole('heading', { name: /^Einzelbeiträge \(\d+\)$/ }).waitFor();
+    await p.getByRole('heading', { name: /^Familien- und Ehegattenbeiträge \(\d+\)$/ }).waitFor();
+    await p.getByRole('button', { name: 'Neu' }).click();
+    const dlg = p.locator('dialog');
+    await dlg.getByRole('heading', { name: 'Familien- oder Ehegattenbeitrag' }).waitFor();
+    assert.ok(!(await dlg.getByLabel('Höchstens Kinder').isVisible()), 'Familienfelder erst bei Familie/Ehepaar');
+    await dlg.getByLabel('Als Gemeinschaft (Familie/Ehepaar)').selectOption('Familie');
+    assert.ok(await dlg.getByLabel('Höchstens Kinder').isVisible());
+    await dlg.getByRole('button', { name: 'Abbrechen' }).click();
+    await arten.getByRole('button', { name: 'Abteilungen' }).click();
 
     await p.getByRole('tab', { name: 'Datenqualität' }).click();
     await p.getByRole('heading', { name: 'Befunde' }).waitFor();

@@ -4,7 +4,8 @@
   Zweck:      Reiter „Benutzer“ (Zugänge anlegen/ändern/deaktivieren, Rechte je Rolle ansehen, Warnliste „Zugang ohne
               passendes Amt“), „Einstellungen“ (Werte aus _Konfig mit Prüfung, gegliedert nach Bereichen – KONFIG_GRUPPEN –,
               Suche über alle Bereiche, Markierung offener Punkte), „Stammdaten“ (Abteilungen,
-              Funktionsarten, Beitragsarten, Nachweisarten, Ehrungsstufen, Aufbewahrungsfristen), „Datenqualität“
+              Funktionsarten, Beitragsarten, Nachweisarten, Ehrungsstufen, Aufbewahrungsfristen – nach Bereichen gegliedert
+              (STAMM_GRUPPEN), je Art in Unterabschnitte, Dialog mit Feldgruppen), „Datenqualität“
               (Prüfregeln über den ganzen Bestand) und „System“ (Cache, Zeilenzahlen, Snapshot neu aufbauen).
   Datenquelle: apiVerwaltung…-Funktionen (src/api/Verwaltung.js); Abteilungen und Personen für Auswahlfelder aus App.daten.
   Wer darf:   benutzer_verwalten, konfig_aendern, stammdaten_bearbeiten (Vorstand, Mitgliederverwalter) – je Reiter;
@@ -28,7 +29,11 @@
     border: 1px solid var(--rand); border-radius: 999px; background: var(--grund); color: var(--text); font: inherit; text-align: left; cursor: pointer; white-space: nowrap; }
   .vw-bereiche button[aria-current="true"] { background: var(--akzent); border-color: var(--akzent); color: var(--akzent-text); font-weight: 600; }
   .vw-zahl { min-width: 22px; padding: 0 6px; border-radius: 999px; background: #d39b00; color: #1b1f24; font-size: 0.8rem; font-weight: 700; text-align: center; }
+  .vw-bereiche-kopf { display: none; font-size: 0.8rem; font-weight: 600; color: var(--text-leise); text-transform: uppercase; letter-spacing: 0.03em; text-align: left; }
+  .vw-teil .kartensortierung { display: none !important; }
   .vw-bereich { min-width: 0; }
+  .vw-bereich > .abschnittskopf:first-child { margin-top: 0; }
+  .vw-teil .tabelle-rahmen { margin: 0 0 8px; }
   .vw-bereich > h2:first-child { margin-top: 0; }
   .vw-teil { padding: 4px 12px; }
   .vw-teil h3 { font-size: 1rem; margin: 10px 0 2px; color: var(--akzent); }
@@ -48,6 +53,8 @@
     .vw-einstellungen { grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 20px; }
     .vw-bereiche { flex-direction: column; overflow: visible; position: sticky; top: 8px; }
     .vw-bereiche button { border-radius: var(--radius); white-space: normal; }
+    .vw-bereiche-kopf { display: block; padding: 10px 0 0; }
+    .vw-bereiche-kopf:first-child { padding-top: 0; }
   }
   .vw-warnung { padding: 10px; border-left: 4px solid #d39b00; background: #fffaeb; margin: 0 0 6px; border-radius: 0 var(--radius) var(--radius) 0; }
   @media (min-width: 720px) { .vw-konfig { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: center; } }
@@ -61,7 +68,9 @@
 
   var TITEL = {
     online_schluessel: 'Schlüssel im Online-Formular', als_gemeinschaft: 'Als Gemeinschaft (Familie/Ehepaar)',
-    betrag_vorher: 'Betrag vor „gültig ab“',
+    betrag_vorher: 'Betrag vor „gültig ab“', gueltig_ab: 'Gültig ab', blsv_sportart: 'BLSV-Sportart', fz_pflichtig: 'Führungszeugnis nötig',
+    ehrungsfaehig: 'Zählt für Funktionsjubiläum', wiedervorlage_monate: 'Wiedervorlage nach Monaten', max_alter_zeugnis_monate: 'Zeugnis höchstens Monate alt',
+    loeschfrist_monate: 'Löschfrist nach Tätigkeitsende (Monate)', betrifft_tab: 'Betrifft', dauer_monate: 'Dauer (Monate)', schwelle: 'Ab Jahren',
     max_erwachsene: 'Höchstens Erwachsene', max_kinder: 'Höchstens Kinder', kinder_bis_alter: 'Kinder bis Alter (einschließlich)',
     ausbildung_bis_alter: 'Mit Ausbildung bis Alter (einschließlich)', alter_von: 'Alter von', alter_bis: 'Alter bis (einschließlich)'
   };
@@ -469,45 +478,241 @@
 
   // ================================================================== Stammdaten
 
-  var STAMM = [
-    { tab: 'Abteilung', titel: 'Abteilungen', name: 'bezeichnung' },
-    { tab: 'Funktionsart', titel: 'Funktionsarten', name: 'bezeichnung' },
-    { tab: 'Beitragsart', titel: 'Beitragsarten', name: 'bezeichnung' },
-    { tab: 'Qualifikationsart', titel: 'Nachweisarten', name: 'bezeichnung' },
-    { tab: 'Ehrungsregel', titel: 'Ehrungsstufen', name: 'bezeichnung' },
-    { tab: 'Aufbewahrungsfrist', titel: 'Aufbewahrungsfristen', name: 'datenkategorie' }
+  function janein(v) { return v === true ? 'ja' : v === false ? 'nein' : '–'; }
+  function leerStrich(v) { return v === null || v === undefined || v === '' ? '–' : v; }
+  function euro(v) { return v === null || v === undefined || v === '' ? '–' : A.betrag(v); }
+  function altersspanne(z) {
+    if (z.alter_von == null && z.alter_bis == null) return '–';
+    if (z.alter_von == null) return 'bis ' + z.alter_bis;
+    if (z.alter_bis == null) return 'ab ' + z.alter_von;
+    return z.alter_von + '–' + z.alter_bis;
+  }
+
+  /**
+   * Stammdaten-Arten, nach Bereichen gegliedert. Je Art:
+   *   spalten      – Spalten der Liste (statt der ersten Felder aus dem Katalog)
+   *   unterteilung – ordnet einen Eintrag einem Unterabschnitt zu (Karte je Abschnitt); reihenfolge legt die Folge fest
+   *   formular     – Feldgruppen im Dialog; Felder, die hier fehlen, erscheinen unter „Weitere Angaben“
+   *   abhaengig    – Felder nur zeigen, wenn ein anderes Feld einen bestimmten Wert hat (z. B. nur bei Familie/Ehepaar)
+   */
+  var STAMM_GRUPPEN = [
+    { titel: 'Verein & Ämter', arten: ['Abteilung', 'Funktionsart'] },
+    { titel: 'Beiträge', arten: ['Beitragsart'] },
+    { titel: 'Nachweise & Ehrungen', arten: ['Qualifikationsart', 'Ehrungsregel'] },
+    { titel: 'Datenschutz', arten: ['Aufbewahrungsfrist'] }
   ];
 
+  var STAMM = [
+    { tab: 'Abteilung', titel: 'Abteilungen', name: 'bezeichnung',
+      text: 'Sparten des Vereins. Meldepflichtige Abteilungen gehen in die BLSV-Bestandserhebung ein.',
+      spalten: [
+        { feld: 'blsv_sportart', titel: 'BLSV-Sportart', wert: function (z) { return leerStrich(z.blsv_sportart); } },
+        { feld: 'meldepflichtig', titel: 'Meldepflichtig', wert: function (z) { return janein(z.meldepflichtig); } },
+        { feld: 'online_schluessel', titel: 'Online-Schlüssel', wert: function (z) { return leerStrich(z.online_schluessel); } }
+      ],
+      formular: [
+        { gruppe: 'Abteilung', felder: ['bezeichnung', 'aktiv'] },
+        { gruppe: 'Meldung an den BLSV', felder: ['blsv_sportart', 'meldepflichtig'] },
+        { gruppe: 'Online-Aufnahme', felder: ['online_schluessel'] },
+        { gruppe: 'Sonstiges', felder: ['bemerkung'] }
+      ] },
+    { tab: 'Funktionsart', titel: 'Funktionsarten', name: 'bezeichnung',
+      text: 'Ämter und Tätigkeiten im Verein und in den Abteilungen – mit Nachweispflicht und Ehrungsfähigkeit.',
+      unterteilung: function (z) { return z.ebene === 'Verein' ? 'Ämter im Verein' : z.ebene === 'Abteilung' ? 'Ämter in den Abteilungen' : 'Ohne Ebene'; },
+      reihenfolge: ['Ämter im Verein', 'Ämter in den Abteilungen', 'Ohne Ebene'],
+      spalten: [
+        { feld: 'bestellung', titel: 'Bestellung', wert: function (z) { return leerStrich(z.bestellung); } },
+        { feld: 'fz_pflichtig', titel: 'Führungszeugnis', wert: function (z) { return janein(z.fz_pflichtig); } },
+        { feld: 'ehrungsfaehig', titel: 'Ehrungsfähig', wert: function (z) { return janein(z.ehrungsfaehig); } }
+      ],
+      formular: [
+        { gruppe: 'Amt', felder: ['bezeichnung', 'ebene', 'bestellung', 'aktiv'] },
+        { gruppe: 'Pflichten und Ehrungen', felder: ['fz_pflichtig', 'ehrungsfaehig'] },
+        { gruppe: 'Sonstiges', felder: ['bemerkung'] }
+      ] },
+    { tab: 'Beitragsart', titel: 'Beitragsarten', name: 'bezeichnung',
+      text: 'Tarife mit Betrag und Altersgrenzen. Familien- und Ehegattenbeiträge gelten einmal für alle Personen der Gemeinschaft.',
+      unterteilung: function (z) { return z.als_gemeinschaft ? 'Familien- und Ehegattenbeiträge' : 'Einzelbeiträge'; },
+      reihenfolge: ['Einzelbeiträge', 'Familien- und Ehegattenbeiträge'],
+      sortiere: function (z) { return z.alter_von == null ? 999 : z.alter_von; },
+      spalten: [
+        { feld: 'betrag', titel: 'Betrag', zahl: true, wert: function (z) { return euro(z.betrag); }, sort: function (z) { return Number(z.betrag) || 0; } },
+        { feld: 'intervall', titel: 'Intervall', wert: function (z) { return leerStrich(z.intervall); } },
+        { feld: 'alter_von', titel: 'Alter', wert: altersspanne, sort: function (z) { return z.alter_von == null ? -1 : z.alter_von; } },
+        { feld: 'gueltig_ab', titel: 'Gültig ab', wert: function (z) { return z.gueltig_ab ? A.datum(z.gueltig_ab) : '–'; } }
+      ],
+      spaltenTeil: {
+        'Familien- und Ehegattenbeiträge': [
+          { feld: 'betrag', titel: 'Betrag', zahl: true, wert: function (z) { return euro(z.betrag); }, sort: function (z) { return Number(z.betrag) || 0; } },
+          { feld: 'als_gemeinschaft', titel: 'Art', wert: function (z) { return leerStrich(z.als_gemeinschaft); } },
+          { feld: 'max_erwachsene', titel: 'Erwachsene', wert: function (z) { return z.max_erwachsene == null ? 'beliebig' : 'bis ' + z.max_erwachsene; } },
+          { feld: 'max_kinder', titel: 'Kinder', wert: function (z) {
+            if (z.max_kinder === 0) return 'keine';
+            var t = z.max_kinder == null ? 'beliebig' : 'bis ' + z.max_kinder;
+            return z.kinder_bis_alter == null ? t : t + ' (bis ' + z.kinder_bis_alter + ' J.)';
+          } }
+        ]
+      },
+      formular: [
+        { gruppe: 'Tarif', felder: ['bezeichnung', 'betrag', 'intervall', 'aktiv'] },
+        { gruppe: 'Altersgrenzen (automatischer Tarifwechsel)', felder: ['alter_von', 'alter_bis'] },
+        { gruppe: 'Beitragsänderung', felder: ['gueltig_ab', 'betrag_vorher'] },
+        { gruppe: 'Familien- oder Ehegattenbeitrag', felder: ['als_gemeinschaft', 'max_erwachsene', 'max_kinder', 'kinder_bis_alter', 'ausbildung_bis_alter'] },
+        { gruppe: 'Online-Aufnahme', felder: ['online_schluessel'] },
+        { gruppe: 'Sonstiges', felder: ['bemerkung'] }
+      ],
+      abhaengig: { feld: 'als_gemeinschaft', gesetzt: true, felder: ['max_erwachsene', 'max_kinder', 'kinder_bis_alter', 'ausbildung_bis_alter'] } },
+    { tab: 'Qualifikationsart', titel: 'Nachweisarten', name: 'bezeichnung',
+      text: 'Führungszeugnisse, Lizenzen und Kurse. Beim Führungszeugnis steuern die Fristen Wiedervorlage und Löschung.',
+      unterteilung: function (z) { return z.kategorie || 'Ohne Kategorie'; },
+      reihenfolge: ['Führungszeugnis', 'Lizenz', 'Kurs', 'Ohne Kategorie'],
+      spalten: [
+        { feld: 'wiedervorlage_monate', titel: 'Wiedervorlage (Monate)', zahl: true, wert: function (z) { return leerStrich(z.wiedervorlage_monate); } },
+        { feld: 'max_alter_zeugnis_monate', titel: 'Höchstalter (Monate)', zahl: true, wert: function (z) { return leerStrich(z.max_alter_zeugnis_monate); } },
+        { feld: 'loeschfrist_monate', titel: 'Löschfrist (Monate)', zahl: true, wert: function (z) { return leerStrich(z.loeschfrist_monate); } }
+      ],
+      spaltenTeil: { Lizenz: [], Kurs: [] },
+      formular: [
+        { gruppe: 'Nachweis', felder: ['bezeichnung', 'kategorie', 'aktiv'] },
+        { gruppe: 'Fristen (nur Führungszeugnis)', felder: ['wiedervorlage_monate', 'max_alter_zeugnis_monate', 'loeschfrist_monate'] },
+        { gruppe: 'Sonstiges', felder: ['bemerkung'] }
+      ],
+      abhaengig: { feld: 'kategorie', wert: 'Führungszeugnis', felder: ['wiedervorlage_monate', 'max_alter_zeugnis_monate', 'loeschfrist_monate'] } },
+    { tab: 'Ehrungsregel', titel: 'Ehrungsstufen', name: 'bezeichnung',
+      text: 'Ab wie vielen Jahren eine Ehrung fällig wird – je Art der Ehrung.',
+      unterteilung: function (z) { return z.typ || 'Ohne Typ'; },
+      reihenfolge: ['Mitgliedsjubiläum', 'Funktionsjubiläum', 'Geburtstag', 'Ohne Typ'],
+      sortiere: function (z) { return Number(z.schwelle) || 0; },
+      spalten: [
+        { feld: 'schwelle', titel: 'Ab Jahren', zahl: true, wert: function (z) { return leerStrich(z.schwelle); }, sort: function (z) { return Number(z.schwelle) || 0; } },
+        { feld: 'verband', titel: 'Verband', wert: function (z) { return leerStrich(z.verband); } }
+      ],
+      formular: [
+        { gruppe: 'Stufe', felder: ['typ', 'schwelle', 'bezeichnung', 'verband', 'aktiv'] },
+        { gruppe: 'Sonstiges', felder: ['bemerkung'] }
+      ] },
+    { tab: 'Aufbewahrungsfrist', titel: 'Aufbewahrungsfristen', name: 'datenkategorie',
+      text: 'Wie lange welche Daten aufbewahrt werden – Grundlage für Sperren, Anonymisieren und Löschen.',
+      spalten: [
+        { feld: 'betrifft_tab', titel: 'Betrifft', wert: function (z) { return leerStrich(z.betrifft_tab); } },
+        { feld: 'dauer_monate', titel: 'Dauer', zahl: true, wert: function (z) { return z.dauer_monate == null ? '–' : z.dauer_monate + ' Monate'; }, sort: function (z) { return Number(z.dauer_monate) || 0; } },
+        { feld: 'bezugspunkt', titel: 'ab', wert: function (z) { return leerStrich(z.bezugspunkt); } },
+        { feld: 'rechtsgrundlage', titel: 'Rechtsgrundlage', wert: function (z) { return leerStrich(z.rechtsgrundlage); } }
+      ],
+      formular: [
+        { gruppe: 'Frist', felder: ['datenkategorie', 'betrifft_tab', 'dauer_monate', 'bezugspunkt', 'aktiv'] },
+        { gruppe: 'Grundlage', felder: ['rechtsgrundlage', 'bemerkung'] }
+      ] }
+  ];
+
+  function stammDef(tab) { return STAMM.filter(function (s) { return s.tab === tab; })[0]; }
+
+  /** Dialogfelder mit Feldgruppen; Felder aus dem Katalog, die keiner Gruppe zugeordnet sind, kommen ans Ende. */
+  function stammFormularFelder(def, namen) {
+    var vergeben = {}, liste = [];
+    (def.formular || []).forEach(function (g) {
+      var f = g.felder.filter(function (n) { return namen.indexOf(n) >= 0; });
+      if (!f.length) return;
+      f.forEach(function (n) { vergeben[n] = true; });
+      liste.push({ gruppe: g.gruppe });
+      liste = liste.concat(felderAus(def.tab, f, HILFE[def.tab]));
+    });
+    var rest = namen.filter(function (n) { return !vergeben[n]; });
+    if (rest.length) { liste.push({ gruppe: 'Weitere Angaben' }); liste = liste.concat(felderAus(def.tab, rest, HILFE[def.tab])); }
+    return liste;
+  }
+
+  /** Abhängige Felder ein-/ausblenden (Werte bleiben erhalten und werden mitgespeichert). */
+  function stammAbhaengig(def, form) {
+    var a = def.abhaengig;
+    var steuer = a && form.feld(a.feld);
+    if (!steuer) return;
+    function pruefe() {
+      var an = a.gesetzt ? !!steuer.value : steuer.value === a.wert;
+      a.felder.forEach(function (n) { var e = form.feld(n); if (e && e.closest('.feld')) e.closest('.feld').style.display = an ? '' : 'none'; });
+    }
+    steuer.addEventListener('change', pruefe);
+    pruefe();
+  }
+
   function reiterStammdaten(ziel, param) {
-    var wahl = (param && param.tab) || 'Abteilung';
-    var auswahl = A.el('select');
-    auswahl.setAttribute('aria-label', 'Stammdaten-Art');
-    STAMM.forEach(function (s) { auswahl.appendChild(A.el('option', s.titel, { value: s.tab })); });
-    auswahl.value = wahl;
-    auswahl.addEventListener('change', function () { A.zeige('verwaltung', { reiter: 'stammdaten', tab: auswahl.value }, true); });
-    ziel.appendChild(A.el('div', null, { className: 'filterleiste' }, [auswahl]));
-    var def = STAMM.filter(function (s) { return s.tab === wahl; })[0];
-    var bereich = A.el('div');
-    ziel.appendChild(bereich);
+    var wahl = (param && stammDef(param.tab)) ? param.tab : 'Abteilung';
+    var def = stammDef(wahl);
     var neu = function () { A.zeige('verwaltung', { reiter: 'stammdaten', tab: wahl }, true); };
+
+    var nav = A.el('nav', null, { className: 'vw-bereiche', aria: { label: 'Arten der Stammdaten' } });
+    STAMM_GRUPPEN.forEach(function (g) {
+      nav.appendChild(A.el('span', g.titel, { className: 'vw-bereiche-kopf' }));
+      g.arten.forEach(function (tab) {
+        var s = stammDef(tab);
+        var b = A.el('button', s.titel, { type: 'button' });
+        if (tab === wahl) b.setAttribute('aria-current', 'true');
+        b.addEventListener('click', function () { if (tab !== wahl) A.zeige('verwaltung', { reiter: 'stammdaten', tab: tab }, true); });
+        nav.appendChild(b);
+      });
+    });
+    var bereich = A.el('div', null, { className: 'vw-bereich' });
+    ziel.appendChild(A.el('div', null, { className: 'vw-einstellungen' }, [nav, bereich]));
+    setTimeout(function () { var b = nav.querySelector('[aria-current]'); if (b && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = b.offsetLeft - 16; }, 0);
+
     laedt(bereich);
     A.rufe('apiVerwaltungStammdaten', wahl).then(function (d) {
       A.leere(bereich);
       var namen = fachfelder(wahl);
       function dialog(z) {
-        var form = A.formular(felderAus(wahl, namen, HILFE[wahl]), z || { aktiv: true });
+        var form = A.formular(stammFormularFelder(def, namen), z || { aktiv: true });
+        stammAbhaengig(def, form);
         speicherDialog((z ? def.titel + ': ' + (z[def.name] || 'Eintrag') + ' bearbeiten' : def.titel + ': neuer Eintrag'), form, 'apiVerwaltungStammdatenSpeichern',
           [wahl, z ? z[d.idSpalte] : null, z ? z.version : null], neu);
       }
+      var ruhend = d.zeilen.filter(function (z) { return z.aktiv === false; }).length;
       bereich.appendChild(A.abschnitt(def.titel, [A.knopf('Neu', function () { dialog(null); })]));
-      var spalten = [{ feld: def.name, titel: titelVon(def.name) }];
-      namen.filter(function (n) { return n !== def.name && n !== 'bemerkung'; }).slice(0, 4).forEach(function (n) {
-        spalten.push({ feld: n, titel: titelVon(n), wert: function (z) { var v = z[n]; return v === true ? 'ja' : v === false ? 'nein' : v; } });
-      });
-      spalten.push({ feld: 'bemerkung', titel: 'Bemerkung' });
-      bereich.appendChild(A.tabelle(spalten, d.zeilen, { beiKlick: dialog, sortiere: def.name }));
-      bereich.appendChild(A.el('p', 'Einträge werden nicht gelöscht, sondern auf „aktiv: nein“ gesetzt – sonst würde die Historie unverständlich.', { className: 'leise' }));
-    }).catch(function () { fehlerText(bereich, 'Die Stammdaten konnten nicht geladen werden.', neu); });
+      bereich.appendChild(A.el('p', def.text + ' Einträge werden nicht gelöscht, sondern auf „aktiv: nein“ gesetzt.', { className: 'leise' }));
+      var filter = [];
+      if (namen.indexOf('aktiv') >= 0) filter.push({ name: 'status', titel: 'Status', start: 'aktiv',
+        liste: [{ wert: 'aktiv', text: 'nur aktive (' + (d.zeilen.length - ruhend) + ')' }, { wert: 'ruhend', text: 'nur ruhende (' + ruhend + ')' }] });
+      var leiste = A.filterleiste(filter, zeichne, def.titel + ' durchsuchen …');
+      var liste = A.el('div');
+      bereich.appendChild(leiste);
+      bereich.appendChild(liste);
+
+      function zeichne(zu) {
+        A.leere(liste);
+        var t = A.falte(zu.suche || '').trim();
+        var zeilen = d.zeilen.filter(function (z) {
+          if (zu.status === 'aktiv' && z.aktiv === false) return false;
+          if (zu.status === 'ruhend' && z.aktiv !== false) return false;
+          return !t || A.falte(namen.map(function (n) { return z[n] == null ? '' : String(z[n]); }).join(' ')).indexOf(t) >= 0;
+        });
+        var teile = {}, folge = (def.reihenfolge || []).slice();
+        zeilen.forEach(function (z) {
+          var k = def.unterteilung ? def.unterteilung(z) : '';
+          if (!teile[k]) { teile[k] = []; if (folge.indexOf(k) < 0) folge.push(k); }
+          teile[k].push(z);
+        });
+        if (!def.unterteilung) folge = [''];
+        var gezeigt = 0;
+        folge.forEach(function (k) {
+          var z = teile[k];
+          if (!z || !z.length) return;
+          gezeigt += z.length;
+          if (def.sortiere) z.sort(function (a, b) { return def.sortiere(a) - def.sortiere(b); });
+          var extra = (def.spaltenTeil && def.spaltenTeil[k]) || def.spalten;
+          var spalten = [{ feld: def.name, titel: titelVon(def.name) }].concat(extra).concat([
+            { feld: 'aktiv', titel: 'Status', wert: function (x) { return x.aktiv === false ? A.ampel('grau', 'ruht') : A.ampel('gruen', 'aktiv'); } }
+          ]);
+          var karte = A.el('section', null, { className: 'karte vw-teil' });
+          if (k) karte.appendChild(A.el('h3', k + ' (' + z.length + ')'));
+          karte.appendChild(A.tabelle(spalten, z, { beiKlick: dialog, sortiere: def.sortiere ? null : def.name, karten: true, kartenTitel: def.name }));
+          liste.appendChild(karte);
+        });
+        if (!gezeigt) liste.appendChild(A.el('p', d.zeilen.length ? 'Keine Einträge zu diesem Filter.' : 'Noch keine Einträge.', { className: 'leise' }));
+      }
+      zeichne(leiste.zustand);
+    }).catch(function (e) {
+      if (window.console) console.error(e);
+      fehlerText(bereich, 'Die Stammdaten konnten nicht geladen werden.', neu);
+    });
   }
 
   // ================================================================== Datenqualität
