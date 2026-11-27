@@ -91,6 +91,15 @@ var Snapshot = (function () {
 
   /** Für den Browser: nur die gewünschten Bereiche (Standard Kern), in Spaltenform gepackt. */
   function fuerClient(ktx, bereiche) {
+    return ansicht(function () { return fuerClientRoh(ktx, bereiche); });
+  }
+
+  /** Messwerk: Abschnitt „ansicht“ (Rollenschnitt, Packen, Write-through). */
+  function ansicht(fn) {
+    return (typeof Messung !== 'undefined' && Messung.abschnitt ? Messung.abschnitt : function (n, f) { return f(); })('ansicht', fn);
+  }
+
+  function fuerClientRoh(ktx, bereiche) {
     var b = (bereiche || ['kern']).filter(function (x) { return x === 'kern' || SnapshotKern.BEREICHE[x]; });
     return { bereiche: b, listen: SnapshotKern.packe(SnapshotKern.nurBereiche(fuer(ktx), b)) };
   }
@@ -102,6 +111,10 @@ var Snapshot = (function () {
    * weiterverwendet – sonst frisch aus dem Cache (eine ältere Kopie könnte fremde Speicherungen überschreiben).
    */
   function schreibe(ktx, aenderungen) {
+    return ansicht(function () { return schreibeRoh(ktx, aenderungen); });
+  }
+
+  function schreibeRoh(ktx, aenderungen) {
     var sperre = DB.sperre();
     var stand = basisSpeicher && sperre && basisSperre === sperre ? { basis: basisSpeicher, kopf: basisKopf } : ausCache();
     if (!stand) {

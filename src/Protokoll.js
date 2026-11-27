@@ -65,21 +65,24 @@ var Protokoll = (function () {
    */
   function schreibe(ktx, eintraege) {
     if (!eintraege || !eintraege.length) return 0;
-    var objekte = alsObjekte(ktx, eintraege);
-    if (nachgelagert()) {
-      var json = JSON.stringify(objekte);
-      if (utf8Laenge(json) <= MAX_WARTEWERT) {
-        try {
-          PropertiesService.getScriptProperties().setProperty(neuerWarteSchluessel(), json);
-          gewartet = true;
-          return objekte.length;
-        } catch (e) {
-          console.warn('Protokoll: Warteschlange nicht beschrieben, schreibe sofort – ' + (e && e.message));
+    var messen = typeof Messung !== 'undefined' && Messung.abschnitt ? Messung.abschnitt : function (n, f) { return f(); };
+    return messen('log', function () {
+      var objekte = alsObjekte(ktx, eintraege);
+      if (nachgelagert()) {
+        var json = JSON.stringify(objekte);
+        if (utf8Laenge(json) <= MAX_WARTEWERT) {
+          try {
+            PropertiesService.getScriptProperties().setProperty(neuerWarteSchluessel(), json);
+            gewartet = true;
+            return objekte.length;
+          } catch (e) {
+            console.warn('Protokoll: Warteschlange nicht beschrieben, schreibe sofort – ' + (e && e.message));
+          }
         }
       }
-    }
-    // protokoll_id = Zeilennummer → nur unter der Sperre korrekt (Befund M2; DB.mitSperre ist wiedereintrittsfähig).
-    return DB.mitSperre(function () { nachtragenGesperrt(); return anhaengenGesperrt(objekte); });
+      // protokoll_id = Zeilennummer → nur unter der Sperre korrekt (Befund M2; DB.mitSperre ist wiedereintrittsfähig).
+      return DB.mitSperre(function () { nachtragenGesperrt(); return anhaengenGesperrt(objekte); });
+    });
   }
 
   var WARTE = 'protwarte:';

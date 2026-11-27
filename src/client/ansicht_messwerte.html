@@ -100,6 +100,42 @@
       ], clientAuswertung()));
       ziel.appendChild(A.el('p', 'Differenz Client − Server ≈ Übertragung und Aufruf-Overhead von google.script.run.', { className: 'leise' }));
 
+      // Messwerk: Einzelaufrufe mit Abschnitten (Bericht _mess vom Server, nur mit messung_lesen)
+      ziel.appendChild(A.abschnitt('Messmodus (Einzelaufrufe)', [
+        A.knopf(A.messen() ? 'Messmodus aus' : 'Messmodus ein', function () { A.messen(!A.messen()); A.neuZeichnen(); }, 'zweit klein'),
+        A.knopf('Leeren', function () { A.messberichtLeeren(); A.neuZeichnen(); }, 'zweit klein')
+      ]));
+      var mz = A.messzeilen();
+      if (!mz.length) {
+        ziel.appendChild(A.el('p', A.messen() ? 'Messmodus ist an. Jetzt Aktionen ausführen und hierher zurückkehren.'
+          : 'Messmodus einschalten, Aktionen ausführen, hierher zurückkehren. Erstaufruf: Seite mit ?messen=1 öffnen.', { className: 'leise' }));
+      } else {
+        ziel.appendChild(tabelle([
+          { feld: 'funktion', titel: 'Funktion' },
+          { feld: 'browser_ms', titel: 'Browser ms', zahl: true },
+          { feld: 'server_ms', titel: 'Server ms', zahl: true },
+          { feld: 'differenz_ms', titel: 'Differenz', zahl: true },
+          { feld: 'laden_ms', titel: 'Laden', zahl: true },
+          { feld: 'sperre', titel: 'Sperre', zahl: true },
+          { feld: 'vorladen', titel: 'Vorladen', zahl: true },
+          { feld: 'lesen', titel: 'Lesen', zahl: true },
+          { feld: 'pruefkette', titel: 'Prüfkette', zahl: true },
+          { feld: 'handler', titel: 'Handler', zahl: true },
+          { feld: 'log', titel: 'Log', zahl: true },
+          { feld: 'schreiben', titel: 'Schreiben', zahl: true },
+          { feld: 'flush', titel: 'flush', zahl: true },
+          { feld: 'ansicht', titel: 'Ansicht', zahl: true },
+          { feld: 'cache', titel: 'Cache', zahl: true },
+          { feld: 'messung', titel: 'Messpuffer', zahl: true },
+          { feld: 'lesungen', titel: 'Lesungen', zahl: true },
+          { feld: 'meta', titel: 'Meta', zahl: true },
+          { feld: 'schreibungen', titel: 'Schreib.', zahl: true },
+          { feld: 'tabellen', titel: 'Tabellen', zahl: true }
+        ], mz));
+        ziel.appendChild(A.el('p', 'Differenz = Browser − Server: Netz und Ausführungshülle von Apps Script. Abschnitte in ms, exklusiv. ' +
+          'Spur eines Aufrufs in der Konsole: App.messbericht(nr).', { className: 'leise' }));
+      }
+
       ziel.appendChild(A.el('h2', 'Server (alle Benutzer)'));
       var bereich = A.el('div', null);
       bereich.appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));

@@ -23,7 +23,8 @@ var Zugriff = (function () {
     var cache = null;
     try {
       cache = CacheService.getScriptCache();
-      var roh = cache.get(CACHE_SCHLUESSEL);
+      var c = cache;
+      var roh = (typeof Messung !== 'undefined' && Messung.miss ? Messung.miss : function (a, i, f) { return f(); })('cache', { methode: 'get benutzer' }, function () { return c.get(CACHE_SCHLUESSEL); });
       if (roh) return JSON.parse(roh);
     } catch (e) { cache = null; }
     // Kaltstart: fehlt auch die Snapshot-Basis im Cache, werden deren Tabs im selben batchGet mitgelesen

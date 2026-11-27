@@ -183,12 +183,15 @@
 
   function merke(funktion, clientMs, antwort) {
     var m = antwort && antwort.messung ? antwort.messung : {};
-    messungen.push({
+    var eintrag = {
       funktion: funktion, client_ms: Math.round(clientMs),
       server_ms: typeof m.server_ms === 'number' ? m.server_ms : null,
       sheets: typeof m.sheets === 'number' ? m.sheets : null,
       ok: !!(antwort && antwort.ok), zeit: new Date().toISOString()
-    });
+    };
+    messungen.push(eintrag);
+    if (antwort && antwort._mess) messberichte.push({ funktion: funktion, browser_ms: Math.round(clientMs), mess: antwort._mess, zeit: eintrag.zeit });
+    if (messberichte.length > MAX_MESSUNGEN) messberichte.splice(0, messberichte.length - MAX_MESSUNGEN);
     if (messungen.length > MAX_MESSUNGEN) {
       var weg = messungen.length - MAX_MESSUNGEN;
       messungen.splice(0, weg);
@@ -205,6 +208,9 @@
     var args = Array.prototype.slice.call(arguments, 1);
     var still = false;
     if (args.length && args[args.length - 1] && args[args.length - 1].__still) { still = true; args.pop(); }
+    // Messmodus: über apiMessen umleiten, damit der Server seinen Bericht (_mess) anhängt (nur mit messung_lesen).
+    var ziel = name, zielArgs = args;
+    if (messModus && name !== 'apiClientMessungen') { ziel = 'apiMessen'; zielArgs = [name, args]; }
     var p = new Promise(function (resolve, reject) {
       var t0 = performance.now();
       var runner = google.script.run
@@ -230,12 +236,66 @@
           var err = new Error('netz'); err.art = 'netz'; err.ursache = fehler;
           reject(err);
         });
-      runner[name].apply(runner, args);
+      runner[ziel].apply(runner, zielArgs);
     });
     if (sammler) sammler.push(p);
     return p;
   };
   App.still = { __still: true };
+
+  // ================================================================== Messwerk (docs/LEISTUNG.md)
+  // In der Browser-Konsole: App.messen(true) → Aktionen ausführen → App.messbericht().
+  // Den Bericht des Servers gibt es nur für Rollen mit messung_lesen; andere sehen nur Browserzeiten.
+
+  var messModus = false;
+  var messberichte = [];
+  try { messModus = window.sessionStorage.getItem('messen') === '1'; } catch (e) { messModus = false; }
+
+  /** Messmodus ein-/ausschalten (gilt bis zum Schließen des Tabs). Ohne Argument: aktueller Stand. */
+  App.messen = function (an) {
+    if (an === undefined) return messModus;
+    messModus = !!an;
+    try { if (messModus) window.sessionStorage.setItem('messen', '1'); else window.sessionStorage.removeItem('messen'); } catch (e) { /* egal */ }
+    return messModus;
+  };
+
+  function abschnittMs(b, n) { return b.abschnitte && b.abschnitte[n] ? b.abschnitte[n].ms : 0; }
+
+  /** Eine Zeile je gemessenem Aufruf: Browserzeit, Serverzeit, Differenz (Netz + Ausführungshülle) und Abschnitte. */
+  App.messzeilen = function () {
+    return messberichte.map(function (e) {
+      var b = e.mess || {};
+      var server = typeof b.gesamt_ms === 'number' ? b.gesamt_ms : null;
+      return {
+        funktion: e.funktion,
+        browser_ms: e.browser_ms,
+        server_ms: server,
+        differenz_ms: server === null || e.browser_ms === null ? null : e.browser_ms - server,
+        laden_ms: b.laden_ms === undefined ? null : b.laden_ms,
+        sperre: abschnittMs(b, 'sperre'), vorladen: abschnittMs(b, 'vorladen'), lesen: abschnittMs(b, 'lesen') + abschnittMs(b, 'meta'),
+        pruefkette: abschnittMs(b, 'pruefkette'), handler: abschnittMs(b, 'handler'), log: abschnittMs(b, 'log'),
+        schreiben: abschnittMs(b, 'schreiben'), flush: abschnittMs(b, 'flush'), ansicht: abschnittMs(b, 'ansicht'),
+        cache: abschnittMs(b, 'cache'), oeffnen: abschnittMs(b, 'oeffnen'), messung: abschnittMs(b, 'messung'), seite: b.seite_ms === undefined ? null : b.seite_ms,
+        lesungen: b.lesungen, meta: b.meta, schreibungen: b.schreibungen, flushes: b.flushes,
+        zellen_gelesen: b.zellen_gelesen, zellen_geschrieben: b.zellen_geschrieben,
+        tabellen: (b.tabellen || []).length, gehalten_ms: b.sperre_gehalten_ms
+      };
+    });
+  };
+
+  /** Listet alle gemessenen Aufrufe in der Konsole (console.table) und liefert die Zeilen. App.messbericht(i) zeigt die Spur. */
+  App.messbericht = function (i) {
+    if (typeof i === 'number') {
+      var e = messberichte[i];
+      if (!e) return null;
+      if (window.console && console.table) console.table(e.mess.spur || []);
+      return e.mess;
+    }
+    var zeilen = App.messzeilen();
+    if (window.console && console.table) console.table(zeilen);
+    return zeilen;
+  };
+  App.messberichtLeeren = function () { messberichte.length = 0; };
 
   /** Noch nicht gemeldete Client-Messungen gebündelt an den Server schicken. */
   App.meldeMessungen = function () {
@@ -1083,6 +1143,10 @@
       starteVerlauf();
       // performance.now() zählt ab dem Laden des (inneren) Dokuments; die Apps-Script-Hülle davor fehlt.
       App.startBisBedienbar = Math.round(performance.now());
+      var mb = App.$('mess-start');
+      if (mb) {
+        try { messberichte.push({ funktion: 'doGet', browser_ms: App.startBisBedienbar, mess: JSON.parse(mb.textContent), zeit: new Date().toISOString() }); } catch (e) { /* egal */ }
+      }
     }).catch(function () {
       var l = App.$('laedt');
       if (l) l.textContent = 'Die Startdaten konnten nicht geladen werden. Bitte Seite neu laden.';
