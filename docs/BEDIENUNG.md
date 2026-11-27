@@ -133,7 +133,10 @@ Zu jedem Diagramm gibt es die Zahlen als aufklappbare Tabelle. Das Dashboard ent
   Alter (leer = keine Verlängerung). Vorbelegt: Familienbeitrag (2 Erwachsene, beliebig viele Kinder bis 18, in
   Ausbildung bis 25), Ehegattenbeitrag (2 Erwachsene, keine Kinder). Derselbe Eintrag gilt für den Online-Antrag
   („Schlüssel im Online-Formular“) und die Beitragsänderung zum 01.01. Jede Gemeinschaft bekommt ihren Tarif in
-  Finanzen → Gemeinschaften („Regel“; bestehende Gemeinschaften einmal zuordnen – sonst Hinweis „ohne Regel“).
+  Finanzen → Gemeinschaften („Regel“). Für den Bestand einmal: Familien → „Abweichungen“ → **„Regeln zuordnen …“** –
+  das System schlägt für jede Gemeinschaft ohne Regel den Tarif vor (nach Bezeichnung „Ehepaar …“/„Familie …“, sonst
+  nach Festbetrag, sonst nach Zusammensetzung) und zeigt, was danach als Abweichung gemeldet würde. Häkchen prüfen,
+  bei Bedarf den Tarif ändern, „Ausgewählte zuordnen“. Der Festbetrag bleibt dabei unverändert.
 - **Abweichungen:** Familien → „Abweichungen“ listet alles, was nicht zu den Regeln passt (zu viele Erwachsene/Kinder,
   Kind über der Altersgrenze ohne Ausbildung, Ausbildung ohne voraussichtliches Ende, Festbetrag ≠ Betrag der Regel,
   Gemeinschaft mit nur einer Person, Beitragsart passt nicht zum Alter – z. B. Kinderbeitrag über 18). Alter zählt zum

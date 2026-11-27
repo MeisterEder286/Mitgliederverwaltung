@@ -20,6 +20,21 @@ function apiFamilieAbweichungen() {
   return Api.ausfuehren('apiFamilieAbweichungen', 'konto_lesen', function (ktx) { return FamilieModul.abweichungen(ktx); });
 }
 
+/** Sammelzuordnung der Regeln: Vorschläge für Gemeinschaften ohne Familien-/Ehegattenbeitrag. */
+function apiFamilieRegelVorschlaege() {
+  return Api.ausfuehren('apiFamilieRegelVorschlaege', 'konto_lesen', function (ktx) { return FamilieModul.regelVorschlaege(ktx); });
+}
+
+/** liste: [{ gemeinschaft_id, version, beitragsart_id }] – nur der Verweis auf die Regel wird gesetzt. */
+function apiFamilieRegelnZuordnen(liste) {
+  return Api.ausfuehren('apiFamilieRegelnZuordnen', 'konto_bearbeiten', function (ktx) {
+    var l = Array.isArray(liste) ? liste.map(function (w) {
+      return { gemeinschaft_id: familieZahl_(w && w.gemeinschaft_id), version: familieZahl_(w && w.version), beitragsart_id: familieZahl_(w && w.beitragsart_id) };
+    }) : [];
+    return FamilieModul.regelnZuordnen(ktx, l);
+  });
+}
+
 function apiFamilieAusscheider(jahr, jahreVoraus) {
   return Api.ausfuehren('apiFamilieAusscheider', 'konto_lesen', function (ktx) {
     return FamilieModul.ausscheider(ktx, familieZahl_(jahr), familieZahl_(jahreVoraus));

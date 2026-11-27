@@ -400,10 +400,58 @@ var Familie = (function () {
     }).sort(function (a, b) { return b.jahr - a.jahr; });
   }
 
+  /**
+   * Sammelzuordnung: Vorschlag einer Regel (Beitragsart „als Gemeinschaft“) für jede aktive Gemeinschaft ohne Regel.
+   * Reihenfolge der Gründe: 1. Bezeichnung („Ehepaar …“ → Ehepaar, „Familie …“ → Familie), 2. Festbetrag gleich dem
+   * Betrag genau einer Regel, 3. Zusammensetzung (Kinder dabei → Familie, genau zwei Erwachsene → Ehepaar, sonst Familie).
+   * Liefert [{ gemeinschaft_id, bezeichnung, version, festbetrag, personen: [{ name, alter, rolle }], vorschlag, grund,
+   *           folgen: [Meldung …] }] – folgen = Abweichungen, die mit dem Vorschlag gemeldet würden.
+   */
+  function regelVorschlaege(daten, konfig, heute) {
+    var tag = stichtag(konfig, Number(String(heute).slice(0, 4)));
+    var ix = index(daten);
+    var regeln = (daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false && a.als_gemeinschaft; });
+    var familie = regeln.filter(function (a) { return a.als_gemeinschaft === 'Familie'; })[0] || null;
+    var ehepaar = regeln.filter(function (a) { return a.als_gemeinschaft === 'Ehepaar'; })[0] || null;
+    var aus = [];
+    Object.keys(ix.jeGemeinschaft).forEach(function (gid) {
+      var g = ix.gemeinschaft[gid];
+      if (!g || g.aktiv === false || hat(g.beitragsart_id)) return;
+      var mitglieder = ix.jeGemeinschaft[gid].filter(function (m) { return m.anonymisiert !== true && aktivAm(m, ix, heute); });
+      if (!mitglieder.length) return;
+      var konto = ix.konto[mitglieder[0].beitragskonto_id] || null;
+      var rolle = rollen(mitglieder, konto, tag);
+      var kinder = mitglieder.filter(function (m) { return rolle[m.mitglied_id] === 'kind'; }).length;
+      var vorschlag = null, grund = null;
+      var bez = String(g.bezeichnung || '').toLowerCase();
+      if (/^(ehepaar|ehegatt|eheleute)/.test(bez) && ehepaar) { vorschlag = ehepaar; grund = 'Bezeichnung „' + g.bezeichnung + '“'; }
+      else if (/^familie/.test(bez) && familie) { vorschlag = familie; grund = 'Bezeichnung „' + g.bezeichnung + '“'; }
+      if (!vorschlag && hat(g.festbetrag)) {
+        var gleich = regeln.filter(function (a) { return hat(a.betrag) && Math.abs(Number(a.betrag) - Number(g.festbetrag)) < 0.005; });
+        if (gleich.length === 1) { vorschlag = gleich[0]; grund = 'Festbetrag ' + Number(g.festbetrag).toFixed(2).replace('.', ',') + ' € = ' + gleich[0].bezeichnung; }
+      }
+      if (!vorschlag) {
+        if (kinder && familie) { vorschlag = familie; grund = kinder + (kinder === 1 ? ' Kind' : ' Kinder') + ' in der Gemeinschaft'; }
+        else if (!kinder && mitglieder.length === 2 && ehepaar) { vorschlag = ehepaar; grund = 'zwei Erwachsene ohne Kinder'; }
+        else if (familie || regeln[0]) { vorschlag = familie || regeln[0]; grund = 'keine eindeutigen Merkmale – bitte prüfen'; }
+      }
+      var folgen = vorschlag ? pruefeGemeinschaft(g, vorschlag, mitglieder, konto, tag, heute, konfig).abweichungen
+        .filter(function (a) { return a.regel !== 'nachweis_faellig'; }).map(function (a) { return a.meldung; }) : [];
+      aus.push({
+        gemeinschaft_id: g.beitragsgemeinschaft_id, bezeichnung: g.bezeichnung, version: g.version || 0,
+        festbetrag: hat(g.festbetrag) ? Number(g.festbetrag) : null, konto_id: konto ? konto.beitragskonto_id : null,
+        personen: mitglieder.map(function (m) { return { mitglied_id: m.mitglied_id, name: name(m), alter: Mitgliedschaft.alter(m.geburtsdatum, tag), rolle: rolle[m.mitglied_id] }; }),
+        vorschlag: vorschlag ? vorschlag.beitragsart_id : null, grund: grund, folgen: folgen
+      });
+    });
+    aus.sort(function (a, b) { return String(a.bezeichnung).localeCompare(String(b.bezeichnung)); });
+    return aus;
+  }
+
   return {
     einstellungen: einstellungen, stichtag: stichtag, rollen: rollen, vorschlagArt: vorschlagArt,
     ausscheider: ausscheider, prognose: prognose, umstellungPlan: umstellungPlan, jahressummen: jahressummen,
     ABWEICHUNGEN: ABWEICHUNGEN, einstellungenFuer: einstellungenFuer, regelText: regelText,
-    pruefeGemeinschaft: pruefeGemeinschaft, abweichungen: abweichungen
+    pruefeGemeinschaft: pruefeGemeinschaft, abweichungen: abweichungen, regelVorschlaege: regelVorschlaege
   };
 })();

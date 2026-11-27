@@ -127,3 +127,54 @@ test('Finanzen: Gemeinschaft mit Regel anlegen übernimmt deren Betrag, leerer F
   const f = rein(u.g.apiFinanzenGemeinschaftSpeichern(null, null, { bezeichnung: 'X', beitragsart_id: 1 }));
   assert.strictEqual(f.ok, false);
 });
+
+test('Sammelzuordnung: Vorschlag nach Bezeichnung, Festbetrag, Zusammensetzung – mit Folgen', () => {
+  const d = bestand({ festbetrag: 999, bezeichnung: 'Familie Huber' }, [{ geburtsdatum: '1975-03-01' }, { geburtsdatum: '1977-06-01' }, { geburtsdatum: '2012-01-01' }]);
+  const zusatz = [
+    { id: 2, bezeichnung: 'Ehepaar Maier', festbetrag: 150, personen: ['1950-01-01', '1952-01-01'] },
+    { id: 3, bezeichnung: 'Gruber', festbetrag: 150, personen: ['1960-01-01', '1961-01-01'] },
+    { id: 4, bezeichnung: 'Wagner', festbetrag: 175, personen: ['1980-01-01', '2015-01-01'] },
+    { id: 5, bezeichnung: 'Schon geregelt', festbetrag: 180, beitragsart_id: 4, personen: ['1980-01-01', '2015-01-01'] }
+  ];
+  let nr = 100;
+  zusatz.forEach(z => {
+    d.Beitragsgemeinschaft.push({ beitragsgemeinschaft_id: z.id, bezeichnung: z.bezeichnung, festbetrag: z.festbetrag, beitragsart_id: z.beitragsart_id || null, aktiv: true });
+    z.personen.forEach(geb => {
+      nr++;
+      d.Mitglied.push({ mitglied_id: nr, vorname: 'P' + nr, nachname: z.bezeichnung, geburtsdatum: geb, beitragsgemeinschaft_id: z.id, version: 1 });
+      d.Mitgliedschaftszeitraum.push({ zeitraum_id: nr, mitglied_id: nr, eintrittsdatum: '2010-01-01' });
+    });
+  });
+  const v = rein(g0.Familie.regelVorschlaege(d, KONFIG, HEUTE));
+  const je = Object.fromEntries(v.map(x => [x.gemeinschaft_id, x]));
+  assert.strictEqual(je[1].vorschlag, 4); assert.match(je[1].grund, /Bezeichnung/);
+  assert.ok(je[1].folgen.some(f => /Festbetrag 999,00/.test(f)), 'abweichender Betrag als Folge');
+  assert.strictEqual(je[2].vorschlag, 5); assert.match(je[2].grund, /Bezeichnung/);
+  assert.strictEqual(je[3].vorschlag, 5); assert.match(je[3].grund, /Festbetrag 150,00/);
+  assert.strictEqual(je[4].vorschlag, 4); assert.match(je[4].grund, /Kind/);
+  assert.ok(!je[5], 'Gemeinschaften mit Regel werden nicht vorgeschlagen');
+});
+
+test('Sammelzuordnung über die API: setzt nur den Verweis, protokolliert, prüft die Regel', () => {
+  const u = als(MV);
+  // Generator-Gemeinschaften ohne Regel machen
+  const vorher = u.obj('Beitragsgemeinschaft').filter(g => g.aktiv === true).length;
+  const sp = u.f.daten('Beitragsgemeinschaft')[0].indexOf('beitragsart_id');
+  u.f.daten('Beitragsgemeinschaft').slice(1).forEach(z => { z[sp] = ''; });
+  u.g.Snapshot.verwerfen();
+  const v = ok(u.g.apiFamilieRegelVorschlaege());
+  assert.ok(v.vorschlaege.length > 0 && v.vorschlaege.length <= vorher);
+  assert.ok(v.regeln.some(r => r.bezeichnung === 'Familienbeitrag'));
+  const liste = v.vorschlaege.map(x => ({ gemeinschaft_id: x.gemeinschaft_id, version: x.version, beitragsart_id: x.vorschlag }));
+  const fest = Object.fromEntries(u.obj('Beitragsgemeinschaft').map(g => [g.beitragsgemeinschaft_id, g.festbetrag]));
+  const r = ok(u.g.apiFamilieRegelnZuordnen(liste));
+  assert.strictEqual(r.anzahl, liste.length);
+  u.obj('Beitragsgemeinschaft').filter(g => liste.some(l => l.gemeinschaft_id === g.beitragsgemeinschaft_id)).forEach(g => {
+    assert.ok([4, 5].includes(g.beitragsart_id));
+    assert.strictEqual(g.festbetrag, fest[g.beitragsgemeinschaft_id], 'Festbetrag unverändert');
+  });
+  assert.ok(u.obj('_Protokoll').some(p => p.tabelle === 'Beitragsgemeinschaft' && /Sammelzuordnung/.test(p.kommentar || '')));
+  assert.strictEqual(ok(u.g.apiFamilieRegelVorschlaege()).vorschlaege.length, 0);
+  const f = rein(u.g.apiFamilieRegelnZuordnen([{ gemeinschaft_id: liste[0].gemeinschaft_id, version: 99, beitragsart_id: 1 }]));
+  assert.strictEqual(f.ok, false, 'Einzel-Beitragsart ist keine Regel');
+});

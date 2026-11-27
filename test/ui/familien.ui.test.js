@@ -75,6 +75,32 @@ test('Familien → Abweichungen: Regeln, Kind über der Altersgrenze gemeldet; R
   } finally { await ui.schliessen(); }
 });
 
+test('Familien → Abweichungen → Regeln zuordnen: Vorschläge prüfen und als Sammelaktion speichern', async () => {
+  const tabs = erzeugeVerein({ seed: 1, mitglieder: 300 }).tabs;
+  const sp = tabs.Beitragsgemeinschaft[0].indexOf('beitragsart_id');
+  tabs.Beitragsgemeinschaft.slice(1).forEach(z => { z[sp] = ''; });   // Bestand vor der Einführung der Regeln
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', tabs });
+  const p = ui.page;
+  try {
+    await ui.oeffne('familien');
+    await p.getByRole('tab', { name: 'Abweichungen' }).click();
+    await p.waitForSelector('text=noch keine Regel');
+    await p.locator('button', { hasText: 'Regeln zuordnen' }).click();
+    await p.waitForSelector('.fam-zuordnung');
+    const anzahl = await p.locator('.fam-zuordnung').count();
+    assert.ok(anzahl > 0);
+    await breiteOk(ui);
+    await p.locator('#fam-alle').check();
+    await p.locator('button', { hasText: 'Ausgewählte zuordnen' }).click();
+    await p.waitForSelector('text=Eingestellte Regeln');
+    const ohne = ui.objekte('Beitragsgemeinschaft').filter(g => g.aktiv === true && !g.beitragsart_id);
+    const aktiveGem = new Set(ui.objekte('Mitglied').filter(m => m.status === 'aktiv' && m.beitragsgemeinschaft_id).map(m => m.beitragsgemeinschaft_id));
+    assert.strictEqual(ohne.filter(g => aktiveGem.has(g.beitragsgemeinschaft_id)).length, 0, 'alle aktiven Gemeinschaften haben eine Regel');
+    assert.strictEqual(await p.locator('text=noch keine Regel').count(), 0);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
 test('Mitglied-Detail: Reiter „Zahlungen“ mit Historie und Ausbildung erfassen; Konto-Detail mit Zahlungshistorie', async () => {
   const { tabs } = vereinMitAusscheider();
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', tabs });

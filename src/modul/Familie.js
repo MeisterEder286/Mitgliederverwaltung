@@ -100,6 +100,48 @@ var FamilieModul = (function () {
     };
   }
 
+  /** Sammelzuordnung: Vorschläge für alle aktiven Gemeinschaften ohne Regel (siehe Familie.regelVorschlaege). */
+  function regelVorschlaege(ktx) {
+    var x = daten();
+    return {
+      regeln: (x.daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false && a.als_gemeinschaft; }).map(function (a) {
+        return { beitragsart_id: a.beitragsart_id, bezeichnung: a.bezeichnung, betrag: a.betrag, text: Familie.regelText(a, x.konfig) };
+      }),
+      vorschlaege: Familie.regelVorschlaege(x.daten, x.konfig, heute())
+    };
+  }
+
+  /**
+   * Sammelzuordnung speichern: liste = [{ gemeinschaft_id, version, beitragsart_id }]. Setzt nur den Verweis auf die
+   * Regel (der Festbetrag bleibt; weicht er ab, meldet das der Bericht). Eine Sperre, ein Schreibzugriff, je Gemeinschaft
+   * ein Protokolleintrag.
+   */
+  function regelnZuordnen(ktx, liste) {
+    if (!Array.isArray(liste) || !liste.length) throw Fehler.fachlich('Bitte mindestens eine Gemeinschaft auswählen.');
+    if (liste.length > 1000) throw Fehler.fachlich('Zu viele Gemeinschaften auf einmal (höchstens 1000).');
+    return DB.mitSperre(function () {
+      var x = daten();
+      var regeln = {}, gem = {};
+      (x.daten.Beitragsart || []).forEach(function (a) { if (a.aktiv !== false && a.als_gemeinschaft) regeln[a.beitragsart_id] = a; });
+      (x.daten.Beitragsgemeinschaft || []).forEach(function (g) { gem[g.beitragsgemeinschaft_id] = g; });
+      var schritte = liste.map(function (w) {
+        var g = gem[Number(w && w.gemeinschaft_id)], r = regeln[Number(w && w.beitragsart_id)];
+        if (!g) throw Fehler.fachlich('Eine Gemeinschaft wurde nicht gefunden. Bitte die Ansicht neu laden.');
+        if (!r) throw Fehler.fachlich('„' + g.bezeichnung + '“: Bitte einen Familien- oder Ehegattenbeitrag wählen.');
+        return { id: g.beitragsgemeinschaft_id, version: Number(w.version || 0), aenderungen: { beitragsart_id: r.beitragsart_id } };
+      });
+      var erg = DB.aktualisiereViele('Beitragsgemeinschaft', schritte, ktx);
+      var prot = [];
+      erg.forEach(function (e) {
+        Protokoll.ausDiff('Beitragsgemeinschaft', e.neu.beitragsgemeinschaft_id, e.diff).forEach(function (p) { p.kommentar = 'Regel zugeordnet (Sammelzuordnung)'; prot.push(p); });
+      });
+      Protokoll.schreibe(ktx, prot);
+      var a = Snapshot.schreibe(ktx, erg.map(function (e) { return { tab: 'Beitragsgemeinschaft', neu: e.neu }; }));
+      a.anzahl = erg.length;
+      return a;
+    });
+  }
+
   // ================================================================== Schreiben
 
   /** Sammel-Umstellung auf Einzelbeitrag. liste: [{ mitglied_id, version, beitragsart_id? }], wirksam: 'JJJJ-MM-TT' (Info). */
@@ -237,7 +279,7 @@ var FamilieModul = (function () {
   }
 
   return {
-    uebersicht: uebersicht, abweichungen: abweichungen, ausscheider: ausscheider, umstellen: umstellen, ausbildungSpeichern: ausbildungSpeichern,
+    uebersicht: uebersicht, abweichungen: abweichungen, regelVorschlaege: regelVorschlaege, regelnZuordnen: regelnZuordnen, ausscheider: ausscheider, umstellen: umstellen, ausbildungSpeichern: ausbildungSpeichern,
     bezahlhistorie: bezahlhistorie, kontohistorie: kontohistorie, exportVermerken: exportVermerken
   };
 })();

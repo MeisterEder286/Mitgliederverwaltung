@@ -27,6 +27,7 @@
   .fam-person .fam-name { flex: 1 1 160px; }
   .fam-balken svg { width: 100%; max-width: 640px; height: auto; }
   .fam-balken text { font-size: 12px; fill: var(--text); }
+  .fam-zuordnung select { min-height: 44px; padding: 4px 8px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); max-width: 100%; }
   .fam-auswahl { width: 24px; height: 24px; accent-color: var(--akzent); }
 </style>
 <script>
@@ -270,6 +271,15 @@
       }, 'zweit klein'));
       inhalt.appendChild(A.abschnitt('Eingestellte Regeln', kopf, 'h3'));
       inhalt.appendChild(regeln);
+      var ohneRegel = d.abweichungen.filter(function (a) { return a.regel === 'ohne_regel'; }).length;
+      if (A.darf('konto_bearbeiten') && d.regeln.length) {
+        var zb = A.el('div', null, { className: ohneRegel ? 'fam-hinweis' : 'fam-zeile' }, [
+          A.el('p', ohneRegel ? ohneRegel + (ohneRegel === 1 ? ' Gemeinschaft hat' : ' Gemeinschaften haben') + ' noch keine Regel. Mit der Sammelzuordnung schlägt das System für alle den passenden Tarif vor.'
+            : 'Gemeinschaften ohne Regel zuordnen (Familien- oder Ehegattenbeitrag).'),
+          A.knopf('Regeln zuordnen …', function () { zeigeZuordnung(A.leere(inhalt)); }, ohneRegel ? '' : 'zweit klein')
+        ]);
+        inhalt.appendChild(zb);
+      }
       var l = d.abweichungen;
       var je = {};
       l.forEach(function (a) { je[a.titel] = (je[a.titel] || 0) + 1; });
@@ -288,6 +298,53 @@
         if (a.mitglied_id) A.zeige('mitglied', { id: a.mitglied_id, reiter: 'zahlungen' });
       } }));
     }, function () { nichtGeladen(inhalt, 'Die Abweichungen konnten nicht geladen werden.'); });
+  }
+
+  /**
+   * Sammelzuordnung: je Gemeinschaft ohne Regel ein Vorschlag (Bezeichnung → Festbetrag → Zusammensetzung) mit Grund
+   * und den Abweichungen, die danach gemeldet würden. Auswählen, ggf. Regel ändern, „Zuordnen“ – setzt nur den Verweis.
+   */
+  function zeigeZuordnung(inhalt) {
+    laedt(inhalt);
+    A.rufe('apiFamilieRegelVorschlaege').then(function (d) {
+      A.leere(inhalt);
+      inhalt.appendChild(A.knopf('← Zurück zu den Abweichungen', function () { A.neuZeichnen(); }, 'zweit klein'));
+      inhalt.appendChild(A.el('h2', 'Regeln zuordnen'));
+      if (!d.vorschlaege.length) { inhalt.appendChild(A.el('p', 'Alle aktiven Gemeinschaften haben schon eine Regel.')); return; }
+      inhalt.appendChild(A.el('p', 'Vorschlag je Gemeinschaft: zuerst nach der Bezeichnung („Ehepaar …“/„Familie …“), dann nach dem Festbetrag, sonst nach der ' +
+        'Zusammensetzung. Der Festbetrag bleibt unverändert – weicht er von der Regel ab, steht das danach unter „Abweichungen“.', { className: 'leise' }));
+      var optionen = d.regeln.map(function (r) { return { wert: String(r.beitragsart_id), text: r.bezeichnung + ' (' + A.betrag(r.betrag) + ')' }; });
+      var zeilen = d.vorschlaege.map(function (v) {
+        var cb = A.el('input', null, { type: 'checkbox', className: 'fam-auswahl', checked: !!v.vorschlag && !/bitte prüfen/.test(v.grund || ''), aria: { label: 'Auswählen ' + v.bezeichnung } });
+        var sel = A.el('select', null, { aria: { label: 'Regel für ' + v.bezeichnung } });
+        optionen.forEach(function (o) { sel.appendChild(A.el('option', o.text, { value: o.wert })); });
+        if (v.vorschlag) sel.value = String(v.vorschlag);
+        sel.addEventListener('change', function () { cb.checked = true; });
+        return { v: v, cb: cb, sel: sel };
+      });
+      var alle = A.el('input', null, { type: 'checkbox', id: 'fam-alle', className: 'fam-auswahl' });
+      alle.addEventListener('change', function () { zeilen.forEach(function (z) { z.cb.checked = alle.checked; }); });
+      inhalt.appendChild(A.el('div', null, { className: 'fam-zeile' }, [A.el('label', null, { htmlFor: 'fam-alle' }, [alle, A.el('span', ' alle auswählen')])]));
+      zeilen.forEach(function (z) {
+        var v = z.v;
+        var karte = A.el('div', null, { className: 'fam-karte fam-zuordnung' });
+        karte.appendChild(A.el('label', null, { className: 'fam-zeile' }, [z.cb, A.el('strong', ' ' + v.bezeichnung + (v.festbetrag !== null ? ' · ' + A.betrag(v.festbetrag) : ' · Einzeltarife'))]));
+        karte.appendChild(A.el('p', v.personen.map(function (p) { return p.name + (p.alter !== null ? ' (' + p.alter + ')' : '') + (p.rolle === 'kind' ? ' – Kind' : ''); }).join(' · '), { className: 'leise' }));
+        karte.appendChild(A.el('div', null, { className: 'fam-zeile' }, [z.sel, A.el('span', v.grund ? 'Vorschlag: ' + v.grund : '', { className: 'leise' })]));
+        if (v.folgen.length) karte.appendChild(A.el('p', 'Danach gemeldet: ' + v.folgen.join(' '), { className: 'fam-hinweis' }));
+        inhalt.appendChild(karte);
+      });
+      var los = A.knopf('Ausgewählte zuordnen', function () {
+        var liste = zeilen.filter(function (z) { return z.cb.checked; }).map(function (z) { return { gemeinschaft_id: z.v.gemeinschaft_id, version: z.v.version, beitragsart_id: Number(z.sel.value) }; });
+        if (!liste.length) { A.meldung('Bitte mindestens eine Gemeinschaft auswählen.', 'hinweis'); return null; }
+        return A.rufe('apiFamilieRegelnZuordnen', liste).then(function (r) {
+          A.daten.uebernehme(r);
+          A.meldung(r.anzahl + (r.anzahl === 1 ? ' Gemeinschaft' : ' Gemeinschaften') + ' zugeordnet.', 'ok');
+          A.neuZeichnen();
+        }, function () {});
+      });
+      inhalt.appendChild(A.el('div', null, { className: 'knopfleiste' }, [los, A.knopf('Abbrechen', function () { A.neuZeichnen(); }, 'zweit')]));
+    }, function () { nichtGeladen(inhalt, 'Die Vorschläge konnten nicht geladen werden.'); });
   }
 
   // ------------------------------------------------------------------ Prognose
