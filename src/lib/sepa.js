@@ -112,7 +112,9 @@ var Sepa = (function () {
       if (!pr.ok) return aus(Iban.fehlertext(pr.fehler));
       if (!k.mandatsreferenz || !k.mandatsdatum) return aus('Mandat unvollständig (Referenz oder Datum fehlt)');
       if (k.mandatsdatum > heute) return aus('Mandatsdatum liegt in der Zukunft');
-      var ms = Beitrag.mandatStatus(k, daten, heute, opt);
+      var einzug = optionen.einzugsdatum || s.einzugsdatum || Beitrag.faelligkeit(daten, opt, jahr);
+      // Verfall zum Einzugsdatum prüfen: ein Mandat, das bis zur Fälligkeit 36 Monate ungenutzt ist, deckt den Einzug nicht
+      var ms = Beitrag.mandatStatus(k, daten, einzug > heute ? einzug : heute, opt);
       if (ms.verfallen) return aus('Mandat verfallen (zuletzt genutzt ' + ms.letzteNutzung + ')');
       var bic = Iban.pruefeBic(k.bic);
       var nummern = (ix.mitgliederJeKonto[k.beitragskonto_id] || []).filter(function (m) {
@@ -131,7 +133,7 @@ var Sepa = (function () {
         adresse: Beitrag.zahleradresse(k, daten),
         verwendungszweck: bereinige(verwendungszweck(vorlage, { jahr: jahr, konto: k.beitragskonto_id, name: k.kontoinhaber_name, nummern: nummern }), 140),
         endToEndId: kennung('TSV-' + jahr + '-K' + k.beitragskonto_id + '-S' + s.sollstellung_id),
-        einzugsdatum: optionen.einzugsdatum || s.einzugsdatum || Beitrag.faelligkeit(daten, opt, jahr)
+        einzugsdatum: einzug
       };
       posten.push(p);
       summe += p.betrag;
@@ -141,7 +143,14 @@ var Sepa = (function () {
 
   // ------------------------------------------------------------------ XML
 
-  function adresseVollstaendig(a) { return !!(a && a.strasse && a.plz && a.ort); }
+  /** ISO-Ländercode der Adresse (Standard DE) oder null, wenn das Freitextfeld keinen zweistelligen Code enthält. */
+  function landCode(a) {
+    var l = String((a && a.land) || 'DE').trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(l) ? l : null;
+  }
+
+  /** Vollständig für die strukturierte Adresse: Straße, PLZ, Ort und ein gültiger Ländercode (sonst lehnt das XSD ab). */
+  function adresseVollstaendig(a) { return !!(a && a.strasse && a.plz && a.ort && landCode(a)); }
 
   function adresseXml(a, einr) {
     if (!adresseVollstaendig(a)) return '';
@@ -151,7 +160,7 @@ var Sepa = (function () {
       (a.hausnummer ? '<BldgNb>' + escape(bereinige(a.hausnummer, 16)) + '</BldgNb>' : '') +
       '<PstCd>' + escape(bereinige(a.plz, 16)) + '</PstCd>' +
       '<TwnNm>' + escape(bereinige(a.ort, 35)) + '</TwnNm>' +
-      '<Ctry>' + escape(String(a.land || 'DE').toUpperCase().slice(0, 2)) + '</Ctry>' +
+      '<Ctry>' + landCode(a) + '</Ctry>' +
       '</PstlAdr>';
   }
 
@@ -161,8 +170,9 @@ var Sepa = (function () {
 
   /**
    * Prüft Gläubigerangaben und Lauf. Liefert eine Liste von Fehlertexten (leer = in Ordnung).
+   * heute ('JJJJ-MM-TT', optional): Einzugsdaten davor sind unzulässig (die Bank lehnt die Datei ab).
    */
-  function pruefeFuerDatei(lauf, glaeubiger) {
+  function pruefeFuerDatei(lauf, glaeubiger, heute) {
     var f = [];
     if (!glaeubiger) return ['Gläubigerdaten fehlen.'];
     var gid = Iban.glaeubigerIdPruefen(glaeubiger.glaeubigerId);
@@ -178,18 +188,21 @@ var Sepa = (function () {
       if (!(p.betrag > 0) || p.betrag > 999999999.99) f.push('Konto ' + p.konto + ': ungültiger Betrag.');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.einzugsdatum || ''))) f.push('Konto ' + p.konto + ': Einzugsdatum fehlt.');
     });
+    var vergangen = heute ? (lauf && lauf.posten || []).filter(function (p) { return p.einzugsdatum && p.einzugsdatum < heute; }).length : 0;
+    if (vergangen) f.push(vergangen + ' Lastschrift(en) mit Einzugsdatum in der Vergangenheit – bitte ein neues Einzugsdatum angeben.');
     return f;
   }
 
   /**
    * Erzeugt die pain.008.001.08-Datei.
    * glaeubiger: { name, iban, bic?, glaeubigerId, adresse?: { strasse, hausnummer, plz, ort, land } }
-   * optionen:   { erstelltAm: 'JJJJ-MM-TTThh:mm:ss' (Standard: jetzt, UTC), msgId, batchBooking (Standard true) }
+   * optionen:   { erstelltAm: 'JJJJ-MM-TTThh:mm:ss' (Standard: jetzt, UTC), msgId, batchBooking (Standard true),
+   *               heute: 'JJJJ-MM-TT' (prüft, dass kein Einzugsdatum in der Vergangenheit liegt) }
    * Liefert { ok: true, xml, msgId, anzahl, summe, dateiname } oder { ok: false, fehler: [texte] }.
    */
   function xml(lauf, glaeubiger, optionen) {
     optionen = optionen || {};
-    var fehler = pruefeFuerDatei(lauf, glaeubiger);
+    var fehler = pruefeFuerDatei(lauf, glaeubiger, optionen.heute);
     if (fehler.length) return { ok: false, fehler: fehler };
 
     var erstellt = optionen.erstelltAm || new Date().toISOString().slice(0, 19);
@@ -272,6 +285,6 @@ var Sepa = (function () {
 
   return {
     NAMESPACE: NAMESPACE, bereinige: bereinige, kennung: kennung, sequenz: sequenz, lauf: lauf,
-    pruefeFuerDatei: pruefeFuerDatei, xml: xml, kontrollliste: kontrollliste
+    pruefeFuerDatei: pruefeFuerDatei, xml: xml, kontrollliste: kontrollliste, adresseVollstaendig: adresseVollstaendig
   };
 })();

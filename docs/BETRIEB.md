@@ -20,7 +20,8 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
    E-Mail-Versand vor dem Einschalten (`mail_aktiv = ja`) in der Testumgebung mit `mail_test_an` prüfen.
 6. **Setup:** Im Editor die Funktion `setup` ausführen. Sie legt alle Tabs mit Kopfzeilen, Formaten,
    Auswahllisten und der Startbelegung an und gibt einen Bericht aus. Mehrfaches Ausführen ist unschädlich
-   (bestehende Werte werden nie überschrieben).
+   (bestehende Werte werden nie überschrieben). Meldet der Bericht „ACHTUNG Zeitzone“, in der Tabelle unter
+   Datei → Einstellungen die Zeitzone des Skripts (`Europe/Berlin`) einstellen.
 7. **Startbelegung prüfen:** In den Tabs `Beitragsart`, `Ehrungsregel`, `Funktionsart`, `Qualifikationsart`,
    `Aufbewahrungsfrist`, `_Konfig` alle mit BEISPIEL/PRÜFEN markierten Werte anpassen.
 8. **Benutzer:** Im Tab `Benutzer` je Rollenzuweisung eine Zeile (E-Mail, Rolle, bei Abteilungsleitern

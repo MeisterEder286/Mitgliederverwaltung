@@ -46,8 +46,11 @@ var Beitrag = (function () {
   /** 'TT.MM.' + Jahr → 'JJJJ-MM-TT'. */
   function tagImJahr(ttmm, jahr) {
     var m = /^(\d{1,2})\.(\d{1,2})\.?$/.exec(String(ttmm || '').trim());
-    if (!m) return jahr + '-01-01';
-    return jahr + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    if (!m || +m[2] < 1 || +m[2] > 12 || +m[1] < 1) return jahr + '-01-01';
+    // Tag am Monatsende kappen (wie Mitgliedschaft.plusMonate): „29.02.“ ergibt in Nicht-Schaltjahren den 28.02.
+    var letzter = new Date(Date.UTC(Number(jahr), +m[2], 0)).getUTCDate();
+    var tag = Math.min(+m[1], letzter);
+    return jahr + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + tag).slice(-2);
   }
 
   function faelligkeit(daten, optionen, jahr) {
@@ -379,6 +382,8 @@ var Beitrag = (function () {
       var adr = zahleradresse(k, daten);
       if (!adr || !adr.strasse || !adr.plz || !adr.ort) {
         melde('adresse_unvollstaendig', 'warnung', id, k.kontoinhaber_mitglied_id, 'Konto ' + id + ' (' + k.kontoinhaber_name + '): Anschrift des Zahlers unvollständig (für strukturierte Adressen)');
+      } else if (!/^[A-Za-z]{2}$/.test(String(adr.land || 'DE').trim())) {
+        melde('adresse_unvollstaendig', 'warnung', id, k.kontoinhaber_mitglied_id, 'Konto ' + id + ' (' + k.kontoinhaber_name + '): Land „' + adr.land + '“ ist kein ISO-Ländercode (z. B. DE, AT) – Anschrift fehlt sonst in der SEPA-Datei');
       } else if (!adr.hausnummer) {
         melde('hausnummer_fehlt', 'warnung', id, k.kontoinhaber_mitglied_id, 'Konto ' + id + ' (' + k.kontoinhaber_name + '): Hausnummer fehlt in der Anschrift');
       }

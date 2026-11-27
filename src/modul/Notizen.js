@@ -228,16 +228,24 @@ var Notizen = (function () {
     var h = stichtag || heute();
     var ktx = { email: 'wartung@system', rollen: [], aktionen: [], sicht: [] };
     return DB.mitSperre(function () {
-      var d = DB.lese(['Notiz', 'Mitglied', 'Mitgliedschaftszeitraum', 'Aufbewahrungsfrist']);
+      var d = DB.lese(['Notiz', 'Mitglied', 'Mitgliedschaftszeitraum', 'Aufbewahrungsfrist', 'Beitragskonto']);
       var frist = (d.Aufbewahrungsfrist || []).filter(function (f) {
         return f.aktiv !== false && String(f.betrifft_tab || '').indexOf('Notiz') >= 0;
       })[0];
       var monate = frist && frist.dauer_monate !== null && frist.dauer_monate !== undefined ? Number(frist.dauer_monate) : 36;
       if (!isFinite(monate)) return { anzahl: 0 };
-      var personen = {};
+      var personen = {}, konten = {};
       (d.Mitglied || []).forEach(function (m) { personen[m.mitglied_id] = m; });
+      (d.Beitragskonto || []).forEach(function (k) { konten[k.beitragskonto_id] = k; });
       var weg = (d.Notiz || []).filter(function (n) {
-        if (!n.erledigt_am || leer(n.mitglied_id)) return false;
+        if (!n.erledigt_am) return false;
+        // Notiz nur am Konto (ohne Person): weg, wenn das Konto fehlt oder nach Löschkonzept geleert ist
+        // (stillgelegt, ohne IBAN und Mandatsdatum – siehe Datenschutz.kontoLeeren). Vorher blieben sie für immer.
+        if (leer(n.mitglied_id)) {
+          if (leer(n.beitragskonto_id)) return false;
+          var k = konten[n.beitragskonto_id];
+          return !k || (k.aktiv === false && leer(k.iban) && leer(k.mandatsdatum));
+        }
         var m = personen[n.mitglied_id];
         if (!m) return true;   // Person gelöscht → Notiz verwaist
         var zr = Mitgliedschaft.zeitraeumeVon(m.mitglied_id, d.Mitgliedschaftszeitraum);
@@ -247,7 +255,7 @@ var Notizen = (function () {
       }).map(function (n) { return n.notiz_id; });
       if (!weg.length) return { anzahl: 0 };
       weg.forEach(function (id) { DB.entfernen('Notiz', id); });
-      Protokoll.schreibe(ktx, [{ aktion: 'gelöscht', tabelle: 'Notiz', datensatz_id: '-', kommentar: weg.length + ' erledigte Notizen nach Aufbewahrungsfrist entfernt' }]);
+      Protokoll.schreibe(ktx, [{ aktion: 'gelöscht', tabelle: 'Notiz', datensatz_id: '-', kommentar: weg.length + ' erledigte Notizen nach Aufbewahrungsfrist bzw. geleertem Konto entfernt' }]);
       Snapshot.schreibe(ktx, weg.map(function (id) { return { tab: 'Notiz', entfernt: id }; }));
       return { anzahl: weg.length };
     });

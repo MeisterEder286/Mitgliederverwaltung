@@ -70,8 +70,10 @@ var Migration = (function () {
   // ================================================================== kleine Helfer
 
   function falte(s) {
-    return String(s === null || s === undefined ? '' : s).toLowerCase()
+    // NFC zuerst (zerlegtes „ü“ → „ue“ wie das zusammengesetzte), danach übrige Akzente entfernen („René“ → „rene“)
+    return String(s === null || s === undefined ? '' : s).normalize('NFC').toLowerCase()
       .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]/g, '');
   }
   function text(v) {
@@ -113,6 +115,8 @@ var Migration = (function () {
       j = +m[1]; mo = +m[2]; t = +m[3];
     } else if (/^\d{1,6}(?:[.,]\d+)?$/.test(s)) {
       var n = Math.floor(Number(s.replace(',', '.')));
+      // Eine vierstellige Zahl 1850–2100 ist fast sicher eine Jahreszahl, keine Seriennummer (die wäre 1905).
+      if (/^\d{4}$/.test(s) && n >= 1850 && n <= 2100) return { wert: null, fehler: 'nur Jahreszahl „' + s + '“ – Tag und Monat fehlen' };
       var d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
       j = d.getUTCFullYear(); mo = d.getUTCMonth() + 1; t = d.getUTCDate();
     } else {

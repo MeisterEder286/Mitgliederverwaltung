@@ -114,6 +114,9 @@ var DB = (function () {
   }
 
   function leseVomSheet(tabs) {
+    // Die Sheets-API sieht gepufferte SpreadsheetApp-Schreibvorgänge erst nach flush(). Innerhalb der Sperre
+    // (Eindeutigkeitsprüfung nach einem Einfügen, Cache-Neubau in Snapshot.schreibe) deshalb vorher leeren.
+    if (gesperrt) { SpreadsheetApp.flush(); sheetsAufrufe++; }
     var antwort = Sheets.Spreadsheets.Values.batchGet(dbId(), {
       ranges: tabs.map(function (t) { return "'" + t.replace(/'/g, "''") + "'"; }),
       valueRenderOption: 'UNFORMATTED_VALUE',
@@ -263,7 +266,7 @@ var DB = (function () {
           var a = z[f], b = obj[f];
           var aLeer = a === null || a === undefined || a === '';
           var bLeer = b === null || b === undefined || b === '';
-          return (aLeer && bLeer) || String(a) === String(b);
+          return (aLeer && bLeer) || schluesselWert(f, a) === schluesselWert(f, b);
         });
       });
       if (doppelt) {
@@ -274,6 +277,14 @@ var DB = (function () {
   }
 
   function istLeer(v) { return v === null || v === undefined || v === ''; }
+
+  /**
+   * Vergleichswert für Eindeutigkeiten: E-Mail-Adressen ohne Groß-/Kleinschreibung und Randleerzeichen – so wie die
+   * Rechteprüfung sie vergleicht (Rechte.kontext); sonst gälten „A@x.de“ und „a@x.de“ als zwei Zugänge.
+   */
+  function schluesselWert(feld, v) {
+    return feld === 'email' ? String(v).trim().toLowerCase() : String(v);
+  }
 
   function fachlichAusPruefung(fehler) {
     // Feldliste mitgeben: der Browser zeigt die Meldungen direkt am jeweiligen Eingabefeld (App.formular).
@@ -344,7 +355,37 @@ var DB = (function () {
     k.zeilen.push(neu);
   }
 
-  /** Nächste freie ID eines Tabs aus _Konfig (next_id_<Tab>). Nur in mitSperre. */
+  // Höchste vorhandene ID je Tab – einmal je Sperre gelesen, danach mit den eigenen neuen IDs fortgeschrieben.
+  var hoechsteStand = { sperre: -1, je: {} };
+
+  /**
+   * Höchste ID im Tab, direkt über SpreadsheetApp gelesen (sieht auch eigene, noch nicht geflushte Schreibvorgänge
+   * innerhalb der Sperre). 0 bei leerem Tab. Je Sperre und Tab nur ein Lesezugriff.
+   */
+  function hoechsteId(tab, idSpalte) {
+    if (hoechsteStand.sperre !== sperrNr) hoechsteStand = { sperre: sperrNr, je: {} };
+    if (Object.prototype.hasOwnProperty.call(hoechsteStand.je, tab)) return hoechsteStand.je[tab];
+    var b = blatt(tab);
+    var letzte = b.getLastRow();
+    sheetsAufrufe++;
+    var max = 0;
+    if (letzte >= 2) {
+      var kopf = kopfLesen(b);
+      var s = kopf.indexOf(idSpalte);
+      if (s >= 0) {
+        b.getRange(2, s + 1, letzte - 1, 1).getValues().forEach(function (z) { var v = Number(z[0]); if (v > max) max = v; });
+        sheetsAufrufe++;
+      }
+    }
+    hoechsteStand.je[tab] = max;
+    return max;
+  }
+
+  /**
+   * Nächste freie ID eines Tabs aus _Konfig (next_id_<Tab>). Nur in mitSperre.
+   * Wie reserviereIds nie unter höchster vorhandener ID + 1: Zeilen, die von Hand (oder per Wiederherstellung)
+   * eingefügt wurden, ohne den Zähler zu erhöhen, führen so nicht zu doppelten IDs (Prüfbefund 10/2026).
+   */
   function neueId(tab) {
     vorratLeeren();
     nurInSperre('neueId');
@@ -355,7 +396,9 @@ var DB = (function () {
     if (roh !== null) {
       var id = Number(roh);
       if (!(id > 0) || Math.floor(id) !== id) throw intern('Zähler ' + name + ' ist keine ganze Zahl');
+      id = Math.max(id, hoechsteId(tab, t.idSpalte) + 1);
       zaehlerSetzen(name, id + 1);
+      hoechsteStand.je[tab] = id;
       return id;
     }
     // Zähler fehlt: aus dem Bestand ableiten und anlegen
@@ -513,7 +556,7 @@ var DB = (function () {
 
   /** Schlüssel einer Eindeutigkeitsgruppe; null, wenn alle Felder leer sind (dann keine Prüfung). */
   function gruppenSchluessel(gruppe, z) {
-    var w = gruppe.map(function (f) { return istLeer(z[f]) ? '' : String(z[f]); });
+    var w = gruppe.map(function (f) { return istLeer(z[f]) ? '' : schluesselWert(f, z[f]); });
     return w.every(function (x) { return x === ''; }) ? null : w.join('\u0001');
   }
 

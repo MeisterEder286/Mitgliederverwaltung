@@ -413,10 +413,10 @@ var Korrespondenz = (function () {
       if (!frist || leer(frist.dauer_monate)) return 0;
       var monate = Number(frist.dauer_monate);
       var liste = (d.Anschreiben || []).filter(function (a) {
-        if (leer(a.inhalt) && leer(a.empfaenger)) return false;
+        if (leer(a.inhalt) && leer(a.empfaenger) && leer(a.email_an)) return false;
         var bezug = frist.bezugspunkt === 'Ende Geschäftsjahr' ? String(a.datum).slice(0, 4) + '-12-31' : a.datum;
         return Mitgliedschaft.plusMonate(bezug, monate) < h;
-      }).map(function (a) { return { id: a.anschreiben_id, aenderungen: { inhalt: null, empfaenger: null }, version: null }; });
+      }).map(function (a) { return { id: a.anschreiben_id, aenderungen: { inhalt: null, empfaenger: null, email_an: null }, version: null }; });
       if (!liste.length) return 0;
       var r = DB.aktualisiereViele('Anschreiben', liste, ktx);
       Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: 'Anschreiben', datensatz_id: '-', kommentar: 'Fristbereinigung: Inhalt von ' + r.length + ' Schreiben geleert' }]);

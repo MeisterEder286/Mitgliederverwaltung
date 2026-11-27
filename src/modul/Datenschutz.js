@@ -26,7 +26,7 @@ var Datenschutz = (function () {
 
   var BASIS_TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
     'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
-    'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Anschreiben', 'Dokument', 'Notiz'];
+    'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Anschreiben', 'Dokument', 'Notiz', 'Aufnahmeantrag'];   // Aufnahmeantrag: Archiv (Auskunft, Anonymisierung)
   var KASSIER_TABELLEN = ['Beitragskonto', 'Sollstellung', 'Beitragsgemeinschaft', 'SEPA'];
   var ABGESCHLOSSEN = ['vollständig umgesetzt', 'teilweise umgesetzt', 'abgelehnt'];
   var SEITE = 50;
@@ -437,9 +437,17 @@ var Datenschutz = (function () {
       })[0];
       if (!kandidat) throw Fehler.fachlich('Für dieses Konto ist die Frist noch nicht abgelaufen oder es wird noch genutzt.');
       var r = DB.aktualisieren('Beitragskonto', kontoId, { iban: null, bic: null, mandatsreferenz: mandatPlatzhalter(kontoId), mandatsdatum: null, aktiv: false }, version, ktx);
-      Protokoll.schreibe(ktx, [{ aktion: 'gelöscht', tabelle: 'Beitragskonto', datensatz_id: kontoId, feld: 'iban',
-        kommentar: 'IBAN, BIC und Mandat nach Frist geleert – Klartextwerte bewusst nicht protokolliert' }]);
-      return Snapshot.schreibe(ktx, [{ tab: 'Beitragskonto', neu: r.neu }]);
+      var prot = [{ aktion: 'gelöscht', tabelle: 'Beitragskonto', datensatz_id: kontoId, feld: 'iban',
+        kommentar: 'IBAN, BIC und Mandat nach Frist geleert – Klartextwerte bewusst nicht protokolliert' }];
+      var aenderungen = [{ tab: 'Beitragskonto', neu: r.neu }];
+      // Interne Notizen nur zu diesem Konto (ohne Person) – Freitext zum Zahler, Zweck mit dem Konto erledigt
+      var notizen = (DB.lese(['Notiz']).Notiz || []).filter(function (n) {
+        return String(n.beitragskonto_id) === String(kontoId) && (n.mitglied_id === null || n.mitglied_id === undefined || n.mitglied_id === '');
+      });
+      notizen.forEach(function (n) { DB.entfernen('Notiz', n.notiz_id); aenderungen.push({ tab: 'Notiz', entfernt: n.notiz_id }); });
+      if (notizen.length) prot.push({ aktion: 'gelöscht', tabelle: 'Notiz', datensatz_id: '-', kommentar: notizen.length + ' Notiz(en) zum geleerten Konto ' + kontoId + ' entfernt' });
+      Protokoll.schreibe(ktx, prot);
+      return Snapshot.schreibe(ktx, aenderungen);
     });
   }
 
