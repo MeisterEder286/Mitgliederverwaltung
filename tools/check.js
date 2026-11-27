@@ -11,6 +11,8 @@
  *  5. appsscript.json: gültiges JSON, nur erlaubte OAuth-Scopes (Sicherheitsregel A5).
  *  6. Getrenntes Backup-Projekt backup/: Syntax, Kopfkommentar, eigene Scope-Liste, KEINE Web-App.
  *  7. Getrenntes Eingangs-Projekt eingang/: Syntax, Kopfkommentar, nur spreadsheets + drive.file, kennt DB_ID nicht.
+ *  8. Getrenntes Testimport-Projekt testimport/: Syntax, Kopfkommentar, nur spreadsheets + drive.readonly, KEINE Web-App,
+ *     kennt DB_ID nicht (nur TEST_DB_ID).
  */
 'use strict';
 const fs = require('fs');
@@ -133,6 +135,28 @@ if (fs.existsSync(EINGANG)) {
     (em.oauthScopes || []).forEach(s => { if (!EINGANG_SCOPES.includes(s)) fehler.push('eingang/appsscript.json: nicht freigegebener Scope ' + s); });
     if (!em.webapp || em.webapp.executeAs !== 'USER_DEPLOYING') fehler.push('eingang/appsscript.json: webapp.executeAs muss USER_DEPLOYING sein');
   } catch (e) { fehler.push('eingang/appsscript.json: ' + e.message); }
+}
+
+// 8 – Testimport-Projekt (füllt nur die Test-Tabelle aus testdaten.json; eigenes Projekt, nie in src/)
+const TESTIMPORT = path.join(__dirname, '..', 'testimport');
+const TESTIMPORT_SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/drive.readonly'
+];
+if (fs.existsSync(TESTIMPORT)) {
+  const tctx = vm.createContext({ console });
+  dateien(TESTIMPORT, '.js').forEach(p => {
+    const code = fs.readFileSync(p, 'utf8');
+    if (!/^\s*\/\*\*/.test(code)) fehler.push(rel(p) + ': Kopfkommentar /** … */ fehlt (C7)');
+    if (/\bDB_ID\b/.test(code)) fehler.push(rel(p) + ': das Testimport-Projekt darf die Datenbank (DB_ID) nicht kennen, nur TEST_DB_ID');
+    try { new vm.Script(code, { filename: rel(p) }).runInContext(tctx); } catch (e) { fehler.push(rel(p) + ': ' + e.message); }
+  });
+  try {
+    const tm = JSON.parse(fs.readFileSync(path.join(TESTIMPORT, 'appsscript.json'), 'utf8'));
+    if (!tm.oauthScopes) fehler.push('testimport/appsscript.json: oauthScopes fehlen');
+    (tm.oauthScopes || []).forEach(s => { if (!TESTIMPORT_SCOPES.includes(s)) fehler.push('testimport/appsscript.json: nicht freigegebener Scope ' + s); });
+    if (tm.webapp) fehler.push('testimport/appsscript.json: das Testimport-Projekt darf keine Web-App sein');
+  } catch (e) { fehler.push('testimport/appsscript.json: ' + e.message); }
 }
 
 if (fehler.length) {

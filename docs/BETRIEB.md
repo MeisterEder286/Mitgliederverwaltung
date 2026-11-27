@@ -79,7 +79,11 @@ gleiche Daten), `--stichtag JJJJ-MM-TT` (Standard heute), `--ziel <Ordner>`. Sta
 sie werden nicht exportiert. Benutzer nur aus `--benutzer` (Rolle Mitgliederverwalter, mehrere mit Komma), nie
 die erfundenen Konten des Generators.
 
-Einfügen in die **Test**-Tabelle (nach `setup`, Gebietsschema Deutschland): je Tab alle Zeilen unter der Kopfzeile
+**Einspielen per Skript (empfohlen):** `testdaten.json` aus demselben Ordner in einen Drive-Ordner hochladen und im
+eigenen Projekt `testimport/` erst `testdatenPruefen`, dann `testdatenImportieren` ausführen. Einrichtung und
+Schutzmechanismen: `testimport/LIESMICH.md`. Das Projekt schreibt nur in eine Tabelle mit „TEST“ im Namen.
+
+**Von Hand:** in die **Test**-Tabelle (nach `setup`, Gebietsschema Deutschland) je Tab alle Zeilen unter der Kopfzeile
 löschen, Inhalt der `.tsv` ab Zeile 2 in A2 mit **Strg+Umschalt+V** einfügen, Werte aus `konfig_werte.txt` in `_Konfig`
 eintragen, in der Oberfläche **Verwaltung → System → „Snapshot neu aufbauen“**. Vor E-Mail-Tests `mail_test_an` setzen.
 Alternativ testet `tools/daten16-synthetisch.js` → `tools/migration-lokal.js` den Migrationsweg (`docs/MIGRATION.md`).

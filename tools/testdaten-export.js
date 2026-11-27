@@ -19,7 +19,8 @@
  *
  *   node tools/testdaten-export.js [--mitglieder 1200] [--seed 1] [--stichtag JJJJ-MM-TT] [--ziel testdaten/ausgabe]
  *                                  [--benutzer ich@example.org]
- *     → <Tab>.tsv je Tab, konfig_werte.txt, LIESMICH.txt (Einfüge-Reihenfolge und Zeilenzahlen)
+ *     → <Tab>.tsv je Tab, konfig_werte.txt, LIESMICH.txt (Einfüge-Reihenfolge und Zeilenzahlen),
+ *       testdaten.json (alles in einer Datei, Zellformat der Tabelle) für den Import per Skript (testimport/)
  *
  *   require('./tools/testdaten-export').exportiere({ mitglieder, seed, stichtag, ziel, benutzer }) → { tabs, dateien, konfig }
  */
@@ -48,8 +49,10 @@ function exportiere(opt) {
   const o = Object.assign({ mitglieder: 1200, seed: 1, stichtag: heute(), benutzer: [] }, opt || {});
   if (!o.ziel) throw new Error('Zielordner fehlt');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(o.stichtag)) throw new Error('Stichtag im Format JJJJ-MM-TT angeben');
-  const schema = ladeProjekt({}).Schema.TABELLEN;
-  const verein = alsObjekte(erzeugeVerein({ seed: o.seed, mitglieder: o.mitglieder, stichtag: o.stichtag, fehler: false }).tabs);
+  const projekt = ladeProjekt({});
+  const schema = projekt.Schema.TABELLEN;
+  const roh = erzeugeVerein({ seed: o.seed, mitglieder: o.mitglieder, stichtag: o.stichtag, fehler: false }).tabs;
+  const verein = alsObjekte(roh);
 
   const benutzer = (o.benutzer || []).map((email, i) => {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('Keine gültige E-Mail-Adresse: ' + email);
@@ -61,19 +64,25 @@ function exportiere(opt) {
   });
 
   fs.mkdirSync(o.ziel, { recursive: true });
-  const tabs = {}, dateien = [];
-  const schreibeTab = (tab, objekte) => {
+  const tabs = {}, dateien = [], json = {};
+  const schreibeTab = (tab, objekte, zellen) => {
     const spalten = schema[tab].spalten;
     const zeilen = [spalten.map(s => s.name)].concat(objekte.map(ob => spalten.map(sp => zelle(ob[sp.name], sp))));
     fs.writeFileSync(path.join(o.ziel, tab + '.tsv'), zeilen.map(z => z.join('\t')).join('\r\n') + '\r\n');
     tabs[tab] = objekte.length;
     dateien.push(tab + '.tsv');
+    // testdaten.json: Zellformat, wie die Tabelle es speichert (Datum/Zeitpunkt als Seriennummer, ja/nein als Text)
+    json[tab] = { kopf: zellen[0], zeilen: zellen.slice(1) };
   };
   Object.keys(schema).forEach(tab => {
     if (STAMMDATEN.includes(tab) || NIE.includes(tab) || !(verein[tab] || []).length) return;
-    schreibeTab(tab, verein[tab]);
+    schreibeTab(tab, verein[tab], roh[tab]);
   });
-  if (benutzer.length) schreibeTab('Benutzer', benutzer);
+  if (benutzer.length) {
+    const kopf = Array.from(schema.Benutzer.spalten, s => s.name);
+    schreibeTab('Benutzer', benutzer, [kopf].concat(benutzer.map(b =>
+      Array.from(projekt.Werte.objektZuZeile(kopf, b, 'Benutzer'), v => v === undefined || v === null ? '' : v))));
+  }
 
   // _Konfig: nur Zähler der exportierten Tabs, Nummernkreis und Beitragsjahr. Die Anwendung nimmt ohnehin nie eine
   // ID unter „höchste vorhandene + 1“ (DB.neueId) – die Werte halten die Tabelle trotzdem stimmig.
@@ -85,11 +94,22 @@ function exportiere(opt) {
   fs.writeFileSync(path.join(o.ziel, 'konfig_werte.txt'), konfig.map(z => z.join('\t')).join('\r\n') + '\r\n');
   dateien.push('konfig_werte.txt');
 
+  // Eine Datei für den Import per Skript (testimport/Import.js): in den Drive-Ordner hochladen, dort ausführen.
+  fs.writeFileSync(path.join(o.ziel, 'testdaten.json'), JSON.stringify({
+    art: 'mitgliederverwaltung-testdaten', version: 1, synthetisch: true,
+    erzeugt: { seed: o.seed, mitglieder: o.mitglieder, stichtag: o.stichtag },
+    tabs: json, konfig
+  }));
+  dateien.push('testdaten.json');
+
   const liesmich = [
     'SYNTHETISCHE TESTDATEN – alles erfunden. Nur in die TEST-Tabelle einfügen, nie in die Produktiv-Datenbank.',
     'Erzeugt: seed ' + o.seed + ', ' + o.mitglieder + ' Mitglieder, Stichtag ' + o.stichtag + '.',
     '',
     'Voraussetzung: Test-Tabelle mit eigenem Skriptprojekt (DB_ID), `setup` ausgeführt, Gebietsschema Deutschland.',
+    '',
+    'EINFACHER: testdaten.json in den Drive-Ordner des Import-Projekts laden und dort testdatenImportieren',
+    'ausführen (testimport/LIESMICH.md). Sonst von Hand:',
     '',
     'Je Tab: alle Zeilen unter der Kopfzeile löschen, <Tab>.tsv im Texteditor öffnen, ab Zeile 2 kopieren,',
     'im Sheet Zelle A2 anklicken, Strg+Umschalt+V (nur Werte).',

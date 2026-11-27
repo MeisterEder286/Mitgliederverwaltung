@@ -32,6 +32,7 @@ keine externen Schriften oder Bibliotheken. Mobil bedienbar, Rollen- und Feldrec
 | Migration aus Access | `docs/MIGRATION.md` |
 | Abgleich mit dem Access-VBA | `docs/VBA_ABGLEICH.md` |
 | Backup | `backup/LIESMICH.md` |
+| Testumgebung mit erfundenem Verein füllen (`npm run testdaten`, Import aus Drive) | `docs/BETRIEB.md` Abschnitt 3, `testimport/LIESMICH.md` |
 | Online-Aufnahmeanträge (Eingang von der Homepage) | `docs/EINGANG.md`, `eingang/LIESMICH.md`, `wordpress/LIESMICH.md` |
 | Code-Aufbau, Schnittstellen, Konventionen | `docs/ENTWICKLUNG.md` |
 | Konzept, Entscheidungen | `docs/PHASE0_Konzept.md`, `docs/ENTSCHEIDUNGEN.md` |
@@ -52,6 +53,7 @@ npm run testdaten # synthetischen Verein als TSV je Tab für die Test-Tabelle in
 npm run push      # check + test + test:ui + clasp push
 npm run schema    # Datenmodell-CSV → src/lib/schema.js
 npm run push:eingang  # Eingangs-Skript (eigenes Projekt, eingang/.clasp.json)
+npm run push:testimport  # Testdaten-Import (eigenes Projekt, nur Test-Tabelle, testimport/.clasp.json)
 ```
 
 Im Repo liegen ausschließlich erfundene Testdaten. Echtdaten nie einchecken (`migration/` ist ausgeschlossen).
