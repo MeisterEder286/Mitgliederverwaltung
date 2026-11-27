@@ -1,0 +1,3 @@
+gemeinschaftsart_id,bezeichnung,betrag,max_erwachsene,max_kinder,kinder_bis_alter,ausbildung_bis_alter,aktiv,bemerkung
+1,Familienbeitrag,180,2,,17,25,ja,"BEISPIELBETRAG — 2 Erwachsene, beliebig viele Kinder bis 18, mit Ausbildung bis 25"
+2,Ehegattenbeitrag,150,2,0,,,ja,BEISPIELBETRAG — 2 Erwachsene ohne Kinder

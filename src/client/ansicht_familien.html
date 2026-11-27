@@ -3,7 +3,8 @@
 
   Zweck:      Familienübersicht (Access „FamilienF“), wer aus dem Familienbeitrag herausfällt (Altersgrenze,
               Ende von Schule/Studium/Ausbildung – mit prognostiziertem Ende), Umstellung auf Einzelbeitrag als
-              Sammelaktion, Nachweise anfordern, Prognose der nächsten Jahre. Außerdem über Erweiterungspunkte:
+              Sammelaktion, Nachweise anfordern, Prognose der nächsten Jahre, Abweichungen von den eingestellten
+              Beitragsregeln (Familien-/Ehegattenbeitrag, Altersgrenzen der Beitragsarten). Außerdem über Erweiterungspunkte:
               Teil „Zahlungen“ (Reiter „Beitrag & Zahlungen“) im Mitglied-Detail (Bezahlhistorie aller Jahre + Ausbildung erfassen) und Abschnitt
               „Zahlungshistorie (alle Jahre)“ im Konto-Detail.
   Datenquelle: apiFamilie… (Server rechnet mit src/lib/familie.js), App.daten für Namen/Navigation.
@@ -78,7 +79,8 @@
     { k: 'uebersicht', t: 'Übersicht' },
     { k: 'ausscheider', t: 'Fallen heraus' },
     { k: 'ausbildung', t: 'Ausbildung/Studium' },
-    { k: 'prognose', t: 'Prognose' }
+    { k: 'prognose', t: 'Prognose' },
+    { k: 'abweichungen', t: 'Abweichungen' }
   ];
 
   A.registriere('familien', {
@@ -95,7 +97,7 @@
       ziel.appendChild(leiste);
       var bereich = A.el('div', null, { role: 'tabpanel' });
       ziel.appendChild(bereich);
-      ({ uebersicht: zeigeUebersicht, ausscheider: zeigeAusscheider, ausbildung: zeigeAusbildung, prognose: zeigePrognose }[zustand.reiter] || zeigeUebersicht)(bereich);
+      ({ uebersicht: zeigeUebersicht, ausscheider: zeigeAusscheider, ausbildung: zeigeAusbildung, prognose: zeigePrognose, abweichungen: zeigeAbweichungen }[zustand.reiter] || zeigeUebersicht)(bereich);
     }
   });
 
@@ -249,6 +251,45 @@
     }, function () { nichtGeladen(inhalt, 'Die Ausbildungsangaben konnten nicht geladen werden.'); });
   }
 
+  // ------------------------------------------------------------------ Abweichungen von den Beitragsregeln
+
+  var SCHWERE = { fehler: 'rot', warnung: 'gelb', hinweis: 'grau' };
+
+  function zeigeAbweichungen(ziel) {
+    var inhalt = A.el('div'); ziel.appendChild(inhalt); laedt(inhalt);
+    A.rufe('apiFamilieAbweichungen').then(function (d) {
+      A.leere(inhalt);
+      inhalt.appendChild(A.el('p', 'Was weicht von den eingestellten Regeln ab? Alter gerechnet zum Stichtag ' + A.datum(d.stichtag) +
+        ' (wie beim Tarifwechsel), Stand ' + A.datum(d.stand) + '.', { className: 'leise' }));
+      var regeln = A.el('ul', null, { className: 'fam-regeln' });
+      d.regeln.forEach(function (r) { regeln.appendChild(A.el('li', null, null, [A.el('strong', r.bezeichnung + ' (' + A.betrag(r.betrag) + '): '), A.el('span', r.text)])); });
+      if (!d.regeln.length) regeln.appendChild(A.el('li', 'Noch keine Regeln eingestellt.'));
+      var kopf = [];
+      if (A.darf('stammdaten_bearbeiten') && A.ansichten && A.ansichten.verwaltung) kopf.push(A.knopf('Regeln einstellen', function () {
+        A.zeige('verwaltung', { reiter: 'stammdaten', tab: 'Gemeinschaftsart' });
+      }, 'zweit klein'));
+      inhalt.appendChild(A.abschnitt('Eingestellte Regeln', kopf, 'h3'));
+      inhalt.appendChild(regeln);
+      var l = d.abweichungen;
+      var je = {};
+      l.forEach(function (a) { je[a.titel] = (je[a.titel] || 0) + 1; });
+      inhalt.appendChild(A.el('div', null, { className: 'kacheln' }, [A.kachel(A.zahl(l.length), 'Abweichungen', l.length ? 'warnung' : '')]
+        .concat(Object.keys(je).map(function (t) { return A.kachel(A.zahl(je[t]), t); }))));
+      inhalt.appendChild(A.abschnitt('Abweichungen', exportKnoepfe('Abweichungen Beitragsregeln', [
+        { titel: 'Schwere', feld: 'schwere' }, { titel: 'Art', feld: 'titel' }, { titel: 'Familie', feld: 'gemeinschaft' },
+        { titel: 'Person', feld: 'name' }, { titel: 'Meldung', feld: 'meldung' }
+      ], l), 'h3'));
+      inhalt.appendChild(A.tabelle([
+        { feld: 'schwere', titel: '', wert: function (a) { return A.ampel(SCHWERE[a.schwere] || 'grau', a.schwere); } },
+        { feld: 'titel', titel: 'Art' },
+        { feld: 'gemeinschaft', titel: 'Familie', wert: function (a) { return a.gemeinschaft || '–'; } },
+        { feld: 'meldung', titel: 'Meldung' }
+      ], l, { karten: true, kartenTitel: 'titel', leer: 'Keine Abweichungen – alles entspricht den Regeln.', beiKlick: function (a) {
+        if (a.mitglied_id) A.zeige('mitglied', { id: a.mitglied_id, reiter: 'zahlungen' });
+      } }));
+    }, function () { nichtGeladen(inhalt, 'Die Abweichungen konnten nicht geladen werden.'); });
+  }
+
   // ------------------------------------------------------------------ Prognose
 
   function zeigePrognose(ziel) {
@@ -265,7 +306,7 @@
       d.prognose.forEach(function (j) { j.personen.forEach(function (p) { personen.push(Object.assign({ jahr: j.jahr }, p)); }); });
       inhalt.appendChild(A.abschnitt('Personen', exportKnoepfe('Prognose Familienbeitrag', [
         { titel: 'Jahr', feld: 'jahr' }, { titel: 'Name', feld: 'name' }, { titel: 'Familie', feld: 'gemeinschaft' }, { titel: 'Grund', feld: 'grund' },
-        { titel: 'Ausbildung bis', wert: function (p) { return A.datum(p.ausbildung_bis); } }
+        { titel: 'Ausbildung voraussichtl. bis', wert: function (p) { return A.datum(p.ausbildung_bis); } }
       ], personen)));
       inhalt.appendChild(A.tabelle([
         { feld: 'jahr', titel: 'Jahr', zahl: true },

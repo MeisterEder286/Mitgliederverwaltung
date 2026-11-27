@@ -55,6 +55,26 @@ test('Familien: Übersicht, Ausscheider umstellen, Ausbildung, Prognose (Mitglie
   } finally { await ui.schliessen(); }
 });
 
+test('Familien → Abweichungen: Regeln, Kind über der Altersgrenze gemeldet; Regeln in den Stammdaten einstellbar', async () => {
+  const { tabs, kindId } = vereinMitAusscheider();
+  // Kind ist heute (Stichtag 01.01.2026) 17 – auf 2005 setzen, damit es schon jetzt über der Grenze liegt
+  const k = tabs.Mitglied[0];
+  tabs.Mitglied.find(z => z[k.indexOf('mitglied_id')] === kindId)[k.indexOf('geburtsdatum')] = isoZuSerial('2005-05-10');
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', tabs });
+  try {
+    await ui.oeffne('familien');
+    await ui.page.getByRole('tab', { name: 'Abweichungen' }).click();
+    await ui.page.waitForSelector('text=Eingestellte Regeln');
+    assert.ok(await ui.page.locator('.fam-regeln li', { hasText: 'Familienbeitrag' }).count());
+    await ui.page.waitForSelector('td:has-text("Altersgrenze erreicht")');
+    await breiteOk(ui);
+    await ui.page.locator('button', { hasText: 'Regeln einstellen' }).click();
+    await ui.page.waitForFunction(() => App.aktuell().schluessel === 'verwaltung');
+    await ui.page.waitForSelector('td:has-text("Ehegattenbeitrag")');
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
 test('Mitglied-Detail: Reiter „Zahlungen“ mit Historie und Ausbildung erfassen; Konto-Detail mit Zahlungshistorie', async () => {
   const { tabs } = vereinMitAusscheider();
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', tabs });

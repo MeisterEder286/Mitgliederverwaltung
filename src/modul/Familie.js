@@ -84,6 +84,22 @@ var FamilieModul = (function () {
     };
   }
 
+  /**
+   * Abweichungen von den Beitragsregeln (Gemeinschaftsart: Familien-/Ehegattenbeitrag; Altersgrenzen der
+   * Beitragsarten) zum heutigen Tag, dazu die Regeln selbst zur Anzeige.
+   */
+  function abweichungen(ktx) {
+    var x = daten();
+    var h = heute();
+    return {
+      stand: h, stichtag: Familie.stichtag(x.konfig, Number(h.slice(0, 4))),
+      regeln: (x.daten.Gemeinschaftsart || []).filter(function (a) { return a.aktiv !== false; }).map(function (a) {
+        return { gemeinschaftsart_id: a.gemeinschaftsart_id, bezeichnung: a.bezeichnung, betrag: a.betrag, text: Familie.regelText(a, x.konfig) };
+      }),
+      abweichungen: Familie.abweichungen(x.daten, x.konfig, h)
+    };
+  }
+
   // ================================================================== Schreiben
 
   /** Sammel-Umstellung auf Einzelbeitrag. liste: [{ mitglied_id, version, beitragsart_id? }], wirksam: 'JJJJ-MM-TT' (Info). */
@@ -221,7 +237,7 @@ var FamilieModul = (function () {
   }
 
   return {
-    uebersicht: uebersicht, ausscheider: ausscheider, umstellen: umstellen, ausbildungSpeichern: ausbildungSpeichern,
+    uebersicht: uebersicht, abweichungen: abweichungen, ausscheider: ausscheider, umstellen: umstellen, ausbildungSpeichern: ausbildungSpeichern,
     bezahlhistorie: bezahlhistorie, kontohistorie: kontohistorie, exportVermerken: exportVermerken
   };
 })();

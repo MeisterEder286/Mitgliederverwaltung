@@ -11,6 +11,8 @@
  *   - Die Integritätsregeln werden beim Schreiben zusätzlich in den Fachmodulen erzwungen; diese Prüfung findet
  *     Altlasten, Migrationsfehler und Handänderungen im Sheet.
  *   - IBAN: nutzt Iban.gueltig/Iban.pruefe aus src/lib/iban.js, falls vorhanden, sonst eigene Prüfziffer (mod 97).
+ *   - Beitragsregeln: Abweichungen von Familien-/Ehegattenbeitrag und Altersgrenzen kommen aus Familie.abweichungen
+ *     (Regeln „beitrag_…“, Titel werden beim ersten Aufruf ergänzt, weil die Ladereihenfolge nicht feststeht).
  *   - Anonymisierte Anker und reine Funktionsträger sind von Mitgliedschaftsregeln ausgenommen.
  */
 var Pruefregeln = (function () {
@@ -208,6 +210,17 @@ var Pruefregeln = (function () {
     // ---------- Führungszeugnisse
     if (typeof Fristen !== 'undefined') {
       Fristen.uebersicht(daten, heute, konfig).maengel.forEach(function (x) { befund('fz_fehlt', 'Qualifikation', null, x.mitglied_id, x.meldung); });
+    }
+
+    // ---------- Beitragsregeln (Familien-/Ehegattenbeitrag, Altersgrenzen der Beitragsarten) – Logik in Familie
+    if (typeof Familie !== 'undefined' && Familie.abweichungen) {
+      Object.keys(Familie.ABWEICHUNGEN).forEach(function (k) {
+        REGELN['beitrag_' + k] = { schwere: Familie.ABWEICHUNGEN[k].schwere, titel: 'Beitragsregel: ' + Familie.ABWEICHUNGEN[k].titel };
+      });
+      Familie.abweichungen(daten, konfig || {}, heute).forEach(function (a) {
+        if (a.mitglied_id) befund('beitrag_' + a.regel, 'Mitglied', a.mitglied_id, a.mitglied_id, a.meldung);
+        else befund('beitrag_' + a.regel, 'Beitragsgemeinschaft', a.gemeinschaft_id, null, a.meldung);
+      });
     }
 
     var rang = { fehler: 0, warnung: 1, hinweis: 2 };

@@ -34,7 +34,23 @@
 
   // ================================================================== Hilfen
 
+  var TITEL = {
+    max_erwachsene: 'Höchstens Erwachsene', max_kinder: 'Höchstens Kinder', kinder_bis_alter: 'Kinder bis Alter (einschließlich)',
+    ausbildung_bis_alter: 'Mit Ausbildung bis Alter (einschließlich)', alter_von: 'Alter von', alter_bis: 'Alter bis (einschließlich)'
+  };
+  /** Erklärungen in den Stammdaten-Formularen je Tab und Feld. */
+  var HILFE = {
+    Gemeinschaftsart: {
+      betrag: { hilfe: 'Pauschale je Gemeinschaft und Jahr; wird beim Anlegen als Festbetrag übernommen.' },
+      max_erwachsene: { hilfe: 'z. B. 2. Leer = unbegrenzt.' },
+      max_kinder: { hilfe: 'Leer = beliebig viele, 0 = keine Kinder (Ehegattenbeitrag).' },
+      kinder_bis_alter: { hilfe: '17 heißt: bis zum 18. Geburtstag. Leer = Einstellung familie_kinder_bis_alter.' },
+      ausbildung_bis_alter: { hilfe: 'Mit Schule/Studium/Ausbildung (voraussichtliches Ende am Mitglied) höchstens bis zu diesem Alter. Leer = keine Verlängerung.' }
+    }
+  };
+
   function titelVon(name) {
+    if (TITEL[name]) return TITEL[name];
     var t = String(name).replace(/_id$/, '').replace(/_/g, ' ');
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
@@ -238,6 +254,7 @@
     { tab: 'Abteilung', titel: 'Abteilungen', name: 'bezeichnung' },
     { tab: 'Funktionsart', titel: 'Funktionsarten', name: 'bezeichnung' },
     { tab: 'Beitragsart', titel: 'Beitragsarten', name: 'bezeichnung' },
+    { tab: 'Gemeinschaftsart', titel: 'Familien-/Ehegattenbeitrag (Regeln)', name: 'bezeichnung' },
     { tab: 'Qualifikationsart', titel: 'Nachweisarten', name: 'bezeichnung' },
     { tab: 'Ehrungsregel', titel: 'Ehrungsstufen', name: 'bezeichnung' },
     { tab: 'Aufbewahrungsfrist', titel: 'Aufbewahrungsfristen', name: 'datenkategorie' }
@@ -260,7 +277,7 @@
       A.leere(bereich);
       var namen = fachfelder(wahl);
       function dialog(z) {
-        var form = A.formular(felderAus(wahl, namen), z || { aktiv: true });
+        var form = A.formular(felderAus(wahl, namen, HILFE[wahl]), z || { aktiv: true });
         speicherDialog((z ? def.titel + ': ' + (z[def.name] || 'Eintrag') + ' bearbeiten' : def.titel + ': neuer Eintrag'), form, 'apiVerwaltungStammdatenSpeichern',
           [wahl, z ? z[d.idSpalte] : null, z ? z.version : null], neu);
       }

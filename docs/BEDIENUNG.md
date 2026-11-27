@@ -59,8 +59,13 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
      das System), „Zahlt über eine andere Person bzw. ein vorhandenes Konto“ (Person suchen oder Konto wählen) oder
      „Noch offen“. Gibt es die eingegebene IBAN schon, erscheint sofort ein Hinweis mit Kontoinhaber und Zahlern:
      „Dieses Konto verwenden“ oder bewusst „Trotzdem ein eigenes, neues Konto anlegen“.
-  3. **Familienbeitrag** (bei mehreren Personen oder wenn das gewählte Konto schon zu einer Familie gehört):
-     neue Beitragsgemeinschaft „Familie …“ (optional mit Festbetrag), Aufnahme in die bestehende oder keine.
+  3. **Familien-/Ehegattenbeitrag** (bei mehreren Personen oder wenn das gewählte Konto schon zu einer Familie gehört):
+     Regel wählen – „Familienbeitrag“, „Ehegattenbeitrag“ (vorgeschlagen je nachdem, ob Kinder dabei sind) –, in die
+     bestehende Gemeinschaft aufnehmen oder keiner. Betrag und Bezeichnung („Familie …“/„Ehepaar …“) werden vorbelegt.
+     Darunter steht sofort, ob die Familie zur Regel passt (z. B. „3 Erwachsene – Familienbeitrag erlaubt 2“). Speichern
+     geht trotzdem; die Abweichung wird gemeldet.
+     Für Personen über 17 erscheinen „Ausbildung / Schule“ und **„Ausbildung voraussichtlich abgeschlossen am“** – mit
+     diesem Datum zählen sie bis zur Altersgrenze der Regel (Standard 25) weiter als Kind im Familienbeitrag.
   Alles wird in einem Schritt gespeichert – entweder komplett oder gar nicht.
   Beim **Bearbeiten** ist der Abschnitt „Gesetzliche Vertretung“ bei Volljährigen ausgeblendet (außer es ist noch etwas eingetragen).
 - **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
@@ -75,6 +80,16 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   Mandat abgleichen.
 - **Austritt:** im Mitglied → „Austritt“. Ist die Person Zahler für andere, fragt das System, wie es mit dem Konto weitergeht.
 - **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!).
+- **Beitragsregeln einstellen:** Verwaltung → Stammdaten → „Familien-/Ehegattenbeitrag (Regeln)“. Je Regel: Betrag,
+  höchstens wie viele Erwachsene und Kinder (leer = beliebig viele, 0 = keine), Kinder bis Alter (17 = bis 18) und mit
+  Ausbildung bis Alter (leer = keine Verlängerung). Vorbelegt: **Familienbeitrag** (2 Erwachsene, beliebig viele Kinder
+  bis 18, in Ausbildung bis 25) und **Ehegattenbeitrag** (2 Erwachsene, keine Kinder). Der **Kinderbeitrag** (bis 18)
+  ist eine Beitragsart mit Altersgrenze (Stammdaten → Beitragsarten). Jede Gemeinschaft bekommt ihre Regel in
+  Finanzen → Gemeinschaften (bestehende Gemeinschaften einmal zuordnen – sonst Hinweis „ohne Regel“).
+- **Abweichungen:** Familien → „Abweichungen“ listet alles, was nicht zu den Regeln passt (zu viele Erwachsene/Kinder,
+  Kind über der Altersgrenze ohne Ausbildung, Ausbildung ohne voraussichtliches Ende, Festbetrag ≠ Betrag der Regel,
+  Gemeinschaft mit nur einer Person, Beitragsart passt nicht zum Alter – z. B. Kinderbeitrag über 18). Alter zählt zum
+  Stichtag (01.01.) wie beim Tarifwechsel. Dieselben Punkte stehen auch in Verwaltung → Datenqualität („Beitragsregel: …“).
 - **Familien:** einmal im Herbst „Fallen heraus“ für das nächste Jahr prüfen. Wer Schule/Studium/Ausbildung nachweist,
   bekommt das voraussichtliche Ende eingetragen und bleibt bis dahin im Familienbeitrag. Die anderen auswählen →
   „Auf Einzelbeitrag umstellen“ → „Anschreiben erstellen“.

@@ -15,6 +15,11 @@ function apiFamilieUebersicht(jahr) {
   return Api.ausfuehren('apiFamilieUebersicht', 'konto_lesen', function (ktx) { return FamilieModul.uebersicht(ktx, familieZahl_(jahr)); });
 }
 
+/** Abweichungen von den Beitragsregeln (Familien-/Ehegattenbeitrag, Altersgrenzen) zum heutigen Tag. */
+function apiFamilieAbweichungen() {
+  return Api.ausfuehren('apiFamilieAbweichungen', 'konto_lesen', function (ktx) { return FamilieModul.abweichungen(ktx); });
+}
+
 function apiFamilieAusscheider(jahr, jahreVoraus) {
   return Api.ausfuehren('apiFamilieAusscheider', 'konto_lesen', function (ktx) {
     return FamilieModul.ausscheider(ktx, familieZahl_(jahr), familieZahl_(jahreVoraus));

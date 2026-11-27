@@ -355,7 +355,17 @@ var Finanzen = (function () {
   function gemeinschaftSpeichern(ktx, id, version, werte) {
     werte = werte || {};
     var w = {};
-    ['bezeichnung', 'festbetrag', 'aktiv', 'bemerkung'].forEach(function (f) { if (Object.prototype.hasOwnProperty.call(werte, f)) w[f] = werte[f]; });
+    ['bezeichnung', 'gemeinschaftsart_id', 'festbetrag', 'aktiv', 'bemerkung'].forEach(function (f) { if (Object.prototype.hasOwnProperty.call(werte, f)) w[f] = werte[f]; });
+    if (w.gemeinschaftsart_id === '') w.gemeinschaftsart_id = null;
+    if (w.gemeinschaftsart_id !== undefined && w.gemeinschaftsart_id !== null) {
+      w.gemeinschaftsart_id = Number(w.gemeinschaftsart_id);
+      var regel = nachId(basis().tabs.Gemeinschaftsart || [], 'gemeinschaftsart_id')[w.gemeinschaftsart_id];
+      if (!regel) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'gemeinschaftsart_id', meldung: 'Diese Regel gibt es nicht.' }]);
+      // mit Regel und ohne eigenen Festbetrag: Betrag der Regel übernehmen
+      var neuG = id === null || id === undefined || id === '';
+      if ((neuG && (w.festbetrag === undefined || w.festbetrag === null || w.festbetrag === '')) ||
+          (!neuG && Object.prototype.hasOwnProperty.call(w, 'festbetrag') && (w.festbetrag === null || w.festbetrag === ''))) w.festbetrag = regel.betrag;
+    }
     var fehler = [];
     if ((id === null || id === undefined || id === '' || w.bezeichnung !== undefined) && !w.bezeichnung) fehler.push({ feld: 'bezeichnung', meldung: 'Bezeichnung: Angabe fehlt.' });
     if (w.festbetrag !== undefined && w.festbetrag !== null && !(Number(w.festbetrag) >= 0)) fehler.push({ feld: 'festbetrag', meldung: 'Festbetrag: bitte einen Betrag ≥ 0 angeben.' });

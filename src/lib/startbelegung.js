@@ -77,6 +77,13 @@ var Startbelegung = {
       ["13","Kassenprüfer","Verein","nein","Wahl JHV","ja","ja","PRÜFEN: Liste gegen die Satzung abgleichen"]
     ]
   },
+  "Gemeinschaftsart": {
+    kopf: ["gemeinschaftsart_id","bezeichnung","betrag","max_erwachsene","max_kinder","kinder_bis_alter","ausbildung_bis_alter","aktiv","bemerkung"],
+    zeilen: [
+      ["1","Familienbeitrag","180","2","","17","25","ja","BEISPIELBETRAG — 2 Erwachsene, beliebig viele Kinder bis 18, mit Ausbildung bis 25"],
+      ["2","Ehegattenbeitrag","150","2","0","","","ja","BEISPIELBETRAG — 2 Erwachsene ohne Kinder"]
+    ]
+  },
   "Qualifikationsart": {
     kopf: ["qualifikationsart_id","bezeichnung","kategorie","wiedervorlage_monate","max_alter_zeugnis_monate","loeschfrist_monate","aktiv","bemerkung"],
     zeilen: [
@@ -128,6 +135,7 @@ var Startbelegung = {
       ["next_id_Funktionsart","14","ID-Zähler"],
       ["next_id_Funktion","16","ID-Zähler"],
       ["next_id_Beitragsart","4","ID-Zähler"],
+      ["next_id_Gemeinschaftsart","3","ID-Zähler"],
       ["next_id_Beitragsgemeinschaft","2","ID-Zähler"],
       ["next_id_Beitragskonto","12","ID-Zähler"],
       ["next_id_Sollstellung","13","ID-Zähler"],

@@ -205,11 +205,29 @@ var Schema = (function () {
         {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
       ]
     },
+    "Gemeinschaftsart": {
+      gruppe: "Stammdaten", idSpalte: "gemeinschaftsart_id", eindeutig: [],
+      spalten: [
+        {"name":"gemeinschaftsart_id","typ":"Ganzzahl","pflicht":"PK","liste":null,"sicht":"intern"},
+        {"name":"bezeichnung","typ":"Text","pflicht":"ja","liste":null,"sicht":"intern"},
+        {"name":"betrag","typ":"Dezimal","pflicht":"ja","liste":null,"sicht":"intern"},
+        {"name":"max_erwachsene","typ":"Ganzzahl","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"max_kinder","typ":"Ganzzahl","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"kinder_bis_alter","typ":"Ganzzahl","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"ausbildung_bis_alter","typ":"Ganzzahl","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"aktiv","typ":"ja/nein","pflicht":"ja","liste":"ja_nein","sicht":"intern"},
+        {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"intern"},
+        {"name":"version","typ":"Ganzzahl","pflicht":"auto","liste":null,"sicht":"intern"},
+        {"name":"geaendert_am","typ":"Zeitpunkt","pflicht":"auto","liste":null,"sicht":"intern"},
+        {"name":"geaendert_von","typ":"Text","pflicht":"auto","liste":null,"sicht":"intern"}
+      ]
+    },
     "Beitragsgemeinschaft": {
       gruppe: "Stammdaten", idSpalte: "beitragsgemeinschaft_id", eindeutig: [],
       spalten: [
         {"name":"beitragsgemeinschaft_id","typ":"Ganzzahl","pflicht":"PK","liste":null,"sicht":"finanz"},
         {"name":"bezeichnung","typ":"Text","pflicht":"ja","liste":null,"sicht":"finanz"},
+        {"name":"gemeinschaftsart_id","typ":"FK","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"festbetrag","typ":"Dezimal","pflicht":"nein","liste":null,"sicht":"finanz"},
         {"name":"aktiv","typ":"ja/nein","pflicht":"ja","liste":"ja_nein","sicht":"finanz"},
         {"name":"bemerkung","typ":"Langtext","pflicht":"nein","liste":null,"sicht":"finanz"},

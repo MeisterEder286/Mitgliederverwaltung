@@ -10,6 +10,9 @@
  *             Beitragskonto, Beitragsart, Sollstellung), `konfig` = _Konfig als { schluessel: wert }.
  * Wer darf was: – (Rechenfunktionen). Lesen mit konto_lesen, Umstellen mit mitglied_bearbeiten (Servermodul).
  * Besonderheiten:
+ *   - Regeln: je Gemeinschaft aus ihrer Gemeinschaftsart (Familienbeitrag/Ehegattenbeitrag: Höchstzahl Erwachsene/
+ *     Kinder, kinder_bis_alter, ausbildung_bis_alter, Betrag) – fehlt sie, gelten die _Konfig-Werte.
+ *     abweichungen() meldet alles, was davon abweicht (auch Einzel-Beitragsarten, deren Altersgrenze nicht passt).
  *   - _Konfig: familie_kinder_bis_alter (Standard 17), familie_ausbildung_bis_alter (25),
  *     familie_umstellung_stichtag (01.01. – Alter wird zu diesem Tag des Jahres bestimmt, wie beim Tarifwechsel),
  *     ausbildungsnachweis_vorlauf_monate (2).
@@ -114,7 +117,7 @@ var Familie = (function () {
       return aus;
     }
     var bis = m.ausbildung_bis || null;
-    if (bis && bis >= tag && alter <= e.ausbildungBis) {
+    if (bis && bis >= tag && e.ausbildungBis !== null && alter <= e.ausbildungBis) {
       var grenzeTag = tagNachAlter(m.geburtsdatum, e.ausbildungBis);
       aus.verlaengert_bis = grenzeTag && grenzeTag <= bis ? grenzeTag : bis;
       var nachweisAlt = !m.ausbildung_nachweis_am || Mitgliedschaft.plusMonate(m.ausbildung_nachweis_am, NACHWEIS_GUELTIG_MONATE) < heute;
@@ -128,7 +131,7 @@ var Familie = (function () {
     aus.ergebnis = 'faellt_raus';
     aus.datum = tag;
     if (bis && bis < tag) aus.grund = 'Ausbildung endet (prognostiziert ' + de(bis) + ')';
-    else if (bis && alter > e.ausbildungBis) aus.grund = 'Ausbildungsgrenze erreicht (Alter ' + alter + ' > ' + e.ausbildungBis + ')';
+    else if (bis && e.ausbildungBis !== null && alter > e.ausbildungBis) aus.grund = 'Ausbildungsgrenze erreicht (Alter ' + alter + ' > ' + e.ausbildungBis + ')';
     else aus.grund = 'Altersgrenze erreicht (Alter ' + alter + ' > ' + e.kinderBis + ')';
     return aus;
   }
@@ -138,10 +141,11 @@ var Familie = (function () {
    * Liefert { jahr, stichtag, eintraege: [...], gemeinschaften: [{ id, bezeichnung, festbetrag, konto_id, mitglieder, hinweis }] }.
    */
   function ausscheider(daten, jahr, konfig, heute) {
-    var e = einstellungen(konfig);
     var tag = stichtag(konfig, jahr);
     heute = heute || tag;
     var ix = index(daten);
+    var artVon = {};
+    (daten.Gemeinschaftsart || []).forEach(function (a) { artVon[a.gemeinschaftsart_id] = a; });
     var eintraege = [], gemeinschaften = [];
     Object.keys(ix.jeGemeinschaft).forEach(function (gid) {
       var g = ix.gemeinschaft[gid];
@@ -150,6 +154,7 @@ var Familie = (function () {
       if (!mitglieder.length) return;
       var konto = ix.konto[mitglieder[0].beitragskonto_id] || null;
       var rolle = rollen(mitglieder, konto, tag);
+      var e = einstellungenFuer(konfig, hat(g.gemeinschaftsart_id) ? artVon[g.gemeinschaftsart_id] : null);
       var bleibende = 0, liste = [];
       mitglieder.forEach(function (m) {
         var b = rolle[m.mitglied_id] === 'kind' ? bewerte(m, tag, heute, e)
@@ -244,6 +249,127 @@ var Familie = (function () {
     return { aenderungen: aenderungen, hinweise: hinweise.filter(function (h, i, a) { return a.indexOf(h) === i; }), fehler: fehler };
   }
 
+  // ================================================================== Regeln je Gemeinschaftsart, Abweichungen
+
+  /** Titel und Schwere der Abweichungen (Bericht „Abweichungen von den Beitragsregeln“, Datenqualität). */
+  var ABWEICHUNGEN = {
+    zu_viele_erwachsene: { schwere: 'warnung', titel: 'Mehr Erwachsene als die Regel erlaubt' },
+    zu_viele_kinder: { schwere: 'warnung', titel: 'Mehr Kinder als die Regel erlaubt' },
+    kind_zu_alt: { schwere: 'warnung', titel: 'Kind über der Altersgrenze (ohne gültige Ausbildung)' },
+    ausbildung_ende_fehlt: { schwere: 'warnung', titel: 'In Ausbildung, aber voraussichtliches Ende fehlt' },
+    nachweis_faellig: { schwere: 'hinweis', titel: 'Ausbildungsnachweis fehlt oder ist älter als 12 Monate' },
+    betrag_abweichend: { schwere: 'hinweis', titel: 'Festbetrag weicht vom Betrag der Regel ab' },
+    nur_eine_person: { schwere: 'warnung', titel: 'Gemeinschaft mit nur einer aktiven Person' },
+    ohne_regel: { schwere: 'hinweis', titel: 'Gemeinschaft mit Festbetrag ohne zugeordnete Regel (Familien-/Ehegattenbeitrag)' },
+    regel_inaktiv: { schwere: 'warnung', titel: 'Zugeordnete Regel ist nicht mehr aktiv' },
+    beitragsart_alter: { schwere: 'warnung', titel: 'Beitragsart passt nicht zum Alter (z. B. Kinderbeitrag über 18)' }
+  };
+
+  /**
+   * Einstellungen für eine Gemeinschaft: die Regel (Gemeinschaftsart) geht vor _Konfig.
+   * ausbildungBis === null heißt: keine Verlängerung durch Ausbildung (z. B. Ehegattenbeitrag).
+   */
+  function einstellungenFuer(konfig, art) {
+    var e = einstellungen(konfig);
+    if (!art) return e;
+    if (hat(art.kinder_bis_alter)) e.kinderBis = Number(art.kinder_bis_alter);
+    e.ausbildungBis = hat(art.ausbildung_bis_alter) ? Number(art.ausbildung_bis_alter) : null;
+    e.maxErwachsene = hat(art.max_erwachsene) ? Number(art.max_erwachsene) : null;
+    e.maxKinder = hat(art.max_kinder) ? Number(art.max_kinder) : null;
+    return e;
+  }
+
+  /** Kurzbeschreibung einer Regel für Anzeigen: „2 Erwachsene, beliebig viele Kinder bis 18, mit Ausbildung bis 25“. */
+  function regelText(art, konfig) {
+    if (!art) return '';
+    var e = einstellungenFuer(konfig, art);
+    var t = [];
+    t.push(e.maxErwachsene === null ? 'beliebig viele Erwachsene' : e.maxErwachsene + (e.maxErwachsene === 1 ? ' Erwachsener' : ' Erwachsene'));
+    if (e.maxKinder === 0) t.push('keine Kinder');
+    else t.push((e.maxKinder === null ? 'beliebig viele' : e.maxKinder) + ' Kinder bis ' + (e.kinderBis + 1) +
+      (e.ausbildungBis !== null ? ', in Ausbildung bis ' + e.ausbildungBis : ''));
+    return t.join(', ');
+  }
+
+  /**
+   * Prüft eine Gemeinschaft (oder eine geplante) gegen ihre Regel zum Stichtag tag.
+   * mitglieder: aktive Personen (Mitglied-Zeilen, bei geplanten mit vorläufigen IDs). art: Gemeinschaftsart oder null.
+   * Liefert { erwachsene, kinder, abweichungen: [{ regel, schwere, titel, meldung, mitglied_id }] }.
+   */
+  function pruefeGemeinschaft(g, art, mitglieder, konto, tag, heute, konfig) {
+    var e = einstellungenFuer(konfig, art);
+    var ab = [];
+    function melde(regel, meldung, m) {
+      ab.push({ regel: regel, schwere: ABWEICHUNGEN[regel].schwere, titel: ABWEICHUNGEN[regel].titel, meldung: meldung, mitglied_id: m ? m.mitglied_id : null, name: m ? name(m) : null });
+    }
+    var rolle = rollen(mitglieder, konto, tag);
+    var erwachsene = 0, kinder = 0;
+    mitglieder.forEach(function (m) {
+      if (rolle[m.mitglied_id] !== 'kind') { erwachsene++; return; }
+      var b = bewerte(m, tag, heute, e);
+      if (b.ergebnis === 'faellt_raus' && hat(m.ausbildung_art) && !hat(m.ausbildung_bis) && e.ausbildungBis !== null && b.alter !== null && b.alter <= e.ausbildungBis) {
+        melde('ausbildung_ende_fehlt', name(m) + ': ' + m.ausbildung_art + ' angegeben, aber „Ausbildung voraussichtlich abgeschlossen am“ fehlt – ohne Datum zählt die Person nicht mehr zum ' + (art ? art.bezeichnung : 'Familienbeitrag') + '.', m);
+        return;
+      }
+      if (b.ergebnis === 'faellt_raus') { melde('kind_zu_alt', name(m) + ': ' + b.grund + ' – gehört nicht mehr in den ' + (art ? art.bezeichnung : 'Familienbeitrag') + '.', m); return; }
+      kinder++;
+      if (b.ergebnis === 'nachweis_anfordern') melde('nachweis_faellig', name(m) + ': ' + b.grund, m);
+    });
+    if (art) {
+      if (art.aktiv === false) melde('regel_inaktiv', '„' + g.bezeichnung + '“: Regel „' + art.bezeichnung + '“ ist nicht mehr aktiv.');
+      if (e.maxErwachsene !== null && erwachsene > e.maxErwachsene) melde('zu_viele_erwachsene', '„' + g.bezeichnung + '“: ' + erwachsene + ' Erwachsene, ' + art.bezeichnung + ' erlaubt ' + e.maxErwachsene + '.');
+      if (e.maxKinder !== null && kinder > e.maxKinder) melde('zu_viele_kinder', '„' + g.bezeichnung + '“: ' + kinder + (kinder === 1 ? ' Kind' : ' Kinder') + ', ' + art.bezeichnung + ' erlaubt ' + (e.maxKinder === 0 ? 'keine' : e.maxKinder) + '.');
+      if (hat(g.festbetrag) && hat(art.betrag) && Math.abs(Number(g.festbetrag) - Number(art.betrag)) > 0.004) {
+        melde('betrag_abweichend', '„' + g.bezeichnung + '“: Festbetrag ' + Number(g.festbetrag).toFixed(2).replace('.', ',') + ' €, ' + art.bezeichnung + ' sieht ' + Number(art.betrag).toFixed(2).replace('.', ',') + ' € vor.');
+      }
+    } else if (hasFest(g)) melde('ohne_regel', '„' + g.bezeichnung + '“ hat einen Festbetrag, aber keine Regel (Familien-/Ehegattenbeitrag) – bitte zuordnen.');
+    if (mitglieder.length === 1) melde('nur_eine_person', '„' + g.bezeichnung + '“ hat nur noch eine aktive Person (' + name(mitglieder[0]) + ') – auflösen bzw. Einzelbeitrag.', mitglieder[0]);
+    return { erwachsene: erwachsene, kinder: kinder, abweichungen: ab };
+  }
+  function hasFest(g) { return g && hat(g.festbetrag); }
+
+  /**
+   * Alle Abweichungen im Bestand zum Stichtag des laufenden Jahres (wie Tarifwechsel/Umstellung: Alter zum
+   * familie_umstellung_stichtag): je aktive Gemeinschaft gegen ihre Regel, dazu Einzel-Beitragsarten, deren
+   * Altersgrenze nicht (mehr) passt. Liefert [{ regel, schwere, titel, meldung, mitglied_id, name, gemeinschaft_id, gemeinschaft }].
+   */
+  function abweichungen(daten, konfig, heute) {
+    var tag = stichtag(konfig, Number(String(heute).slice(0, 4)));
+    var ix = index(daten);
+    var arten = {};
+    (daten.Gemeinschaftsart || []).forEach(function (a) { arten[a.gemeinschaftsart_id] = a; });
+    var aus = [];
+    Object.keys(ix.jeGemeinschaft).forEach(function (gid) {
+      var g = ix.gemeinschaft[gid];
+      if (!g || g.aktiv === false) return;
+      var mitglieder = ix.jeGemeinschaft[gid].filter(function (m) { return m.anonymisiert !== true && aktivAm(m, ix, heute); });
+      if (!mitglieder.length) return;
+      var konto = ix.konto[mitglieder[0].beitragskonto_id] || null;
+      var art = hat(g.gemeinschaftsart_id) ? arten[g.gemeinschaftsart_id] || null : null;
+      pruefeGemeinschaft(g, art, mitglieder, konto, tag, heute, konfig).abweichungen.forEach(function (a) {
+        a.gemeinschaft_id = g.beitragsgemeinschaft_id; a.gemeinschaft = g.bezeichnung; a.regel_name = art ? art.bezeichnung : null;
+        aus.push(a);
+      });
+    });
+    var bArten = {};
+    (daten.Beitragsart || []).forEach(function (a) { bArten[a.beitragsart_id] = a; });
+    (daten.Mitglied || []).forEach(function (m) {
+      if (!m.beitragsart_id || m.anonymisiert === true || !aktivAm(m, ix, heute)) return;
+      var g = m.beitragsgemeinschaft_id ? ix.gemeinschaft[m.beitragsgemeinschaft_id] : null;
+      if (hatFestbetrag(g)) return;   // zahlt über die Pauschale, die Einzelart wirkt nicht
+      var a = bArten[m.beitragsart_id];
+      var alter = Mitgliedschaft.alter(m.geburtsdatum, tag);
+      // passt zum Stichtag ODER heute → keine Abweichung (der Wechsel kommt mit dem Tarifwechsel zum Jahreswechsel)
+      if (!a || alter === null || Beitrag.altersbereichPasst(a, alter) || Beitrag.altersbereichPasst(a, Mitgliedschaft.alter(m.geburtsdatum, heute))) return;
+      aus.push({ regel: 'beitragsart_alter', schwere: ABWEICHUNGEN.beitragsart_alter.schwere, titel: ABWEICHUNGEN.beitragsart_alter.titel,
+        meldung: name(m) + ': „' + a.bezeichnung + '“, aber ' + alter + ' Jahre (zum ' + de(tag) + ').', mitglied_id: m.mitglied_id, name: name(m),
+        gemeinschaft_id: null, gemeinschaft: null, regel_name: a.bezeichnung });
+    });
+    var rang = { fehler: 0, warnung: 1, hinweis: 2 };
+    aus.sort(function (a, b) { return rang[a.schwere] - rang[b.schwere] || String(a.gemeinschaft || a.name).localeCompare(String(b.gemeinschaft || b.name)); });
+    return aus;
+  }
+
   /**
    * Zahlungshistorie für Sollstellungen (alle Jahre): Summen je Jahr { jahr, soll, ist, gebuehr, offen, anzahl }.
    * offen = Soll + Gebühr − Ist (nie negativ) für nicht stornierte, nicht bezahlte Posten.
@@ -269,6 +395,8 @@ var Familie = (function () {
 
   return {
     einstellungen: einstellungen, stichtag: stichtag, rollen: rollen, vorschlagArt: vorschlagArt,
-    ausscheider: ausscheider, prognose: prognose, umstellungPlan: umstellungPlan, jahressummen: jahressummen
+    ausscheider: ausscheider, prognose: prognose, umstellungPlan: umstellungPlan, jahressummen: jahressummen,
+    ABWEICHUNGEN: ABWEICHUNGEN, einstellungenFuer: einstellungenFuer, regelText: regelText,
+    pruefeGemeinschaft: pruefeGemeinschaft, abweichungen: abweichungen
   };
 })();

@@ -65,6 +65,8 @@
   .mv-treffer li button { width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--flaeche); font: inherit; cursor: pointer; }
   .mv-treffer li button:hover, .mv-treffer li button:focus { background: #eef4fb; }
   .mv-ibantreffer p { margin: 6px 0; }
+  .mv-regelpruefung ul { margin: 6px 0 0; padding-left: 20px; }
+  .mv-ausbildung-hinweis { margin: 4px 0; }
   .mv-ibantreffer label { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .mv-person [hidden], .mv-zahlung [hidden], .mv-gemeinschaft [hidden], .mv-neu-gruppe[hidden] { display: none; }
 </style>
@@ -86,7 +88,7 @@
     passnummer: 'Passnummer', eintrittsdatum: 'Eintritt', austrittsdatum: 'Austritt', funktionsart_id: 'Funktion',
     zusatz: 'Zusatz (Mannschaft/Gruppe)', von: 'Seit', bis: 'Bis', bestellt_am: 'Bestellt am', beendigungsgrund: 'Grund',
     mitgliedsnummer: 'Mitgliedsnummer', sterbedatum: 'Sterbedatum', adresse_ungueltig: 'Adresse ungültig (Post kam zurück)',
-    adresse_ungueltig_am: 'Adresse ungültig seit', ausbildung_art: 'Ausbildung / Schule', ausbildung_bis: 'Ausbildung bis',
+    adresse_ungueltig_am: 'Adresse ungültig seit', ausbildung_art: 'Ausbildung / Schule', ausbildung_bis: 'Ausbildung voraussichtlich abgeschlossen am',
     ausbildung_nachweis_am: 'Nachweis vorgelegt am', verarbeitung_eingeschraenkt: 'Verarbeitung eingeschränkt (Art. 18 DSGVO)',
     sperre_grund: 'Grund der Sperre', loeschbar_ab: 'Löschbar ab', anonymisiert: 'Anonymisiert', anonymisiert_am: 'Anonymisiert am'
   };
@@ -940,6 +942,36 @@
     return select.value;
   }
 
+  function regelnAktiv() {
+    return A.daten.liste('gemeinschaftsarten').filter(function (r) { return r.aktiv !== false; })
+      .sort(function (a, b) { return a.gemeinschaftsart_id - b.gemeinschaftsart_id; });
+  }
+  function konfigZahl(k, standard) { var v = ((A.startdaten && A.startdaten.konfig) || {})[k]; return v === undefined || v === null || v === '' || isNaN(Number(v)) ? standard : Number(v); }
+  /** Grenzen einer Regel (Gemeinschaftsart) – leere Felder wie auf dem Server (Familie.einstellungenFuer). */
+  function regelGrenzen(r) {
+    var hat = function (v) { return v !== undefined && v !== null && v !== ''; };
+    return {
+      kinderBis: hat(r.kinder_bis_alter) ? Number(r.kinder_bis_alter) : konfigZahl('familie_kinder_bis_alter', 17),
+      ausbildungBis: hat(r.ausbildung_bis_alter) ? Number(r.ausbildung_bis_alter) : null,
+      maxErwachsene: hat(r.max_erwachsene) ? Number(r.max_erwachsene) : null,
+      maxKinder: hat(r.max_kinder) ? Number(r.max_kinder) : null
+    };
+  }
+  function regelText(r) {
+    var e = regelGrenzen(r), t = [];
+    t.push(e.maxErwachsene === null ? 'beliebig viele Erwachsene' : e.maxErwachsene + ' Erwachsene');
+    if (e.maxKinder === 0) t.push('keine Kinder');
+    else t.push((e.maxKinder === null ? 'beliebig viele' : e.maxKinder) + ' Kinder bis ' + (e.kinderBis + 1) + (e.ausbildungBis !== null ? ', in Ausbildung bis ' + e.ausbildungBis : ''));
+    return t.join(', ');
+  }
+  /** Ausbildungsfelder nur zeigen, wo sie für den Familienbeitrag zählen (über der Kinder-Altersgrenze) oder schon belegt sind. */
+  function ausbildungRelevant(alter) {
+    var max = null, min = null;
+    regelnAktiv().forEach(function (r) { var e = regelGrenzen(r); if (e.ausbildungBis !== null) { max = Math.max(max || 0, e.ausbildungBis); min = min === null ? e.kinderBis : Math.min(min, e.kinderBis); } });
+    if (max === null) { max = konfigZahl('familie_ausbildung_bis_alter', 25); min = konfigZahl('familie_kinder_bis_alter', 17); }
+    return alter !== null && alter > min && alter <= max;
+  }
+
   function kontoText(k) {
     return 'Konto ' + k.beitragskonto_id + ' – ' + (k.kontoinhaber_name || '–') + ' (' + (k.zahlweg || '–') + (k.iban_maskiert ? ', ' + k.iban_maskiert : '') + ')';
   }
@@ -1000,6 +1032,12 @@
       briefanredeKnopf(p.form);
       if (i === 0) A.mitgliedNeuFormular = p.form;   // für Erweiterungen (z. B. Formularhilfen), die das Formular vorbefüllen
       A.rufeErweiterungen('mitglied.formular', p.form, p.karte, i === 0 ? 'neu' : 'neu_weitere', null);
+
+      var ausbArt = p.form.feld('ausbildung_art');
+      if (ausbArt && ausbArt.parentNode) {
+        p.ausbildungHinweis = A.el('p', 'Über 17: Bei Schule, Studium oder Ausbildung bleibt die Person im Familienbeitrag – Art und voraussichtliches Ende angeben.', { className: 'leise breit mv-ausbildung-hinweis' });
+        ausbArt.parentNode.parentNode.insertBefore(p.ausbildungHinweis, ausbArt.parentNode);
+      }
 
       // Dubletten
       p.dublette = A.el('div', null, { className: 'mv-warnung', hidden: true });
@@ -1132,22 +1170,27 @@
 
       // ---------------------------------------------------------------- 3. Familienbeitrag
       gem = {};
-      gem.ueberschrift = A.el('h2', 'Familienbeitrag', { className: 'mv-neu-gruppe' });
+      gem.regeln = regelnAktiv();
+      gem.ueberschrift = A.el('h2', 'Familien-/Ehegattenbeitrag', { className: 'mv-neu-gruppe' });
       gem.box = A.el('section', null, { className: 'karte mv-gemeinschaft' });
-      gem.art = radios('mv-gemart', [
-        { wert: 'keine', text: 'Kein Familienverbund – jede Person zahlt ihre eigene Beitragsart' },
-        { wert: 'neu', text: 'Als Familie (neue Beitragsgemeinschaft) führen' },
-        { wert: 'bestehend', text: 'In die bestehende Beitragsgemeinschaft aufnehmen' }
-      ], 'keine');
+      gem.art = radios('mv-gemart', [{ wert: 'keine', text: 'Keiner – jede Person zahlt ihre eigene Beitragsart' }]
+        .concat(gem.regeln.map(function (r) { return { wert: 'r' + r.gemeinschaftsart_id, text: r.bezeichnung + ' (' + A.betrag(r.betrag) + ') – ' + regelText(r) }; }))
+        .concat(gem.regeln.length ? [] : [{ wert: 'neu', text: 'Als Familie (neue Beitragsgemeinschaft) führen' }])
+        .concat([{ wert: 'bestehend', text: 'In die bestehende Beitragsgemeinschaft aufnehmen' }]), 'keine');
       gem.box.appendChild(gem.art.element);
       gem.form = A.formular([
         { name: 'bezeichnung', titel: 'Bezeichnung', typ: 'text', pflicht: true },
-        { name: 'festbetrag', titel: 'Festbetrag (Familienpauschale)', typ: 'betrag', hilfe: 'Leer lassen, wenn jede Person ihren Einzeltarif zahlt.' }
+        { name: 'festbetrag', titel: 'Festbetrag', typ: 'betrag', hilfe: 'Vorbelegt mit dem Betrag der Regel. Ein anderer Betrag wird als Abweichung gemeldet.' }
       ], {});
       gem.box.appendChild(gem.form.element);
+      gem.form.feld('festbetrag').addEventListener('input', function () { gem.form.feld('festbetrag').dataset.auto = 'nein'; });
+      gem.form.feld('bezeichnung').addEventListener('input', function () { gem.form.feld('bezeichnung').dataset.auto = 'nein'; });
       gem.bestehendInfo = A.el('p', '', { className: 'leise' });
       gem.box.appendChild(gem.bestehendInfo);
+      gem.pruefung = A.el('div', null, { className: 'mv-regelpruefung', hidden: true });
+      gem.box.appendChild(gem.pruefung);
       gem.art.beiAenderung(function () { gem.manuell = true; zeigeGemeinschaft(); });
+      gem.form.element.addEventListener('change', function () { zeigeGemeinschaft(); });
       ziel.appendChild(gem.ueberschrift);
       ziel.appendChild(gem.box);
     }
@@ -1233,6 +1276,23 @@
       }).catch(function () {});
     }
 
+    function regel(id) { return gem ? gem.regeln.filter(function (r) { return String(r.gemeinschaftsart_id) === String(id); })[0] || null : null; }
+    function gewaehlteRegel() {
+      if (!gem) return null;
+      var w = gem.art.wert() || '';
+      if (/^r\d+$/.test(w)) return regel(w.slice(1));
+      if (w === 'bestehend' && gem.bestehend && gem.bestehend.gemeinschaftsart_id) return A.daten.hole('gemeinschaftsarten', gem.bestehend.gemeinschaftsart_id);
+      return null;
+    }
+    /** Vorschlag: Kinder dabei → Regel mit Kindern (Familienbeitrag), genau zwei Erwachsene → Regel ohne Kinder (Ehegattenbeitrag). */
+    function regelVorschlag() {
+      var kinder = personen.filter(function (p) { var a = alterVon(p); return a !== null && a <= 17; }).length;
+      var ohneKinder = gem.regeln.filter(function (r) { return Number(r.max_kinder) === 0 && r.max_kinder !== undefined; })[0];
+      var mitKindern = gem.regeln.filter(function (r) { return !(r.max_kinder !== undefined && Number(r.max_kinder) === 0); })[0];
+      var r = !kinder && personen.length === 2 && ohneKinder ? ohneKinder : mitKindern || ohneKinder;
+      return r ? 'r' + r.gemeinschaftsart_id : (gem.regeln.length ? 'keine' : 'neu');
+    }
+
     function zeigeGemeinschaft() {
       if (!gem) return;
       var art = zahlung.art.wert();
@@ -1244,25 +1304,73 @@
       var sichtbar = art !== 'spaeter' && (mehrere || !!bestehend);
       gem.ueberschrift.hidden = !sichtbar;
       gem.box.hidden = !sichtbar;
-      gem.art.zeige('neu', mehrere && art !== 'spaeter');
+      var neuMoeglich = mehrere && art !== 'spaeter';
+      gem.regeln.forEach(function (r) { gem.art.zeige('r' + r.gemeinschaftsart_id, neuMoeglich); });
+      gem.art.zeige('neu', neuMoeglich);
       gem.art.zeige('bestehend', !!bestehend);
-      if (!gem.manuell) gem.art.setze(bestehend ? 'bestehend' : mehrere ? 'neu' : 'keine', true);
+      if (!gem.manuell) gem.art.setze(bestehend ? 'bestehend' : mehrere ? regelVorschlag() : 'keine', true);
       if (gem.art.wert() === 'bestehend' && !bestehend) gem.art.setze('keine', true);
-      if (gem.art.wert() === 'neu' && !mehrere) gem.art.setze('keine', true);
-      var w = gem.art.wert();
-      gem.form.element.hidden = w !== 'neu';
+      if (/^r|^neu$/.test(gem.art.wert() || '') && !neuMoeglich) gem.art.setze('keine', true);
+      var w = gem.art.wert() || 'keine';
+      var r = gewaehlteRegel();
+      var neu = w === 'neu' || /^r\d+$/.test(w);
+      gem.form.element.hidden = !neu;
       gem.bestehendInfo.hidden = w !== 'bestehend' || !bestehend;
-      gem.bestehendInfo.textContent = bestehend ? 'Gemeinschaft „' + bestehend.bezeichnung + '“' + (bestehend.festbetrag ? ' – Festbetrag ' + A.betrag(bestehend.festbetrag) : ' – Einzeltarife') : '';
-      var bez = gem.form.feld('bezeichnung');
-      if (!bez.value || bez.dataset.auto === 'ja') {
+      gem.bestehendInfo.textContent = bestehend ? 'Gemeinschaft „' + bestehend.bezeichnung + '“' + (r ? ' (' + r.bezeichnung + ')' : '') +
+        (bestehend.festbetrag ? ' – Festbetrag ' + A.betrag(bestehend.festbetrag) : ' – Einzeltarife') : '';
+      var bez = gem.form.feld('bezeichnung'), fest = gem.form.feld('festbetrag');
+      if (!bez.value || bez.dataset.auto !== 'nein') {
         var n = personen[0] && personen[0].form.werte().nachname;
-        bez.value = n ? 'Familie ' + n : '';
+        bez.value = n ? (r && Number(r.max_kinder) === 0 && r.max_kinder !== undefined ? 'Ehepaar ' : 'Familie ') + n : '';
         bez.dataset.auto = 'ja';
       }
+      if (fest.dataset.auto !== 'nein') { fest.value = r && neu && r.betrag !== undefined ? String(r.betrag).replace('.', ',') : ''; fest.dataset.auto = 'ja'; }
+      zeigeRegelpruefung(w, r);
+    }
+
+    /**
+     * Vorab-Prüfung gegen die Regel (wie Familie.pruefeGemeinschaft auf dem Server, vereinfacht): wer zählt als Kind
+     * (bis zur Altersgrenze bzw. in Ausbildung mit voraussichtlichem Ende), wer als Erwachsener. Abweichungen sind erlaubt,
+     * werden aber gezeigt – der Server meldet sie nach dem Speichern und im Bericht „Familien → Abweichungen“.
+     */
+    function zeigeRegelpruefung(w, r) {
+      A.leere(gem.pruefung);
+      if (!r || !(w === 'bestehend' || /^r\d+$/.test(w))) { gem.pruefung.hidden = true; return; }
+      var e = regelGrenzen(r), heuteIso = heute();
+      var personenListe = personen.map(function (p, i) { var x = p.form.werte(); return { name: personName(p, i), alter: alterVon(p), ausbildung_art: x.ausbildung_art, ausbildung_bis: x.ausbildung_bis }; });
+      if (w === 'bestehend' && gem.bestehend) A.daten.liste('mitglieder').forEach(function (m) {
+        if (m.beitragsgemeinschaft_id === gem.bestehend.beitragsgemeinschaft_id && statusVon(m) === 'aktiv') personenListe.push({ name: [m.vorname, m.nachname].filter(Boolean).join(' '), alter: m.alter === undefined ? null : m.alter, ausbildung_art: m.ausbildung_art, ausbildung_bis: m.ausbildung_bis });
+      });
+      var erw = 0, kinder = 0, meldungen = [];
+      personenListe.forEach(function (x) {
+        if (x.alter === null) { erw++; return; }
+        if (x.alter <= e.kinderBis) { kinder++; return; }
+        var inAusbildung = e.ausbildungBis !== null && x.alter <= e.ausbildungBis && x.ausbildung_bis && x.ausbildung_bis >= heuteIso;
+        if (inAusbildung) { kinder++; return; }
+        if (e.ausbildungBis !== null && x.alter <= e.ausbildungBis && x.alter < 30 && personenListe.some(function (y) { return y.alter !== null && y.alter - x.alter >= 15; })) {
+          meldungen.push(x.name + ' (' + x.alter + ') zählt als Erwachsener – falls in Schule/Studium/Ausbildung: „Ausbildung voraussichtlich abgeschlossen am“ eintragen.');
+        }
+        erw++;
+      });
+      if (e.maxErwachsene !== null && erw > e.maxErwachsene) meldungen.unshift(erw + ' Erwachsene – ' + r.bezeichnung + ' erlaubt ' + e.maxErwachsene + '.');
+      if (e.maxKinder !== null && kinder > e.maxKinder) meldungen.unshift(kinder + (kinder === 1 ? ' Kind' : ' Kinder') + ' – ' + r.bezeichnung + ' erlaubt ' + (e.maxKinder === 0 ? 'keine' : e.maxKinder) + '.');
+      var fest = gem.form.werte().festbetrag;
+      if (/^r/.test(w) && fest !== null && r.betrag !== undefined && Math.abs(Number(fest) - Number(r.betrag)) > 0.004) meldungen.push('Festbetrag ' + A.betrag(fest) + ' weicht vom Betrag der Regel (' + A.betrag(r.betrag) + ') ab.');
+      gem.pruefung.hidden = false;
+      if (!meldungen.length) { gem.pruefung.className = 'mv-regelpruefung leise'; gem.pruefung.textContent = 'Passt zur Regel: ' + erw + ' Erwachsene, ' + kinder + (kinder === 1 ? ' Kind' : ' Kinder') + '.'; return; }
+      gem.pruefung.className = 'mv-regelpruefung mv-warnung';
+      gem.pruefung.appendChild(A.el('strong', 'Abweichung von der Regel (Speichern ist trotzdem möglich, wird aber gemeldet):'));
+      var ul = A.el('ul');
+      meldungen.forEach(function (t) { ul.appendChild(A.el('li', t)); });
+      gem.pruefung.appendChild(ul);
     }
 
     function aktualisiere() {
       personen.forEach(function (p, i) {
+        var ausb = ['ausbildung_art', 'ausbildung_bis', 'ausbildung_nachweis_am'].map(function (n) { return p.form.feld(n); }).filter(Boolean);
+        var zeigeAusb = ausbildungRelevant(alterVon(p)) || ausb.some(function (x) { return x.value; });
+        ausb.forEach(function (x) { x.parentNode.hidden = !zeigeAusb; });
+        if (p.ausbildungHinweis) p.ausbildungHinweis.hidden = !zeigeAusb;
         p.titel.textContent = personen.length > 1 ? 'Person ' + (i + 1) + (personName(p, i) !== 'Person ' + (i + 1) ? ' – ' + personName(p, i) : '') : 'Person';
         var mj = minderjaehrig(p);
         p.vertretungBox.hidden = !mj;
@@ -1313,7 +1421,7 @@
       } else if (za === 'konto') e.zahlung = { art: 'konto', beitragskonto_id: zahlung.kontoWahl.value ? Number(zahlung.kontoWahl.value) : null };
       else e.zahlung = { art: 'spaeter' };
       var ga = gem.box.hidden ? 'keine' : gem.art.wert();
-      if (ga === 'neu') e.gemeinschaft = { art: 'neu', bezeichnung: gem.form.werte().bezeichnung, festbetrag: gem.form.werte().festbetrag };
+      if (ga === 'neu' || /^r\d+$/.test(ga)) e.gemeinschaft = { art: 'neu', gemeinschaftsart_id: /^r\d+$/.test(ga) ? Number(ga.slice(1)) : null, bezeichnung: gem.form.werte().bezeichnung, festbetrag: gem.form.werte().festbetrag };
       else if (ga === 'bestehend' && gem.bestehend) e.gemeinschaft = { art: 'bestehend', beitragsgemeinschaft_id: gem.bestehend.beitragsgemeinschaft_id };
       else e.gemeinschaft = { art: 'keine' };
       return e;

@@ -10,7 +10,7 @@ const { ladeProjekt } = require('./projekt');
 const { beispielTabs } = require('./gas-fakes');
 
 const ALLE = ['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
-  'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
+  'Beitragsart', 'Gemeinschaftsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
   'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Aufbewahrungsfrist', 'Betroffenenanfrage', '_Protokoll', '_Konfig', 'Benutzer'];
 
 function ladeFachdaten(globale) {

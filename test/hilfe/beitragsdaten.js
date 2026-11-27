@@ -7,7 +7,7 @@
 const { ladeProjekt } = require('./projekt');
 const { erzeugeFakes, beispielTabs } = require('./gas-fakes');
 
-const TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', '_Konfig'];
+const TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Beitragsart', 'Gemeinschaftsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', '_Konfig'];
 
 function beitragsdaten(optionen) {
   optionen = optionen || {};

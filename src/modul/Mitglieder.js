@@ -267,7 +267,8 @@ var Mitglieder = (function () {
    *                vertretung: null | { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | { art: 'frei', name, kontakt } }],
    *   zahlung: { art: 'neu', konto: { zahlweg, iban, bic, mandatsdatum, kontoinhaber_name, abw_… }, inhaber: { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | null, trotzIban }
    *          | { art: 'konto', beitragskonto_id } | { art: 'spaeter' },
-   *   gemeinschaft: { art: 'keine' } | { art: 'neu', bezeichnung, festbetrag } | { art: 'bestehend', beitragsgemeinschaft_id }
+   *   gemeinschaft: { art: 'keine' } | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag } | { art: 'bestehend', beitragsgemeinschaft_id }
+   *   (gemeinschaftsart_id = Regel, z. B. Familienbeitrag; ohne festbetrag gilt deren Betrag)
    * }
    * Feldfehler tragen { person: i } bzw. { bereich: 'zahlung' | 'gemeinschaft' }, damit der Browser sie zuordnen kann.
    * Gesetzliche Vertretung wird nur bei Minderjährigen übernommen. Scheitert ein Schreibschritt, werden die bereits
@@ -386,6 +387,14 @@ var Mitglieder = (function () {
       } else if (gemWahl.art === 'neu') {
         gemNeuWerte = { bezeichnung: String(gemWahl.bezeichnung || '').trim() || null, festbetrag: gemWahl.festbetrag === '' || gemWahl.festbetrag === undefined ? null : gemWahl.festbetrag, aktiv: true };
         if (gemNeuWerte.festbetrag !== null) gemNeuWerte.festbetrag = Number(String(gemNeuWerte.festbetrag).replace(',', '.'));
+        if (!leer(gemWahl.gemeinschaftsart_id)) {
+          var gArt = finde('Gemeinschaftsart', 'gemeinschaftsart_id', gemWahl.gemeinschaftsart_id);
+          if (!gArt || gArt.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'gemeinschaftsart_id', meldung: 'Die gewählte Regel (Familien-/Ehegattenbeitrag) gibt es nicht (mehr).' });
+          else {
+            gemNeuWerte.gemeinschaftsart_id = gArt.gemeinschaftsart_id;
+            if (gemNeuWerte.festbetrag === null && !leer(gArt.betrag)) gemNeuWerte.festbetrag = Number(gArt.betrag);
+          }
+        }
         if (!gemNeuWerte.bezeichnung) fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Bezeichnung: Angabe fehlt (z. B. „Familie Muster“).' });
         if (gemNeuWerte.festbetrag !== null && !(gemNeuWerte.festbetrag >= 0)) fehler.push({ bereich: 'gemeinschaft', feld: 'festbetrag', meldung: 'Festbetrag: bitte einen Betrag ≥ 0 angeben.' });
         if (zahlung.art === 'spaeter') fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Für eine Beitragsgemeinschaft muss feststehen, über welches Konto gezahlt wird.' });
@@ -461,6 +470,19 @@ var Mitglieder = (function () {
         }
         if (zahlung.art === 'spaeter' && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragskonto_id') >= 0) {
           hinweise.push('Noch kein Beitragskonto zugeordnet – bitte im Bereich Finanzen nachtragen.');
+        }
+        if (gem) {
+          // Regel der Gemeinschaft prüfen (neue + bisherige aktive Mitglieder) – Abweichungen sind erlaubt, werden aber gemeldet
+          var konfig = Konfig.alle();
+          var gArtNeu = !leer(gem.gemeinschaftsart_id) ? finde('Gemeinschaftsart', 'gemeinschaftsart_id', gem.gemeinschaftsart_id) : null;
+          var neuIds = {};
+          neue.forEach(function (m) { neuIds[m.mitglied_id] = true; });
+          var bisher = (daten().Mitglied || []).filter(function (m) {
+            return !neuIds[m.mitglied_id] && m.beitragsgemeinschaft_id === gem.beitragsgemeinschaft_id && m.anonymisiert !== true &&
+              Mitgliedschaft.status(m, zeitraeume(m.mitglied_id), h) === 'aktiv';
+          });
+          Familie.pruefeGemeinschaft(gem, gArtNeu, bisher.concat(neue), konto, Familie.stichtag(konfig, Number(h.slice(0, 4))), h, konfig)
+            .abweichungen.forEach(function (a) { if (a.regel !== 'nachweis_faellig') hinweise.push('Abweichung: ' + a.meldung); });
         }
         neue.forEach(function (m) {
           if (!m.beitragsart_id && !m.beitragsgemeinschaft_id && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragsart_id') >= 0) {
