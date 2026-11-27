@@ -136,6 +136,53 @@ test('XML pain.008.001.08: Struktur, Summen je PmtInf und gesamt, XSD-valide', (
   execFileSync('xmllint', ['--noout', '--schema', XSD, datei], { stdio: 'pipe' });
 });
 
+test('Mandatsänderung: Kontowechsel gleiche Bank → alte IBAN, andere Bank → SMNDA, erledigt nach Einzug, XSD-valide', () => {
+  const { g, d } = laufDaten();
+  const wagner = d.Beitragskonto.find(k => k.beitragskonto_id === 1);
+  const vorher = d.Sollstellung.filter(s => s.beitragskonto_id === 1 && s.status === 'bezahlt' && s.einzugsdatum);
+  assert.ok(vorher.length, 'Wagner hat einen bezahlten Einzug');
+  const wechsel = vorher.map(s => s.einzugsdatum).sort().pop().slice(0, 4) + '-12-31';
+  const gleicheBank = g.Iban.ausBlzKonto(wagner.iban.slice(4, 12), '0000123456');
+  const andereBank = g.Iban.ausBlzKonto('70150000', '1234567890');
+  const M = (k, opt) => rein(g.Sepa.mandatsaenderung(k, d.Sollstellung, opt));
+
+  assert.strictEqual(M(wagner), null, 'ohne Wechsel keine Änderung');
+  wagner.iban_vorher = gleicheBank; wagner.iban_geaendert_am = wechsel;
+  assert.deepStrictEqual(M(wagner), { art: 'konto', alteIban: gleicheBank });
+  wagner.iban_vorher = andereBank;
+  assert.deepStrictEqual(M(wagner), { art: 'bank' });
+  assert.strictEqual(M(Object.assign({}, wagner, { mandatsdatum: wechsel })), null, 'neues Mandat nach dem Wechsel');
+  assert.strictEqual(M(Object.assign({}, wagner, { iban_vorher: wagner.iban })), null, 'zurück auf die alte IBAN');
+  // nach einem bezahlten Einzug ab dem Wechsel ist die Änderung übermittelt
+  const spaeter = d.Sollstellung.concat([{ sollstellung_id: 999, beitragskonto_id: 1, status: 'bezahlt', sepa_sequenz: 'RCUR', einzugsdatum: wechsel }]);
+  assert.strictEqual(rein(g.Sepa.mandatsaenderung(wagner, spaeter)), null);
+  // nie eingezogenes Konto (Vogl, neues Mandat): kein Änderungshinweis, FRST genügt
+  const vogl = d.Beitragskonto.find(k => k.beitragskonto_id === 9);
+  assert.strictEqual(M(Object.assign({}, vogl, { iban_vorher: andereBank, iban_geaendert_am: '2026-10-01' })), null);
+
+  // im Lauf und in der Datei
+  const l = g.Sepa.lauf(d, 2027, { heute: '2026-10-25' });
+  const p = l.posten.find(x => x.konto === 1);
+  assert.deepStrictEqual(rein(p.aenderung), { art: 'bank' });
+  assert.strictEqual(p.sequenz, 'RCUR');
+  const x = g.Sepa.xml(l, GLAEUBIGER, { erstelltAm: '2026-10-25T12:00:00' });
+  assert.match(x.xml, /<DtOfSgntr>[\d-]+<\/DtOfSgntr><AmdmntInd>true<\/AmdmntInd><AmdmntInfDtls><OrgnlDbtrAgt><FinInstnId><Othr><Id>SMNDA<\/Id><\/Othr><\/FinInstnId><\/OrgnlDbtrAgt><\/AmdmntInfDtls><\/MndtRltdInf>/);
+  assert.strictEqual((x.xml.match(/<AmdmntInd>/g) || []).length, 1, 'nur das geänderte Konto');
+  assert.match(rein(g.Sepa.kontrollliste(l)).find(z => z.konto === 1).aenderung, /SMNDA/);
+  wagner.iban_vorher = gleicheBank;
+  const x2 = g.Sepa.xml(g.Sepa.lauf(d, 2027, { heute: '2026-10-25' }), GLAEUBIGER, { erstelltAm: '2026-10-25T12:00:00' });
+  assert.ok(x2.xml.includes('<AmdmntInfDtls><OrgnlDbtrAcct><Id><IBAN>' + gleicheBank + '</IBAN></Id></OrgnlDbtrAcct></AmdmntInfDtls>'));
+  const kl = rein(g.Sepa.kontrollliste(g.Sepa.lauf(d, 2027, { heute: '2026-10-25' }))).find(z => z.konto === 1);
+  assert.ok(!kl.aenderung.includes(gleicheBank), 'alte IBAN in der Kontrollliste nur maskiert');
+
+  if (!hatXmllint()) return;
+  const datei = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sepa-')), 'aenderung.xml');
+  [x.xml, x2.xml].forEach(inhalt => {
+    fs.writeFileSync(datei, inhalt);
+    execFileSync('xmllint', ['--noout', '--schema', XSD, datei], { stdio: 'pipe' });
+  });
+});
+
 test('Kontrollliste ohne volle IBAN', () => {
   const { g, d } = laufDaten();
   const k = rein(g.Sepa.kontrollliste(g.Sepa.lauf(d, 2027, { heute: '2026-10-25' })));

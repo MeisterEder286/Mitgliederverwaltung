@@ -79,7 +79,7 @@ var FamilieModul = (function () {
       eintraege: relevant,
       prognose: Familie.prognose(x.daten, jahr, n, x.konfig, h),
       anschreiben: anschreibenListe(relevant),
-      beitragsarten: (x.daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false; })
+      beitragsarten: (x.daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false && !a.als_gemeinschaft; })
         .map(function (a) { return { beitragsart_id: a.beitragsart_id, bezeichnung: a.bezeichnung, betrag: a.betrag }; })
     };
   }

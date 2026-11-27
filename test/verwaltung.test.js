@@ -83,6 +83,12 @@ test('Einstellungen: lesbar mit Typen, Validierung, Zähler gesperrt, Konflikt, 
   assert.strictEqual(objekte(f, '_Konfig').find(x => x.schluessel === 'ehrung_zaehlweise').wert, 'gesamt');
   assert.strictEqual(g.Konfig.wert('ehrung_zaehlweise'), 'gesamt', 'Konfig-Cache verworfen');
   ok(g.apiVerwaltungKonfigSpeichern('sepa_faelligkeit', '01.03.', '15.02.'));
+  // Jugendalter (Sicht Jugendleiter) einstellbar, mit Plausibilitätsgrenze
+  const jugend = k.find(x => x.schluessel === 'jugend_bis_alter');
+  assert.strictEqual(jugend.typ, 'zahl');
+  fehler(rein(g.apiVerwaltungKonfigSpeichern('jugend_bis_alter', '30', jugend.wert)), 'fachlich');
+  ok(g.apiVerwaltungKonfigSpeichern('jugend_bis_alter', '20', jugend.wert));
+  assert.strictEqual(g.Konfig.wert('jugend_bis_alter'), '20');
   assert.ok(objekte(f, '_Protokoll').some(p => p.tabelle === '_Konfig' && p.datensatz_id === 'ehrung_zaehlweise' && p.neu_wert === 'gesamt'));
   // Kassier darf nicht
   fehler(rein(aufbau(KASSIER).g.apiVerwaltungKonfig()), 'zugriff');

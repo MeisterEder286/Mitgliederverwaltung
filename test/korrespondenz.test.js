@@ -130,3 +130,31 @@ test('Serienbrief-Export (Word) und Fristbereinigung alter Schreiben', () => {
   const a = u.obj('Anschreiben')[0];
   assert.ok(!a.inhalt && a.betreff, 'Inhalt geleert, Betreff bleibt');
 });
+
+test('Beitragsänderung: Vorschau (Kassier), Übernahme nur mit Stammdatenrecht, Vorabinformation mit altem/neuem Kontobeitrag', () => {
+  const jahr = new Date().getFullYear() + 1;
+  const eingabe = { arten: [{ beitragsart_id: 1, betrag: 110 }], festbetraege: [{ alt: 180, neu: 200 }] };
+  const k = als('Kassier');
+  const v = ok(k.g.apiFinanzenBeitragsaenderungVorschau(jahr, eingabe));
+  assert.deepStrictEqual(v.fehler, []);
+  assert.ok(v.konten.length > 0 && v.summe_neu > v.summe_alt);
+  assert.strictEqual(v.aenderungen, undefined, 'Schreibplan bleibt auf dem Server');
+  fehler(k.g.apiFinanzenBeitragsaenderungUebernehmen(jahr, eingabe), 'zugriff');
+  fehler(als('Abteilungsleiter').g.apiFinanzenBeitragsaenderungVorschau(jahr, eingabe), 'zugriff');
+
+  const u = als('Mitgliederverwalter');
+  fehler(u.g.apiFinanzenBeitragsaenderungUebernehmen(jahr - 1, eingabe), 'fachlich');
+  const a = ok(u.g.apiFinanzenBeitragsaenderungUebernehmen(jahr, eingabe));
+  assert.strictEqual(a.konten.length, v.konten.length);
+  const art = u.g.DB.lese(['Beitragsart']).Beitragsart.find(x => x.beitragsart_id === 1);
+  assert.deepStrictEqual([art.betrag, art.betrag_vorher, art.gueltig_ab], [110, 100, jahr + '-01-01']);
+  assert.ok(u.obj('Beitragsgemeinschaft').filter(gm => gm.festbetrag_ab).every(gm => gm.festbetrag === 200 && gm.festbetrag_vorher === 180));
+  assert.ok(u.obj('_Protokoll').some(p => p.tabelle === 'Beitragsart' && p.feld === 'betrag' && /Beitragsänderung ab/.test(p.kommentar)));
+  // erneut übernehmen: es ändert sich nichts mehr
+  fehler(u.g.apiFinanzenBeitragsaenderungUebernehmen(jahr, eingabe), 'fachlich');
+
+  const kontoId = a.konten[0].beitragskonto_id;
+  const brief = ok(u.g.apiKorrespondenzVorschau(vorlageId(u, 'Beitragsänderung'), { beitragskonto_ids: [kontoId] }, { jahr })).briefe[0];
+  const euro = n => n.toFixed(2).replace('.', ',');
+  assert.ok(brief.text.includes(euro(a.konten[0].neu)) && brief.text.includes('bisher ' + euro(a.konten[0].alt)), brief.text);
+});

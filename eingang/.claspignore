@@ -1,0 +1,3 @@
+# Nur Code und Manifest des Eingangs-Projekts übertragen.
+**/*.md
+.clasp.json.beispiel

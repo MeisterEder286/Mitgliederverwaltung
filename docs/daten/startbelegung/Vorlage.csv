@@ -49,9 +49,9 @@ Bitte sorgen Sie für ausreichende Deckung. Fällt der Einzugstag auf ein Wochen
 Mit freundlichen Grüßen",ja,BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen
 6,Beitragsänderung,Beitragsänderung,Änderung Ihres Mitgliedsbeitrags ab {{jahr}},"{{briefanrede}},
 
-ab dem Beitragsjahr {{jahr}} gilt für Sie die Beitragsart „{{beitragsart}}“ mit einem Jahresbeitrag von {{beitrag}}.
+die Mitgliederversammlung hat neue Beiträge beschlossen. Ab dem Beitragsjahr {{jahr}} beträgt der Jahresbeitrag für Ihr Beitragskonto {{beitrag_neu}}{{#wenn beitrag_bisher}} (bisher {{beitrag_bisher}}){{/wenn}}.
 
-{{#wenn mandatsreferenz}}Der Beitrag wird wie gewohnt per Lastschrift (Mandatsreferenz {{mandatsreferenz}}) eingezogen.{{/wenn}}
+{{#wenn mandatsreferenz}}Der Beitrag wird wie gewohnt per Lastschrift (Mandatsreferenz {{mandatsreferenz}}, Gläubiger-ID {{glaeubiger_id}}) eingezogen. Ihr Mandat gilt weiter, Sie müssen nichts unternehmen.{{/wenn}}
 
 Bei Fragen wenden Sie sich gerne an die Mitgliederverwaltung.
 

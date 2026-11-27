@@ -58,12 +58,17 @@ Zu jedem Diagramm gibt es die Zahlen als aufklappbare Tabelle. Das Dashboard ent
   Eintrag“ – **niemals Inhalte**, kein Upload (§ 72a SGB VIII).
 
 ## Jugendleitung
-- Sicht auf Minderjährige und auf alle Funktionsträger mit Nachweispflicht; Nachweise erfassen wie oben.
+- Sicht auf Jugendmitglieder und auf alle Funktionsträger mit Nachweispflicht; Nachweise erfassen wie oben.
+  Bis zu welchem Alter jemand als Jugendmitglied gilt, stellt die Verwaltung unter Einstellungen ein (`jugend_bis_alter`, Standard 17).
 
 ## Kasse
 - **Finanzen → Einzugsstand:** Soll, eingezogen, offen, Rücklastschriften; Mahnliste drucken oder „Mahnungen erstellen“.
 - **Nachzügler:** Neue Mitglieder nach dem Jahreslauf → Sollstellungen „Nachzügler anlegen“ → SEPA-Lauf (nimmt nur, was noch nie eingezogen wurde).
 - **Rechnungen** für Überweiser: Finanzen → Rechnungen → auswählen → Schreiben.
+- **Beitragserhöhung** (nach JHV-Beschluss, vor dem Jahreslauf): Finanzen → Beitragsänderung → Jahr wählen, neue Beträge
+  je Beitragsart und je Familien-Pauschale eintragen → „Vorschau berechnen“ (alt/neu je Konto) → „Übernehmen“ →
+  „Vorabinformation erstellen“ (Vorlage „Beitragsänderung“ mit `{{beitrag_bisher}}`/`{{beitrag_neu}}`). Frühere Jahre
+  rechnen weiter mit dem alten Betrag. Nur möglich, solange es für das Jahr noch keine Sollstellungen gibt.
 - **Sollstellungen:** einmal im Jahr „Probelauf“ → „Anlegen“.
 - **SEPA-Lauf:** Probelauf prüfen (Ausschlüsse mit Grund) → „XML erzeugen“ → Datei im Online-Banking hochladen.
   Danach „alle als bezahlt buchen“; Rücklastschriften einzeln mit Grund erfassen (Gebühr automatisch).
@@ -99,6 +104,14 @@ Zu jedem Diagramm gibt es die Zahlen als aufklappbare Tabelle. Das Dashboard ent
   Familie, wählt man „Ganze Familie wechselt mit“ oder sie verlässt die Gemeinschaft. Darunter: in die Gemeinschaft des
   neuen Kontos aufnehmen oder eine neue nach Regel (Familien-/Ehegattenbeitrag) mit den übrigen Zahlern des Kontos
   bilden. Wird ein altes Konto danach von niemandem mehr genutzt, erscheint ein Hinweis zum Stilllegen.
+- **Online-Anträge von der Homepage:** Startseite-Kachel „neue Online-Aufnahmeanträge“ bzw. Mitglieder → „Beitritte aus XML
+  importieren“ → oben „Online-Anträge von der Homepage“. Anträge ankreuzen (das PDF mit Unterschrift lässt sich daneben
+  öffnen) → „Ausgewählte prüfen“ → wie unten. Beim Übernehmen wird das PDF automatisch als Dokument verknüpft
+  (Aufnahmeantrag bei jeder Person, SEPA-Mandat am Konto), Einwilligungen aus dem Formular werden angelegt, der Tarif
+  kommt aus den Stammdaten (Familienpreis, Einzelbeitrag). Doppelt abgeschickte oder zurückgezogene Anträge mit „Nicht
+  übernehmen“ und kurzem Grund abschließen.
+  Voraussetzung: In Verwaltung → Stammdaten haben Beitragsarten und Abteilungen ihren „Schlüssel im Online-Formular“
+  (z. B. `familienbeitrag`, `fussball`). Fehlt einer, zeigt die Vorschau eine Warnung.
 - **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
   bearbeiten). Eine oder mehrere Antrags-Dateien (XML wie bisher aus Access) auswählen – sie werden nur im Browser gelesen.
   Die Vorschau zeigt je Antrag die Personen mit vorläufiger Nummer, das Konto (IBAN nur maskiert), ggf. den
@@ -110,7 +123,9 @@ Zu jedem Diagramm gibt es die Zahlen als aufklappbare Tabelle. Das Dashboard ent
   importiert wurde. Danach „Aufnahmebestätigungen erstellen“. Mandatsdatum = Eintrittsdatum – mit dem unterschriebenen
   Mandat abgleichen.
 - **Austritt:** im Mitglied → „Austritt“. Ist die Person Zahler für andere, fragt das System, wie es mit dem Konto weitergeht.
-- **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!).
+- **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!). Neue IBAN bei
+  gleichem Inhaber: Das Mandat gilt weiter, der nächste SEPA-Lauf meldet der Bank die Mandatsänderung automatisch
+  (Probelauf und Kontrollliste zeigen „Änderung“).
 - **Beitragsregeln einstellen:** Verwaltung → Stammdaten → „Familien-/Ehegattenbeitrag (Regeln)“. Je Regel: Betrag,
   höchstens wie viele Erwachsene und Kinder (leer = beliebig viele, 0 = keine), Kinder bis Alter (17 = bis 18) und mit
   Ausbildung bis Alter (leer = keine Verlängerung). Vorbelegt: **Familienbeitrag** (2 Erwachsene, beliebig viele Kinder
