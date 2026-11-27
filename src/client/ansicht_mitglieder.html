@@ -1500,10 +1500,12 @@
     }
     /** Vorschlag: Kinder dabei → Regel mit Kindern (Familienbeitrag), genau zwei Erwachsene → Regel ohne Kinder (Ehegattenbeitrag). */
     function regelVorschlag() {
-      var kinder = personen.filter(function (p) { var a = alterVon(p); return a !== null && a <= 17; }).length;
+      var kinder = personen.filter(function (p) { var a = alterVon(p); return a !== null && a <= 17; }).length +
+        (gem.mit || []).filter(function (m) { return m.alter !== undefined && m.alter <= 17; }).length;
+      var anzahl = personen.length + (gem.mit || []).length;
       var ohneKinder = gem.regeln.filter(function (r) { return Number(r.max_kinder) === 0 && r.max_kinder !== undefined; })[0];
       var mitKindern = gem.regeln.filter(function (r) { return !(r.max_kinder !== undefined && Number(r.max_kinder) === 0); })[0];
-      var r = !kinder && personen.length === 2 && ohneKinder ? ohneKinder : mitKindern || ohneKinder;
+      var r = !kinder && anzahl === 2 && ohneKinder ? ohneKinder : mitKindern || ohneKinder;
       return r ? 'r' + r.gemeinschaftsart_id : (gem.regeln.length ? 'keine' : 'neu');
     }
 
@@ -1514,7 +1516,11 @@
       var bestehend = gemeinschaftVonKonto(kontoId) ||
         (gefundenesKonto && String(gefundenesKonto.beitragskonto_id) === String(kontoId) && gefundenesKonto.gemeinschaften[0] ? A.daten.hole('gemeinschaften', gefundenesKonto.gemeinschaften[0].beitragsgemeinschaft_id) : null);
       gem.bestehend = bestehend;
-      var mehrere = personen.length > 1;
+      // Wer zahlt schon über das gewählte Konto und ist in keiner Gemeinschaft? (z. B. Eltern beim Neuzugang eines Kindes)
+      gem.mit = !bestehend && kontoId ? A.daten.liste('mitglieder').filter(function (x) {
+        return x.beitragskonto_id === Number(kontoId) && !x.beitragsgemeinschaft_id && statusVon(x) === 'aktiv';
+      }) : [];
+      var mehrere = personen.length > 1 || gem.mit.length > 0;
       var sichtbar = art !== 'spaeter' && (mehrere || !!bestehend);
       gem.ueberschrift.hidden = !sichtbar;
       gem.box.hidden = !sichtbar;
@@ -1529,8 +1535,8 @@
       var r = gewaehlteRegel();
       var neu = w === 'neu' || /^r\d+$/.test(w);
       gem.form.element.hidden = !neu;
-      gem.bestehendInfo.hidden = w !== 'bestehend' || !bestehend;
-      gem.bestehendInfo.textContent = bestehend ? 'Gemeinschaft „' + bestehend.bezeichnung + '“' + (r ? ' (' + r.bezeichnung + ')' : '') +
+      gem.bestehendInfo.hidden = !((w === 'bestehend' && bestehend) || (neu && gem.mit.length));
+      gem.bestehendInfo.textContent = neu && gem.mit.length ? 'Zusammen mit: ' + gem.mit.map(A.name).join('; ') + ' (zahlen schon über dieses Konto).' : bestehend ? 'Gemeinschaft „' + bestehend.bezeichnung + '“' + (r ? ' (' + r.bezeichnung + ')' : '') +
         (bestehend.festbetrag ? ' – Festbetrag ' + A.betrag(bestehend.festbetrag) : ' – Einzeltarife') : '';
       var bez = gem.form.feld('bezeichnung'), fest = gem.form.feld('festbetrag');
       if (!bez.value || bez.dataset.auto !== 'nein') {
@@ -1539,6 +1545,15 @@
         bez.dataset.auto = 'ja';
       }
       if (fest.dataset.auto !== 'nein') { fest.value = r && neu && r.betrag !== undefined ? String(r.betrag).replace('.', ',') : ''; fest.dataset.auto = 'ja'; }
+      // Mit Familien-/Ehegattenbeitrag (Pauschale) entfällt die Beitragsart der einzelnen Personen
+      var pauschale = !gem.box.hidden && ((neu && (gem.form.werte().festbetrag !== null)) || (w === 'bestehend' && bestehend && bestehend.festbetrag !== undefined));
+      personen.forEach(function (p) {
+        var ba = p.form.feld('beitragsart_id');
+        if (!ba) return;
+        ba.disabled = pauschale;
+        if (!p.beitragsartHinweis) { p.beitragsartHinweis = A.el('span', 'Entfällt – zahlt über den Familien-/Ehegattenbeitrag.', { className: 'leise hilfe' }); ba.parentNode.insertBefore(p.beitragsartHinweis, ba.nextSibling); }
+        p.beitragsartHinweis.hidden = !pauschale;
+      });
       zeigeRegelpruefung(w, r);
     }
 
@@ -1552,6 +1567,7 @@
       if (!r || !(w === 'bestehend' || /^r\d+$/.test(w))) { gem.pruefung.hidden = true; return; }
       var e = regelGrenzen(r), heuteIso = heute();
       var personenListe = personen.map(function (p, i) { var x = p.form.werte(); return { name: personName(p, i), alter: alterVon(p), ausbildung_art: x.ausbildung_art, ausbildung_bis: x.ausbildung_bis }; });
+      if (/^r/.test(w)) gem.mit.forEach(function (m) { personenListe.push({ name: [m.vorname, m.nachname].filter(Boolean).join(' '), alter: m.alter === undefined ? null : m.alter, ausbildung_art: m.ausbildung_art, ausbildung_bis: m.ausbildung_bis }); });
       if (w === 'bestehend' && gem.bestehend) A.daten.liste('mitglieder').forEach(function (m) {
         if (m.beitragsgemeinschaft_id === gem.bestehend.beitragsgemeinschaft_id && statusVon(m) === 'aktiv') personenListe.push({ name: [m.vorname, m.nachname].filter(Boolean).join(' '), alter: m.alter === undefined ? null : m.alter, ausbildung_art: m.ausbildung_art, ausbildung_bis: m.ausbildung_bis });
       });
@@ -1635,7 +1651,8 @@
       } else if (za === 'konto') e.zahlung = { art: 'konto', beitragskonto_id: zahlung.kontoWahl.value ? Number(zahlung.kontoWahl.value) : null };
       else e.zahlung = { art: 'spaeter' };
       var ga = gem.box.hidden ? 'keine' : gem.art.wert();
-      if (ga === 'neu' || /^r\d+$/.test(ga)) e.gemeinschaft = { art: 'neu', gemeinschaftsart_id: /^r\d+$/.test(ga) ? Number(ga.slice(1)) : null, bezeichnung: gem.form.werte().bezeichnung, festbetrag: gem.form.werte().festbetrag };
+      if (ga === 'neu' || /^r\d+$/.test(ga)) e.gemeinschaft = { art: 'neu', gemeinschaftsart_id: /^r\d+$/.test(ga) ? Number(ga.slice(1)) : null, bezeichnung: gem.form.werte().bezeichnung, festbetrag: gem.form.werte().festbetrag,
+        mit: (gem.mit || []).map(function (x) { return x.mitglied_id; }) };
       else if (ga === 'bestehend' && gem.bestehend) e.gemeinschaft = { art: 'bestehend', beitragsgemeinschaft_id: gem.bestehend.beitragsgemeinschaft_id };
       else e.gemeinschaft = { art: 'keine' };
       return e;

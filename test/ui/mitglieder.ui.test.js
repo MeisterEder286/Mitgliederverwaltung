@@ -128,7 +128,7 @@ test('Mitgliederverwalter: Familie aufnehmen, vorhandene IBAN erkennen und Konto
       assert.strictEqual(gemArt, 'r1', 'mit Kind → Familienbeitrag vorgeschlagen');
       assert.strictEqual(await p.getByLabel('Bezeichnung *').inputValue(), 'Familie Familienprobe');
       assert.strictEqual(await p.getByLabel('Festbetrag', { exact: true }).inputValue(), '180');
-      assert.match(await p.locator('.mv-regelpruefung').innerText(), /Passt zur Regel: 1 Erwachsene, 1 Kind/);
+      assert.match(await p.locator('.mv-regelpruefung').innerText(), /Passt zur Regel: \d Erwachsene, 1 Kind/);
     }
     await p.locator('button', { hasText: '2 Mitglieder anlegen' }).click();
     await p.waitForSelector('.mv-kopf');
@@ -350,6 +350,35 @@ test('Mitgliederliste: Filter zurücksetzen, Status als Marke mit Symbol', async
     assert.strictEqual(await p.inputValue('select[aria-label="Status"]'), 'aktiv');
     assert.strictEqual(await reset.isVisible(), false);
     assert.strictEqual(await p.getByText('Keine Mitglieder für diese Auswahl.').count(), 0);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+test('Neues Mitglied (Kind) zahlt über die Mutter: Familienbeitrag zusammen mit ihr, Beitragsart entfällt', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  const p = ui.page;
+  try {
+    const ms = ui.objekte('Mitglied'), zr = ui.objekte('Mitgliedschaftszeitraum');
+    const aktiv = m => !m.sterbedatum && zr.some(z => z.mitglied_id === m.mitglied_id && !z.austrittsdatum && !z.austritt_wirksam);
+    const mutter = ms.find(m => aktiv(m) && m.beitragskonto_id && !m.beitragsgemeinschaft_id && m.nachname &&
+      !ms.some(x => x !== m && x.beitragskonto_id === m.beitragskonto_id && x.beitragsgemeinschaft_id));
+    await p.evaluate(() => App.zeige('mitglied_neu'));
+    await p.waitForSelector('text=Wer zahlt den Beitrag?');
+    await p.getByLabel('Vorname *').fill('Paul');
+    await p.getByLabel('Nachname *').fill(mutter.nachname);
+    await p.getByLabel('Geburtsdatum', { exact: true }).fill('01.02.2017');
+    await p.getByLabel('Geburtsdatum', { exact: true }).dispatchEvent('change');
+    await p.locator('.mv-zahlung label', { hasText: 'Zahlt über eine andere Person' }).locator('input').check();
+    await p.locator('#mv-kontowahl').selectOption(String(mutter.beitragskonto_id));
+    await p.locator('#mv-kontowahl').dispatchEvent('change');
+    await p.waitForSelector('text=Zusammen mit:');
+    assert.match(await p.locator('input[name=mv-gemart]:checked').inputValue(), /^r\d+$/);
+    assert.strictEqual(await p.getByLabel('Beitragsart', { exact: true }).isDisabled(), true);
+    await p.locator('button', { hasText: 'Mitglied anlegen' }).click();
+    await p.waitForSelector('.mv-kopf');
+    const paul = ui.objekte('Mitglied').find(x => x.vorname === 'Paul' && x.nachname === mutter.nachname);
+    const m2 = ui.objekte('Mitglied').find(x => x.mitglied_id === mutter.mitglied_id);
+    assert.ok(paul.beitragsgemeinschaft_id && paul.beitragsgemeinschaft_id === m2.beitragsgemeinschaft_id, 'Familie mit der Mutter gebildet');
+    assert.ok(!paul.beitragsart_id, 'keine zusätzliche Beitragsart');
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });

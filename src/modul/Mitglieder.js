@@ -494,7 +494,8 @@ var Mitglieder = (function () {
    *                vertretung: null | { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | { art: 'frei', name, kontakt } }],
    *   zahlung: { art: 'neu', konto: { zahlweg, iban, bic, mandatsdatum, kontoinhaber_name, abw_… }, inhaber: { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | null, trotzIban }
    *          | { art: 'konto', beitragskonto_id } | { art: 'spaeter' },
-   *   gemeinschaft: { art: 'keine' } | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag } | { art: 'bestehend', beitragsgemeinschaft_id }
+   *   gemeinschaft: { art: 'keine' } | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] } | { art: 'bestehend', beitragsgemeinschaft_id }
+   *   (mit = Personen, die schon über das gewählte Konto zahlen und mit in die neue Gemeinschaft kommen)
    *   (gemeinschaftsart_id = Regel, z. B. Familienbeitrag; ohne festbetrag gilt deren Betrag)
    * }
    * Feldfehler tragen { person: i } bzw. { bereich: 'zahlung' | 'gemeinschaft' }, damit der Browser sie zuordnen kann.
@@ -579,7 +580,7 @@ var Mitglieder = (function () {
       }
 
       // 4. Beitragsgemeinschaft (alle Mitglieder einer Gemeinschaft zahlen über dasselbe Konto)
-      var gemBestehend = null, gemNeuWerte = null;
+      var gemBestehend = null, gemNeuWerte = null, gemMit = [];
       if (gemWahl.art === 'bestehend') {
         gemBestehend = finde('Beitragsgemeinschaft', 'beitragsgemeinschaft_id', gemWahl.beitragsgemeinschaft_id);
         if (!gemBestehend || gemBestehend.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsgemeinschaft_id', meldung: 'Die Beitragsgemeinschaft wurde nicht gefunden.' });
@@ -591,6 +592,14 @@ var Mitglieder = (function () {
       } else if (gemWahl.art === 'neu') {
         gemNeuWerte = pruefeGemeinschaftNeu(gemWahl, fehler);
         if (zahlung.art === 'spaeter') fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: 'Für eine Beitragsgemeinschaft muss feststehen, über welches Konto gezahlt wird.' });
+        // weitere Personen, die schon über das gewählte Konto zahlen (z. B. Eltern), kommen mit in die neue Gemeinschaft
+        (Array.isArray(gemWahl.mit) ? gemWahl.mit : []).forEach(function (mid) {
+          var x = finde('Mitglied', 'mitglied_id', mid);
+          if (!x || x.anonymisiert === true || Mitgliedschaft.status(x, zeitraeume(x.mitglied_id), heute()) !== 'aktiv') return;
+          if (!kontoBestehend || x.beitragskonto_id !== kontoBestehend.beitragskonto_id) { fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: name(x) + ' zahlt über ein anderes Konto und kann nicht in diese Gemeinschaft.' }); return; }
+          if (x.beitragsgemeinschaft_id) { fehler.push({ bereich: 'gemeinschaft', feld: 'bezeichnung', meldung: name(x) + ' gehört schon zu einer Gemeinschaft.' }); return; }
+          gemMit.push(x);
+        });
       }
       feldfehler(fehler);
 
@@ -621,7 +630,10 @@ var Mitglieder = (function () {
           f.status = Mitgliedschaft.status(f, [{ eintrittsdatum: eintritt, austrittsdatum: null }], h);
           if (leer(f.land)) f.land = 'DE';
           if (konto) f.beitragskonto_id = konto.beitragskonto_id;
-          if (gem) f.beitragsgemeinschaft_id = gem.beitragsgemeinschaft_id;
+          if (gem) {
+            f.beitragsgemeinschaft_id = gem.beitragsgemeinschaft_id;
+            if (!leer(gem.festbetrag)) f.beitragsart_id = null;   // die Pauschale deckt den Beitrag – keine zusätzliche Beitragsart
+          }
           if (p.vertretung && p.vertretung.art === 'mitglied') f.vertreter_mitglied_id = p.vertretung.mitglied_id;
           if (p.vertretung && p.vertretung.art === 'frei') { f.vertreter_name = p.vertretung.name; f.vertreter_kontakt = p.vertretung.kontakt; }
           var m = rein('Mitglied', f);
@@ -654,16 +666,24 @@ var Mitglieder = (function () {
         if (zahlung.art === 'spaeter' && Rechte.sichtbareSpalten(ktx, 'Mitglied').indexOf('beitragskonto_id') >= 0) {
           hinweise.push('Noch kein Beitragskonto zugeordnet – bitte im Bereich Finanzen nachtragen.');
         }
+        var gemMitNeu = gemMit.map(function (x) {
+          var r = DB.aktualisieren('Mitglied', x.mitglied_id, { beitragsgemeinschaft_id: gem.beitragsgemeinschaft_id }, x.version, ktx);
+          aenderungen.push({ tab: 'Mitglied', neu: r.neu });
+          Protokoll.ausDiff('Mitglied', x.mitglied_id, r.diff).forEach(function (pr) { pr.kommentar = 'Gemeinschaft bei Neuaufnahme gebildet'; protokoll.push(pr); });
+          return r.neu;
+        });
         if (gem) {
           // Regel der Gemeinschaft prüfen (neue + bisherige aktive Mitglieder) – Abweichungen sind erlaubt, werden aber gemeldet
           var konfig = Konfig.alle();
           var gArtNeu = !leer(gem.gemeinschaftsart_id) ? finde('Gemeinschaftsart', 'gemeinschaftsart_id', gem.gemeinschaftsart_id) : null;
           var neuIds = {};
           neue.forEach(function (m) { neuIds[m.mitglied_id] = true; });
+          var mitIds = {};
+          gemMitNeu.forEach(function (m) { mitIds[m.mitglied_id] = true; });
           var bisher = (daten().Mitglied || []).filter(function (m) {
-            return !neuIds[m.mitglied_id] && m.beitragsgemeinschaft_id === gem.beitragsgemeinschaft_id && m.anonymisiert !== true &&
+            return !neuIds[m.mitglied_id] && !mitIds[m.mitglied_id] && m.beitragsgemeinschaft_id === gem.beitragsgemeinschaft_id && m.anonymisiert !== true &&
               Mitgliedschaft.status(m, zeitraeume(m.mitglied_id), h) === 'aktiv';
-          });
+          }).concat(gemMitNeu);
           Familie.pruefeGemeinschaft(gem, gArtNeu, bisher.concat(neue), konto, Familie.stichtag(konfig, Number(h.slice(0, 4))), h, konfig)
             .abweichungen.forEach(function (a) { if (a.regel !== 'nachweis_faellig') hinweise.push('Abweichung: ' + a.meldung); });
         }

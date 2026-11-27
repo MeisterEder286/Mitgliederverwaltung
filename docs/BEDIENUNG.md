@@ -62,6 +62,10 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   3. **Familien-/Ehegattenbeitrag** (bei mehreren Personen oder wenn das gewählte Konto schon zu einer Familie gehört):
      Regel wählen – „Familienbeitrag“, „Ehegattenbeitrag“ (vorgeschlagen je nachdem, ob Kinder dabei sind) –, in die
      bestehende Gemeinschaft aufnehmen oder keiner. Betrag und Bezeichnung („Familie …“/„Ehepaar …“) werden vorbelegt.
+     Auch bei **einer** neuen Person geht das: Zahlt sie über das Konto von jemandem (z. B. Kind über die Mutter), wird
+     „Familienbeitrag zusammen mit …“ angeboten – die bisherigen Zahler des Kontos kommen mit in die neue Familie. Gehört
+     das Konto schon zu einer Familie, wird „in die bestehende Gemeinschaft aufnehmen“ vorgeschlagen. Mit Familien-/
+     Ehegattenbeitrag entfällt die Beitragsart der einzelnen Personen (die Pauschale deckt sie ab).
      Darunter steht sofort, ob die Familie zur Regel passt (z. B. „3 Erwachsene – Familienbeitrag erlaubt 2“). Speichern
      geht trotzdem; die Abweichung wird gemeldet.
      Für Personen über 17 erscheinen „Ausbildung / Schule“ und **„Ausbildung voraussichtlich abgeschlossen am“** – mit
