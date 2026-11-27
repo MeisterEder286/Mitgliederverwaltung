@@ -36,6 +36,18 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
 - **Nicht gespeicherte Eingaben:** Wer beim Bearbeiten wegklickt, wird vorher gefragt.
 - **„Rückgängig“:** Manche Aktionen (z. B. „Post kam zurück“) lassen sich direkt in der Bestätigungsmeldung zurücknehmen.
 
+## Dashboard (Vorstand, Mitgliederverwaltung, Kasse)
+
+„Dashboard“ zeigt den Verein auf einen Blick, oben wählbar nach Jahr:
+
+- **Kacheln:** Mitglieder aktuell, Veränderung seit Jahresbeginn, Eintritte, Austritte, eingegangene Beiträge, anstehende Ehrungen (Klick öffnet „Ehrungen“).
+- **Mitgliederverlauf:** Bestand zum Monatsende, das Vorjahr gestrichelt; darunter Ein- und Austritte je Monat.
+- **Einnahmen** (nur mit Finanzsicht): eingegangene Beiträge je Monat nach Buchungsdatum, Soll/Ist/offen/Quote je Beitragsjahr.
+- **Ehrungen in den nächsten Jahren** (nur mit Recht für Ehrungen): Anzahl je Jahr, in der Tabelle je Ehrung aufgeschlüsselt. Prognose bei unverändertem Bestand.
+- **Altersstruktur, Abteilungen, Austrittsgründe** des Jahres.
+
+Zu jedem Diagramm gibt es die Zahlen als aufklappbare Tabelle. Das Dashboard enthält nur Zahlen, keine Namen.
+
 ## Abteilungsleitung
 - **Meine Abteilung:** alle Mitglieder Ihrer Abteilung mit Kontakt und Geburtsdatum. Filter nach aktiv/passiv, Alter, Funktion.
 - **Mitglied zuordnen:** Ein bestehendes Vereinsmitglied kommt neu in Ihre Abteilung: Nachname **und** Mitgliedsnummer

@@ -1,0 +1,319 @@
+<!--
+  ansicht_dashboard – Dashboard: Vereinsüberblick mit Mitgliederverlauf, Einnahmen und Ehrungs-Vorschau.
+
+  Zweck:      Der Blick „wie steht der Verein da?“: Kennzahlen des Jahres, Mitgliederverlauf über das Jahr (mit
+              Vorjahreslinie), Ein- und Austritte je Monat, eingegangene Beiträge je Monat und Soll/Ist je Beitragsjahr,
+              wie viele Ehrungen in den nächsten Jahren anstehen, Altersstruktur, Abteilungen, Austrittsgründe.
+  Datenquelle: apiDashboard (ein Aufruf; der Server rechnet auf der vollständigen Basis). Keine Personennamen,
+              nur Zahlen.
+  Wer darf:   Aktion dashboard_lesen (Vorstand, Mitgliederverwaltung, Kasse). Einnahmen nur mit Finanzsicht, Ehrungen nur
+              mit Recht ehrung_bearbeiten – der Server lässt den Abschnitt sonst weg, die Ansicht zeigt ihn dann nicht.
+  Besonderheiten:
+    - Diagramme ohne Bibliothek (SVG); dieselben Zahlen stehen immer auch als Tabelle (aufklappbar) daneben.
+    - Farben nicht allein als Unterscheidung: Linien/Balken sind in der Legende benannt, Vorjahr gestrichelt.
+    - Die Ehrungs-Vorschau ist eine Prognose bei unverändertem Bestand (Hinweis steht in der Ansicht).
+-->
+<style>
+  .db-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 0 0 12px; }
+  .db-zeile label { display: flex; flex-direction: column; font-size: 0.9rem; font-weight: 600; gap: 4px; }
+  .db-zeile select { min-height: 44px; padding: 6px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
+  .db-karte { border: 1px solid var(--rand); border-radius: var(--radius); padding: 12px; margin: 0 0 16px; background: var(--grund); }
+  .db-karte h2 { margin: 0 0 4px; font-size: 1.1rem; }
+  .db-diagramm { width: 100%; max-width: 640px; height: auto; display: block; margin: 8px 0; }
+  .db-diagramm text { font: 12px system-ui, sans-serif; fill: var(--text); }
+  .db-diagramm .achse { fill: var(--text-leise); }
+  .db-legende { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; color: var(--text-leise); margin: 0 0 4px; }
+  .db-legende span::before { content: ''; display: inline-block; width: 14px; height: 0; border-top: 3px solid currentColor; vertical-align: middle; margin-right: 6px; }
+  .db-legende .l-a::before { border-top-color: var(--akzent); }
+  .db-legende .l-b::before { border-top-color: #b45309; }
+  .db-legende .l-v::before { border-top: 3px dashed #6b7480; }
+  .db-balken { list-style: none; margin: 0; padding: 0; }
+  .db-balken li { display: grid; grid-template-columns: minmax(90px, 36%) 1fr auto; gap: 8px; align-items: center; padding: 3px 0; font-size: 0.92rem; }
+  .db-balken .spur { background: var(--flaeche); border-radius: 3px; height: 14px; }
+  .db-balken .fuell { background: var(--akzent); height: 100%; border-radius: 3px; min-width: 2px; }
+  .db-balken .zahl { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .db-details { margin: 6px 0 0; }
+  .db-details summary { cursor: pointer; min-height: 32px; color: var(--akzent); }
+  .db-hinweis { font-size: 0.85rem; color: var(--text-leise); margin: 4px 0 0; }
+  .db-tab { overflow-x: auto; }
+</style>
+<script>
+(function () {
+  'use strict';
+  var A = window.App;
+  var MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  var KURZ = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+  var zustand = { jahr: null, daten: null };
+
+  // ================================================================== Hilfen
+
+  function svgEl(tag, attrs, text) {
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    if (text !== undefined) e.textContent = String(text);
+    return e;
+  }
+  function vorzeichen(n) { return (n > 0 ? '+' : n < 0 ? '−' : '±') + A.zahl(Math.abs(n)); }
+  function max0(liste) { return Math.max.apply(null, liste.concat([1])); }
+
+  /** Gerundete obere Achsengrenze (1, 2, 5 · 10^n), damit die Beschriftung lesbar bleibt. */
+  function schoen(maximum) {
+    var e = Math.pow(10, Math.floor(Math.log(maximum) / Math.LN10));
+    var f = maximum / e;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e;
+  }
+
+  /** Kurze Achsenbeschriftung: 40000 € → „40 T€“, damit sie in den linken Rand passt. */
+  function achsenText(n, einheit) {
+    if (einheit && n >= 1000) return A.zahl(Math.round(n / 100) / 10) + '\u00a0T€';
+    return A.zahl(n) + (einheit || '');
+  }
+
+  var B = 360, H = 170, L = 38, R = 8, O = 10, U = 24;   // Diagrammfläche (viewBox 360 × 170)
+
+  function leinwand(beschreibung) {
+    return svgEl('svg', { viewBox: '0 0 ' + B + ' ' + H, class: 'db-diagramm', role: 'img', 'aria-label': beschreibung });
+  }
+  function monatsachse(svg) {
+    var w = (B - L - R) / 12;
+    KURZ.forEach(function (k, i) { svg.appendChild(svgEl('text', { x: L + w * i + w / 2, y: H - 6, 'text-anchor': 'middle', class: 'achse' }, k)); });
+  }
+  function hilfslinie(svg, y, text) {
+    svg.appendChild(svgEl('line', { x1: L, x2: B - R, y1: y, y2: y, stroke: '#c9d1da', 'stroke-width': 1 }));
+    svg.appendChild(svgEl('text', { x: L - 4, y: y + 4, 'text-anchor': 'end', class: 'achse' }, text));
+  }
+  function legende(eintraege) {
+    return A.el('div', null, { className: 'db-legende' }, eintraege.map(function (e) { return A.el('span', e[1], { className: e[0] }); }));
+  }
+  function tabelleInDetails(titel, spalten, zeilen) {
+    var d = A.el('details', null, { className: 'db-details' }, [A.el('summary', titel)]);
+    d.appendChild(A.el('div', null, { className: 'db-tab' }, [A.tabelle(spalten, zeilen, { block: 100 })]));
+    return d;
+  }
+  function karte(titel, untertitel) {
+    var k = A.el('section', null, { className: 'db-karte' }, [A.el('h2', titel)]);
+    if (untertitel) k.appendChild(A.el('p', untertitel, { className: 'leise' }));
+    return k;
+  }
+  /** Waagerechte Balkenliste (Name, Balken, Zahl) – gut auf dem Handy. */
+  function balkenListe(zeilen, einheit) {
+    var m = max0(zeilen.map(function (z) { return z.wert; }));
+    var ul = A.el('ul', null, { className: 'db-balken' });
+    zeilen.forEach(function (z) {
+      var f = A.el('div', null, { className: 'fuell' });
+      f.style.width = Math.round(z.wert / m * 100) + '%';
+      ul.appendChild(A.el('li', null, null, [A.el('span', z.titel), A.el('div', null, { className: 'spur' }, [f]),
+        A.el('span', A.zahl(z.wert) + (einheit || ''), { className: 'zahl' })]));
+    });
+    return ul;
+  }
+
+  // ================================================================== Diagramme
+
+  /** Liniendiagramm: Bestand je Monat, Vorjahr gestrichelt. Y-Achse ohne Nullpunkt (Verlauf zählt, nicht der Pegel). */
+  function verlaufDiagramm(v) {
+    var werte = v.monate.map(function (m) { return m.bestand; }).concat(v.monate.map(function (m) { return m.vorjahr; })).filter(function (x) { return x !== null; });
+    var lo = Math.min.apply(null, werte.concat([v.anfang])), hi = Math.max.apply(null, werte.concat([v.anfang]));
+    var spanne = Math.max(hi - lo, 4), rand = Math.ceil(spanne * 0.15);
+    lo = Math.max(0, lo - rand); hi = hi + rand;
+    var svg = leinwand('Mitgliederbestand je Monatsende ' + v.jahr + ' im Vergleich zum Vorjahr');
+    var w = (B - L - R) / 12;
+    function y(x) { return O + (H - O - U) * (1 - (x - lo) / (hi - lo)); }
+    function xm(i) { return L + w * i + w / 2; }
+    hilfslinie(svg, y(hi), Math.round(hi)); hilfslinie(svg, y(lo), Math.round(lo));
+    monatsachse(svg);
+    function linie(feld, farbe, gestrichelt) {
+      var pkt = [];
+      v.monate.forEach(function (m, i) { if (m[feld] !== null) pkt.push(xm(i).toFixed(1) + ',' + y(m[feld]).toFixed(1)); });
+      if (pkt.length < 1) return;
+      var a = { fill: 'none', stroke: farbe, 'stroke-width': gestrichelt ? 2 : 3, 'stroke-linejoin': 'round' };
+      if (gestrichelt) a['stroke-dasharray'] = '5 4';
+      svg.appendChild(svgEl('polyline', Object.assign({ points: pkt.join(' ') }, a)));
+      if (!gestrichelt) pkt.forEach(function (p) { var c = p.split(','); svg.appendChild(svgEl('circle', { cx: c[0], cy: c[1], r: 3.5, fill: farbe })); });
+    }
+    linie('vorjahr', '#6b7480', true);
+    linie('bestand', 'var(--akzent)', false);
+    return svg;
+  }
+
+  /** Gruppierte Säulen je Monat: serien [{ feld, farbe }] aus monate. */
+  function saeulen(monate, serien, beschreibung, einheit) {
+    var maxW = schoen(max0([].concat.apply([], serien.map(function (s) { return monate.map(function (m) { return m[s.feld] || 0; }); }))));
+    var svg = leinwand(beschreibung);
+    var w = (B - L - R) / 12, hoehe = H - O - U;
+    hilfslinie(svg, O, achsenText(maxW, einheit)); hilfslinie(svg, O + hoehe, '0');
+    monatsachse(svg);
+    var bw = Math.min(14, (w - 4) / serien.length);
+    monate.forEach(function (m, i) {
+      serien.forEach(function (s, j) {
+        var wert = m[s.feld];
+        if (wert === null || wert === undefined) return;
+        var hh = Math.round(wert / maxW * hoehe);
+        svg.appendChild(svgEl('rect', { x: L + w * i + (w - bw * serien.length) / 2 + bw * j, y: O + hoehe - hh, width: bw - 1, height: Math.max(hh, wert > 0 ? 1 : 0), fill: s.farbe }));
+      });
+    });
+    return svg;
+  }
+
+  /** Säulen je Jahr (Ehrungen-Vorschau). */
+  function jahresSaeulen(jahre, beschreibung) {
+    var maxW = max0(jahre.map(function (j) { return j.anstehend; }));
+    var h = 150, b = Math.min(44, Math.floor(300 / jahre.length) - 8);
+    var svg = svgEl('svg', { viewBox: '0 0 ' + B + ' ' + (h + 34), class: 'db-diagramm', role: 'img', 'aria-label': beschreibung });
+    var abstand = (B - 20) / jahre.length;
+    jahre.forEach(function (j, i) {
+      var hh = Math.round(j.anstehend / maxW * h);
+      var x = 10 + abstand * i + (abstand - b) / 2;
+      svg.appendChild(svgEl('rect', { x: x, y: h - hh + 18, width: b, height: Math.max(hh, j.anstehend > 0 ? 1 : 0), fill: 'var(--akzent)' }));
+      svg.appendChild(svgEl('text', { x: x + b / 2, y: h - hh + 13, 'text-anchor': 'middle' }, j.anstehend));
+      svg.appendChild(svgEl('text', { x: x + b / 2, y: h + 32, 'text-anchor': 'middle', class: 'achse' }, j.jahr));
+    });
+    return svg;
+  }
+
+  // ================================================================== Abschnitte
+
+  function kacheln(d, ziel) {
+    var v = d.verlauf;
+    var k = A.el('div', null, { className: 'kacheln' });
+    k.appendChild(A.kachel(A.zahl(v.aktuell), d.jahr === Number(d.heute.slice(0, 4)) ? 'Mitglieder aktuell' : 'Mitglieder zum 31.12.'));
+    k.appendChild(A.kachel(vorzeichen(v.saldo), 'seit Jahresbeginn (' + A.zahl(v.anfang) + ' am 1.1.)'));
+    k.appendChild(A.kachel(A.zahl(v.eintritte), 'Eintritte'));
+    k.appendChild(A.kachel(A.zahl(v.austritte), 'Austritte'));
+    if (d.einnahmen) k.appendChild(A.kachel(A.betrag(d.einnahmen.summe), 'eingegangen ' + d.jahr));
+    if (d.ehrungen) {
+      var jetzt = d.ehrungen[0];
+      k.appendChild(A.kachel(A.zahl(jetzt.anstehend + jetzt.offen_vorjahre), 'Ehrungen anstehend', jetzt.offen_vorjahre ? 'warnung' : '', function () { A.zeige('ehrungen'); }));
+    }
+    ziel.appendChild(k);
+  }
+
+  function verlaufKarte(d, ziel) {
+    var v = d.verlauf;
+    var k = karte('Mitgliederverlauf ' + d.jahr, 'Bestand zum Monatsende, gestrichelt das Vorjahr.');
+    k.appendChild(legende([['l-a', String(d.jahr)], ['l-v', String(d.jahr - 1)]]));
+    k.appendChild(verlaufDiagramm(v));
+    k.appendChild(A.el('h3', 'Eintritte und Austritte je Monat'));
+    k.appendChild(legende([['l-a', 'Eintritte'], ['l-b', 'Austritte']]));
+    k.appendChild(saeulen(v.monate, [{ feld: 'eintritte', farbe: 'var(--akzent)' }, { feld: 'austritte', farbe: '#b45309' }],
+      'Eintritte und Austritte je Monat ' + d.jahr));
+    k.appendChild(tabelleInDetails('Zahlen als Tabelle', [
+      { titel: 'Monat', wert: function (z) { return MONATE[z.monat - 1]; } },
+      { titel: 'Bestand', zahl: true, wert: function (z) { return A.zahl(z.bestand); } },
+      { titel: 'Vorjahr', zahl: true, wert: function (z) { return A.zahl(z.vorjahr); } },
+      { titel: 'Eintritte', zahl: true, wert: function (z) { return A.zahl(z.eintritte); } },
+      { titel: 'Austritte', zahl: true, wert: function (z) { return A.zahl(z.austritte); } }
+    ], v.monate));
+    k.appendChild(A.el('p', 'Austritte zählen zum Monat des Austrittsdatums, Wiedereintritte als Eintritt. Reine Funktionsträger sind nicht mitgezählt.', { className: 'db-hinweis' }));
+    ziel.appendChild(k);
+  }
+
+  function einnahmenKarte(d, ziel) {
+    var e = d.einnahmen;
+    var k = karte('Einnahmen ' + d.jahr, 'Eingegangene Beiträge je Monat nach Buchungsdatum.');
+    k.appendChild(saeulen(e.monate, [{ feld: 'betrag', farbe: 'var(--akzent)' }], 'Eingegangene Beiträge je Monat ' + d.jahr, ' €'));
+    k.appendChild(tabelleInDetails('Monate als Tabelle', [
+      { titel: 'Monat', wert: function (z) { return MONATE[z.monat - 1]; } },
+      { titel: 'Eingegangen', zahl: true, wert: function (z) { return A.betrag(z.betrag); } }
+    ], e.monate));
+    if (e.ohne_datum > 0) k.appendChild(A.el('p', A.betrag(e.ohne_datum) + ' sind für das Beitragsjahr ' + d.jahr + ' ohne Buchungsdatum erfasst und stehen in keinem Monat.', { className: 'db-hinweis' }));
+    k.appendChild(A.el('h3', 'Soll und Ist je Beitragsjahr'));
+    k.appendChild(A.el('div', null, { className: 'db-tab' }, [A.tabelle([
+      { titel: 'Beitragsjahr', wert: function (z) { return String(z.jahr); } },
+      { titel: 'Soll', zahl: true, wert: function (z) { return A.betrag(z.soll); } },
+      { titel: 'Ist', zahl: true, wert: function (z) { return A.betrag(z.ist); } },
+      { titel: 'Offen', zahl: true, wert: function (z) { return A.betrag(z.offen); } },
+      { titel: 'Quote', zahl: true, wert: function (z) { return z.quote === null ? '–' : String(z.quote).replace('.', ',') + ' %'; } },
+      { titel: 'Rücklastschriften', zahl: true, wert: function (z) { return A.zahl(z.ruecklastschriften); } }
+    ], e.jahre.slice().reverse(), { block: 100 })]));
+    k.appendChild(A.el('p', 'Soll und Ist gehören zum Beitragsjahr, die Monatswerte oben zum Kalenderjahr der Zahlung – die Summen können deshalb abweichen.', { className: 'db-hinweis' }));
+    ziel.appendChild(k);
+  }
+
+  function ehrungenKarte(d, ziel) {
+    var jahre = d.ehrungen;
+    var k = karte('Ehrungen in den nächsten Jahren', 'Wie viele Ehrungen in welchem Jahr anstehen.');
+    k.appendChild(jahresSaeulen(jahre, 'Anstehende Ehrungen je Jahr von ' + jahre[0].jahr + ' bis ' + jahre[jahre.length - 1].jahr));
+    if (jahre[0].offen_vorjahre) k.appendChild(A.el('p', jahre[0].offen_vorjahre + ' Ehrung(en) aus früheren Jahren sind noch offen und in den Säulen nicht enthalten.', { className: 'db-hinweis' }));
+    // Matrix: je Ehrung eine Zeile, je Jahr eine Spalte
+    var schluessel = {}, zeilen = [];
+    jahre.forEach(function (j) {
+      j.zeilen.forEach(function (z) {
+        var s = z.typ + '|' + z.bezeichnung + '|' + z.schwelle;
+        var r = schluessel[s];
+        if (!r) { r = schluessel[s] = { typ: z.typ, bezeichnung: z.bezeichnung, schwelle: z.schwelle, je: {} }; zeilen.push(r); }
+        r.je[j.jahr] = z.anzahl;
+      });
+    });
+    zeilen.sort(function (a, b) { return String(a.typ).localeCompare(String(b.typ)) || (a.schwelle - b.schwelle); });
+    var spalten = [{ titel: 'Ehrung', wert: function (z) { return z.bezeichnung || (z.typ + ' ' + z.schwelle); } }];
+    jahre.forEach(function (j) { spalten.push({ titel: String(j.jahr), zahl: true, wert: function (z) { return z.je[j.jahr] ? A.zahl(z.je[j.jahr]) : '–'; } }); });
+    var summe = { bezeichnung: 'Summe', je: {} };
+    jahre.forEach(function (j) { summe.je[j.jahr] = j.anstehend; });
+    if (zeilen.length) {
+      k.appendChild(tabelleInDetails('Welche Ehrungen? (Tabelle)', spalten, zeilen.concat([summe])));
+      if (jahre[0].verliehen) k.appendChild(A.el('p', 'Im Jahr ' + jahre[0].jahr + ' wurden schon ' + jahre[0].verliehen + ' Ehrung(en) verliehen.', { className: 'db-hinweis' }));
+    } else k.appendChild(A.el('p', 'In den nächsten Jahren stehen keine Ehrungen an.', { className: 'leise' }));
+    k.appendChild(A.el('p', 'Prognose bei unverändertem Bestand: Wer bis dahin austritt, fällt heraus. Die verbindliche Liste steht in „Ehrungen“.', { className: 'db-hinweis' }));
+    k.appendChild(A.knopf('Ehrungen öffnen', function () { A.zeige('ehrungen'); }, 'zweit klein'));
+    ziel.appendChild(k);
+  }
+
+  function strukturKarten(d, ziel) {
+    var alter = d.altersgruppen;
+    var k = karte('Altersstruktur', 'Aktive Mitglieder nach Altersgruppen (Jahrgang) zum ' + A.datum(d.stichtag) + '.');
+    k.appendChild(balkenListe(alter.gruppen.map(function (g, i) { return { titel: g.titel + ' Jahre', wert: alter.werte[i] }; })));
+    if (alter.ohne_geburtsdatum) k.appendChild(A.el('p', alter.ohne_geburtsdatum + ' Mitglied(er) ohne Geburtsdatum sind nicht eingeordnet.', { className: 'db-hinweis' }));
+    ziel.appendChild(k);
+
+    var a = karte('Abteilungen', 'Aktive Mitglieder je Abteilung – wer in mehreren ist, zählt mehrfach.');
+    if (d.abteilungen.length) a.appendChild(balkenListe(d.abteilungen.slice().sort(function (x, y) { return y.gesamt - x.gesamt; })
+      .map(function (x) { return { titel: x.bezeichnung, wert: x.gesamt }; })));
+    else a.appendChild(A.el('p', 'Keine Abteilungszuordnungen.', { className: 'leise' }));
+    ziel.appendChild(a);
+
+    var laufend = d.jahr === Number(d.heute.slice(0, 4));
+    var g = karte('Austrittsgründe ' + d.jahr, laufend ? 'Einschließlich bereits eingegangener Kündigungen zu einem späteren Austrittsdatum – deshalb mehr als „Austritte“ oben.' : null);
+    if (d.austrittsgruende.length) g.appendChild(balkenListe(d.austrittsgruende.map(function (x) { return { titel: x.grund, wert: x.gesamt }; })));
+    else g.appendChild(A.el('p', 'Keine Austritte in diesem Jahr.', { className: 'leise' }));
+    ziel.appendChild(g);
+  }
+
+  function zeichneErgebnis(ziel) {
+    var d = zustand.daten;
+    kacheln(d, ziel);
+    verlaufKarte(d, ziel);
+    if (d.einnahmen) einnahmenKarte(d, ziel);
+    if (d.ehrungen) ehrungenKarte(d, ziel);
+    strukturKarten(d, ziel);
+  }
+
+  function lade(inhalt) {
+    A.leere(inhalt).appendChild(A.el('p', 'Lädt …', { className: 'laedt' }));
+    A.rufe('apiDashboard', zustand.jahr).then(function (d) {
+      zustand.daten = d;
+      zustand.jahr = d.jahr;
+      if (A.aktuell().schluessel === 'dashboard') zeichneErgebnis(A.leere(inhalt));
+    }).catch(function () { A.leere(inhalt); });
+  }
+
+  // ================================================================== Ansicht
+
+  A.registriere('dashboard', {
+    titel: 'Dashboard', aktion: 'dashboard_lesen', reihenfolge: 5,
+    zeichne: function (ziel) {
+      ziel.appendChild(A.el('h1', 'Dashboard'));
+      var aktuell = Number((A.startdaten.heute || A.heute()).slice(0, 4));
+      var wahl = A.el('select', null, { aria: { label: 'Jahr' } });
+      for (var j = aktuell; j >= aktuell - 10; j--) wahl.appendChild(A.el('option', String(j), { value: String(j) }));
+      wahl.value = String(zustand.jahr || aktuell);
+      var inhalt = A.el('div');
+      wahl.addEventListener('change', function () { zustand.jahr = Number(wahl.value); lade(inhalt); });
+      ziel.appendChild(A.el('div', null, { className: 'db-zeile' }, [A.el('label', 'Jahr', null, [wahl])]));
+      ziel.appendChild(inhalt);
+      zustand.jahr = Number(wahl.value);
+      lade(inhalt);
+    }
+  });
+})();
+</script>
