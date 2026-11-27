@@ -56,6 +56,13 @@ if (!fehler.length) {
 dateien(SRC, '.html').forEach(p => {
   const html = fs.readFileSync(p, 'utf8');
   if (!/^\s*<!--/.test(html)) fehler.push(rel(p) + ': Kopfkommentar <!-- … --> fehlt (C7)');
+  // Apps Script wertet Scriptlets auch in HTML-Kommentaren aus (z. B. wird ein leeres Ausgabe-Scriptlet zu
+  // „output._ = ;“ → SyntaxError beim evaluate()). Darum: keine Scriptlet-Zeichen in Kommentaren.
+  (html.match(/<!--[\s\S]*?-->/g) || []).forEach(k => {
+    if (/<\?|\?>/.test(k)) fehler.push(rel(p) + ': Scriptlet-Zeichen <? / ?> im HTML-Kommentar – Apps Script wertet sie aus');
+  });
+  // Leere Scriptlets ergeben ungültigen Code.
+  if (/<\?(=|!=)?\s*\?>/.test(html)) fehler.push(rel(p) + ': leeres Scriptlet');
   const re = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi;
   let m, nr = 0;
   while ((m = re.exec(html))) {
