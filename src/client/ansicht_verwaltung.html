@@ -2,7 +2,8 @@
   ansicht_verwaltung – Verwaltung: Benutzer & Rechte, Einstellungen, Stammdaten, Datenqualität, System.
 
   Zweck:      Reiter „Benutzer“ (Zugänge anlegen/ändern/deaktivieren, Rechte je Rolle ansehen, Warnliste „Zugang ohne
-              passendes Amt“), „Einstellungen“ (Werte aus _Konfig mit Prüfung), „Stammdaten“ (Abteilungen,
+              passendes Amt“), „Einstellungen“ (Werte aus _Konfig mit Prüfung, gegliedert nach Bereichen – KONFIG_GRUPPEN –,
+              Suche über alle Bereiche, Markierung offener Punkte), „Stammdaten“ (Abteilungen,
               Funktionsarten, Beitragsarten, Nachweisarten, Ehrungsstufen, Aufbewahrungsfristen), „Datenqualität“
               (Prüfregeln über den ganzen Bestand) und „System“ (Cache, Zeilenzahlen, Snapshot neu aufbauen).
   Datenquelle: apiVerwaltung…-Funktionen (src/api/Verwaltung.js); Abteilungen und Personen für Auswahlfelder aus App.daten.
@@ -19,13 +20,37 @@
   .vw-person ul { list-style: none; margin: 0; padding: 0; border: 1px solid var(--rand); border-radius: var(--radius); }
   .vw-person li button { width: 100%; text-align: left; min-height: 40px; padding: 6px 10px; background: none; border: 0; border-bottom: 1px solid var(--flaeche); font: inherit; cursor: pointer; }
   .vw-person input { min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; }
-  .vw-konfig { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--rand); }
+  /* Einstellungen: Bereichsliste (mobil waagrecht wischbar, ab 900 px links) + Karten je Unterabschnitt */
+  .vw-schalter { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+  .vw-einstellungen { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .vw-bereiche { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+  .vw-bereiche button { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 6px 14px;
+    border: 1px solid var(--rand); border-radius: 999px; background: var(--grund); color: var(--text); font: inherit; text-align: left; cursor: pointer; white-space: nowrap; }
+  .vw-bereiche button[aria-current="true"] { background: var(--akzent); border-color: var(--akzent); color: var(--akzent-text); font-weight: 600; }
+  .vw-zahl { min-width: 22px; padding: 0 6px; border-radius: 999px; background: #d39b00; color: #1b1f24; font-size: 0.8rem; font-weight: 700; text-align: center; }
+  .vw-bereich { min-width: 0; }
+  .vw-bereich > h2:first-child { margin-top: 0; }
+  .vw-teil { padding: 4px 12px; }
+  .vw-teil h3 { font-size: 1rem; margin: 10px 0 2px; color: var(--akzent); }
+  .vw-konfig { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 16px; padding: 10px 0; border-bottom: 1px solid var(--flaeche); }
+  .vw-konfig:last-child { border-bottom: 0; }
+  .vw-konfig.geaendert { box-shadow: inset 3px 0 0 var(--fokus); padding-left: 8px; }
   .vw-konfig > div { min-width: 0; overflow-wrap: anywhere; }
-  .vw-konfig code { font-size: 0.85rem; color: var(--text-leise); }
+  .vw-konfig-titel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .vw-konfig .leise { font-size: 0.85rem; }
+  .vw-konfig code { font-size: 0.75rem; color: var(--text-leise); }
   .vw-konfig .zeile { display: flex; gap: 8px; }
-  .vw-konfig input, .vw-konfig select { flex: 1; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; min-width: 0; }
+  .vw-konfig input, .vw-konfig select { flex: 1; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; min-width: 0; background: var(--grund); color: var(--text); }
+  .vw-konfig input:disabled, .vw-konfig select:disabled { background: var(--flaeche); }
+  .marke.vw-marke-offen { background: #fffaeb; border-color: #d39b00; color: #5c4400; font-weight: 600; }
+  .marke.vw-marke-pruefen { color: var(--text-leise); }
+  @media (min-width: 900px) {
+    .vw-einstellungen { grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 20px; }
+    .vw-bereiche { flex-direction: column; overflow: visible; position: sticky; top: 8px; }
+    .vw-bereiche button { border-radius: var(--radius); white-space: normal; }
+  }
   .vw-warnung { padding: 10px; border-left: 4px solid #d39b00; background: #fffaeb; margin: 0 0 6px; border-radius: 0 var(--radius) var(--radius) 0; }
-  @media (min-width: 720px) { .vw-konfig { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; } }
+  @media (min-width: 720px) { .vw-konfig { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: center; } }
 </style>
 <script>
 (function () {
@@ -195,56 +220,247 @@
 
   // ================================================================== Einstellungen
 
+  /**
+   * Gliederung der Einstellungen (_Konfig) in Bereiche und Unterabschnitte. Schlüssel, die hier fehlen (neu im
+   * Setup ergänzt), landen in „Weitere“ – nichts geht verloren. Reihenfolge = Reihenfolge der Anzeige.
+   */
+  var KONFIG_GRUPPEN = [
+    { id: 'verein', titel: 'Verein', text: 'Name, Anschrift und Links – erscheinen in Schreiben, SEPA-Datei und Fußzeile.', teile: [
+      { titel: 'Name und Anschrift', schluessel: ['verein_name', 'verein_strasse', 'verein_hausnummer', 'verein_plz', 'verein_ort', 'verein_land'] },
+      { titel: 'Links in der Fußzeile', schluessel: ['impressum_url', 'datenschutz_url'] }
+    ] },
+    { id: 'beitraege', titel: 'Beiträge', text: 'Beitragsjahr, anteilige Beiträge, Gebühren und Tarifwechsel.', teile: [
+      { titel: 'Beitragsjahr und Berechnung', schluessel: ['beitragsjahr', 'beitrag_anteilig', 'ruecklastschrift_gebuehr', 'rueckfrage_wiedervorlage_tage'] },
+      { titel: 'Tarifwechsel nach Alter', schluessel: ['tarifwechsel_automatisch', 'tarifwechsel_stichtag'] }
+    ] },
+    { id: 'familie', titel: 'Familienbeitrag', text: 'Altersgrenzen und Stichtage für Familien- und Ehegattenbeitrag. Die Beträge stehen unter Stammdaten.', teile: [
+      { titel: 'Altersgrenzen', schluessel: ['familie_kinder_bis_alter', 'familie_ausbildung_bis_alter'] },
+      { titel: 'Umstellung und Nachweise', schluessel: ['familie_umstellung_stichtag', 'ausbildungsnachweis_vorlauf_monate'] }
+    ] },
+    { id: 'sepa', titel: 'SEPA-Lastschrift', text: 'Angaben für die Lastschriftdatei der Bank.', teile: [
+      { titel: 'Gläubiger und Vereinskonto', schluessel: ['verein_glaeubiger_id', 'verein_iban', 'verein_bic'] },
+      { titel: 'Einzug', schluessel: ['sepa_format', 'sepa_faelligkeit', 'sepa_vier_augen', 'mandat_verfall_monate'] }
+    ] },
+    { id: 'mitglieder', titel: 'Mitglieder', text: 'Mitgliedsnummern, Altersgrenze Jugend und Stichtag der Jahresstatistik.', teile: [
+      { titel: 'Mitgliedsnummern', schluessel: ['mitgliedsnummer_naechste', 'mitgliedsnummer_wiederverwendung'] },
+      { titel: 'Jugend und Statistik', schluessel: ['jugend_bis_alter', 'statistik_einfrieren_am'] }
+    ] },
+    { id: 'aufnahme', titel: 'Online-Aufnahme', text: 'Aufnahmeanträge über das öffentliche Formular.', teile: [
+      { titel: 'Eingang und Ablage', schluessel: ['antrag_eingangsdatei', 'antrag_endpunkt_regel', 'antrag_drive_ordner', 'antrag_dateiname'] },
+      { titel: 'Ablauf', schluessel: ['antrag_abholung', 'antrag_doppelte_bestaetigung', 'antrag_dublettenpruefung', 'antrag_erinnerung_tage'] }
+    ] },
+    { id: 'ehrungen', titel: 'Ehrungen & Nachweise', text: 'Wie Mitgliedsjahre und Ämter für Ehrungen gezählt werden; Wiedervorlage von Nachweisen.', teile: [
+      { titel: 'Ehrungen', schluessel: ['ehrung_zaehlweise', 'ehrung_stichtag', 'funktionsjubilaeum_zaehlweise'] },
+      { titel: 'Nachweise', schluessel: ['fz_wiedervorlage_monate'] }
+    ] },
+    { id: 'schreiben', titel: 'Briefe & E-Mail', text: 'Absender und Gestaltung von Anschreiben und E-Mails, Versandschalter.', teile: [
+      { titel: 'Briefe', schluessel: ['brief_absender', 'brief_unterschrift', 'brief_ort'] },
+      { titel: 'E-Mail-Versand', schluessel: ['mail_aktiv', 'mail_test_an', 'mail_max_je_lauf', 'mail_pdf_anhang'] },
+      { titel: 'Absender und Antwortadressen', schluessel: ['mail_absendername', 'mail_antwort_an', 'mail_antwort_an_finanzen'] },
+      { titel: 'Gestaltung der E-Mails', schluessel: ['mail_briefkopf', 'mail_logo_url', 'mail_fusszeile'] }
+    ] },
+    { id: 'datenschutz', titel: 'Datenschutz', text: 'Fristen und Vorgehen bei Auskunft, Löschung und Anonymisierung.', teile: [
+      { titel: 'Anfragen und Löschung', schluessel: ['loeschantwort_frist_tage', 'loeschlauf_intervall'] },
+      { titel: 'Anonymisierung', schluessel: ['chronik_bei_anonymisierung', 'anonym_platzhalter'] }
+    ] },
+    { id: 'betrieb', titel: 'Betrieb & Technik', text: 'Technische Stellschrauben. Nur ändern, wenn klar ist, was sie bewirken.', teile: [
+      { titel: 'Konto und Sicherung', schluessel: ['sheet_eigentuemer', 'backup_intervall'] },
+      { titel: 'Leistung', schluessel: ['snapshot_einbetten', 'snapshot_sollstellung_jahre', 'cache_warmhalten', 'protokoll_nachgelagert', 'messung_puffer_max', 'sperre_wartezeit_ms'] }
+    ] },
+    { id: 'zaehler', titel: 'Systemzähler', text: 'Fortlaufende Nummern, die das System selbst vergibt – nur zur Ansicht.', muster: /^next_id_/ }
+  ];
+  var KONFIG_WEITERE = { id: 'weitere', titel: 'Weitere', text: 'Einstellungen, die noch keinem Bereich zugeordnet sind.' };
+
+  /** Verständliche Namen der Einstellungen (Schlüssel bleibt klein darunter sichtbar). */
+  var KONFIG_TITEL = {
+    verein_name: 'Vereinsname', verein_strasse: 'Straße', verein_hausnummer: 'Hausnummer', verein_plz: 'PLZ', verein_ort: 'Ort',
+    verein_land: 'Land (ISO-Code)', impressum_url: 'Impressum (Adresse)', datenschutz_url: 'Datenschutzerklärung (Adresse)',
+    beitragsjahr: 'Laufendes Beitragsjahr', beitrag_anteilig: 'Anteiliger Beitrag bei Ein-/Austritt', ruecklastschrift_gebuehr: 'Gebühr Rücklastschrift (€)',
+    rueckfrage_wiedervorlage_tage: 'Rückfrage an Zahler: Wiedervorlage nach Tagen', tarifwechsel_automatisch: 'Tarifwechsel automatisch',
+    tarifwechsel_stichtag: 'Stichtag Tarifwechsel', familie_kinder_bis_alter: 'Kinder bis Alter (einschließlich)',
+    familie_ausbildung_bis_alter: 'Mit Ausbildung bis Alter (einschließlich)', familie_umstellung_stichtag: 'Stichtag Umstellung auf Einzelbeitrag',
+    ausbildungsnachweis_vorlauf_monate: 'Ausbildungsnachweis anfordern (Monate vorher)', verein_glaeubiger_id: 'Gläubiger-ID',
+    verein_iban: 'IBAN Vereinskonto', verein_bic: 'BIC Vereinskonto', sepa_format: 'Dateiformat', sepa_faelligkeit: 'Fälligkeit (Tag und Monat)',
+    sepa_vier_augen: 'Vier-Augen-Freigabe', mandat_verfall_monate: 'Mandat verfällt nach Monaten', mitgliedsnummer_naechste: 'Nächste Mitgliedsnummer',
+    mitgliedsnummer_wiederverwendung: 'Nummern Ausgetretener neu vergeben', jugend_bis_alter: 'Jugendmitglied bis Alter (einschließlich)',
+    statistik_einfrieren_am: 'Jahresstatistik einfrieren am', antrag_eingangsdatei: 'Eingangsdatei (Datei-ID)', antrag_endpunkt_regel: 'Regel für den öffentlichen Endpunkt',
+    antrag_drive_ordner: 'Drive-Ordner für Anträge (Ordner-ID)', antrag_dateiname: 'Dateiname der Anträge', antrag_abholung: 'Abruf der Anträge',
+    antrag_doppelte_bestaetigung: 'Bestätigung per E-Mail-Link', antrag_dublettenpruefung: 'Dublettenprüfung über', antrag_erinnerung_tage: 'Erinnerung nach Tagen',
+    ehrung_zaehlweise: 'Zählweise Mitgliedsjahre', ehrung_stichtag: 'Stichtag Ehrungen', funktionsjubilaeum_zaehlweise: 'Zählweise Funktionsjubiläum',
+    fz_wiedervorlage_monate: 'Führungszeugnis: Wiedervorlage nach Monaten', brief_absender: 'Absenderzeile', brief_unterschrift: 'Grußzeile / Unterschrift',
+    brief_ort: 'Ort vor dem Datum', mail_aktiv: 'E-Mail-Versand eingeschaltet', mail_test_an: 'Testmodus: alle Mails an', mail_max_je_lauf: 'Höchstens Mails je Sammelversand',
+    mail_pdf_anhang: 'Bestätigungen als PDF anhängen', mail_absendername: 'Absendername', mail_antwort_an: 'Antwortadresse allgemein',
+    mail_antwort_an_finanzen: 'Antwortadresse Finanzen', mail_briefkopf: 'Briefkopf', mail_logo_url: 'Logo (Adresse)', mail_fusszeile: 'Fußzeile',
+    loeschantwort_frist_tage: 'Antwortfrist Betroffenenanfragen (Tage)', loeschlauf_intervall: 'Löschliste erzeugen', chronik_bei_anonymisierung: 'Chronik bei Anonymisierung',
+    anonym_platzhalter: 'Platzhalter für Namen', sheet_eigentuemer: 'Eigentümer der Tabelle', backup_intervall: 'Sicherung',
+    snapshot_einbetten: 'Startdaten in die Seite einbetten', snapshot_sollstellung_jahre: 'Beitragsjahre im Browser', cache_warmhalten: 'Cache warmhalten',
+    protokoll_nachgelagert: 'Protokoll im Hintergrund schreiben', messung_puffer_max: 'Messwerte puffern (Anzahl)', sperre_wartezeit_ms: 'Wartezeit auf Sperre (ms)'
+  };
+
+  function konfigTitel(s) {
+    if (KONFIG_TITEL[s]) return KONFIG_TITEL[s];
+    if (/^next_id_/.test(s)) return 'Nächste ID ' + s.slice(8).replace(/_/g, ' ');
+    return titelVon(s);
+  }
+
+  /** Offene Punkte: Platzhalter oder fehlender Pflichtwert („offen“) bzw. Prüfvermerk in der Beschreibung („prüfen“). */
+  function konfigStatus(k) {
+    if (!k.bearbeitbar) return null;
+    var w = String(k.wert || ''), b = String(k.beschreibung || '');
+    if (/EINTRAGEN/.test(w) || (k.schluessel === 'verein_glaeubiger_id' && /^DE00ZZZ0+$/.test(w)) || (!w && /ECHTEN WERT/.test(b))) return 'offen';
+    if (/PRÜFEN|OFFENER PUNKT|OFFEN:|BEISPIELWERT/.test(b)) return 'pruefen';
+    return null;
+  }
+
+  /** Ordnet die Liste aus dem Server den Bereichen zu: [{ gruppe, teile: [{ titel, eintraege }] }]. */
+  function konfigGliedern(liste) {
+    var nach = {}, vergeben = {};
+    liste.forEach(function (k) { nach[k.schluessel] = k; });
+    var ergebnis = KONFIG_GRUPPEN.map(function (g) {
+      var teile;
+      if (g.muster) {
+        var e = liste.filter(function (k) { return g.muster.test(k.schluessel) && !vergeben[k.schluessel]; });
+        e.forEach(function (k) { vergeben[k.schluessel] = true; });
+        teile = [{ titel: '', eintraege: e }];
+      } else {
+        teile = g.teile.map(function (t) {
+          var e = t.schluessel.filter(function (s) { return nach[s]; }).map(function (s) { vergeben[s] = true; return nach[s]; });
+          return { titel: t.titel, eintraege: e };
+        });
+      }
+      return { gruppe: g, teile: teile.filter(function (t) { return t.eintraege.length; }) };
+    });
+    var rest = liste.filter(function (k) { return !vergeben[k.schluessel]; });
+    if (rest.length) ergebnis.push({ gruppe: KONFIG_WEITERE, teile: [{ titel: '', eintraege: rest }] });
+    return ergebnis.filter(function (x) { return x.teile.length; });
+  }
+
   function konfigZeile(k) {
     var eingabe;
     if (k.typ === 'auswahl' || k.typ === 'janein') {
       eingabe = A.el('select');
-      (k.typ === 'janein' ? ['ja', 'nein'] : k.auswahl).forEach(function (w) { eingabe.appendChild(A.el('option', w, { value: w })); });
+      var werte = k.typ === 'janein' ? ['ja', 'nein'] : k.auswahl.slice();
+      if (werte.indexOf(k.wert) < 0) werte.unshift(k.wert);   // unbekannten Altwert anzeigen statt still zu ersetzen
+      werte.forEach(function (w) { eingabe.appendChild(A.el('option', w, { value: w })); });
     } else eingabe = A.el('input', null, { type: 'text' });
     eingabe.value = k.wert;
     eingabe.disabled = !k.bearbeitbar;
-    eingabe.setAttribute('aria-label', k.schluessel);
+    eingabe.setAttribute('aria-label', konfigTitel(k.schluessel) + ' (' + k.schluessel + ')');
     var fehler = A.el('span', '', { className: 'feldfehler' });
     var bisher = k.wert;
+    var status = konfigStatus(k);
+    var marke = status ? A.el('span', status === 'offen' ? 'offen' : 'prüfen', { className: 'marke vw-marke-' + status }) : null;
+    var zeile;
+    function geaendert() {
+      var anders = eingabe.value !== bisher;
+      knopf.disabled = !anders;
+      zeile.classList.toggle('geaendert', anders);
+    }
     var knopf = A.knopf('Speichern', function () {
       knopf.disabled = true; fehler.textContent = '';
       return A.rufe('apiVerwaltungKonfigSpeichern', k.schluessel, eingabe.value, bisher, A.still).then(function (r) {
-        bisher = r.wert; eingabe.value = r.wert;
-        A.meldung(r.geaendert ? 'Einstellung „' + k.schluessel + '“ gespeichert.' : 'Keine Änderung.', 'ok');
+        bisher = r.wert; eingabe.value = r.wert; k.wert = r.wert;
+        if (marke && konfigStatus(k) !== 'offen' && status === 'offen') marke.remove();
+        A.meldung(r.geaendert ? 'Einstellung „' + konfigTitel(k.schluessel) + '“ (' + k.schluessel + ') gespeichert.' : 'Keine Änderung.', 'ok');
       }, function (err) {
         if (err.felder && err.felder[0]) fehler.textContent = err.felder[0].meldung;
         else if (err.art === 'konflikt') fehler.textContent = 'Inzwischen geändert – bitte neu laden.';
         else A.fehler(err);
-      }).then(function () { knopf.disabled = false; });
+      }).then(geaendert);
     }, 'zweit klein');
     knopf.hidden = !k.bearbeitbar;
-    return A.el('div', null, { className: 'vw-konfig' }, [
-      A.el('div', null, null, [A.el('strong', titelVon(k.schluessel)), A.el('br'), A.el('code', k.schluessel), A.el('div', k.beschreibung, { className: 'leise' })]),
+    knopf.disabled = true;
+    eingabe.addEventListener('input', geaendert);
+    eingabe.addEventListener('change', geaendert);
+    eingabe.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !knopf.disabled) { e.preventDefault(); knopf.click(); } });
+    zeile = A.el('div', null, { className: 'vw-konfig' }, [
+      A.el('div', null, null, [
+        A.el('div', null, { className: 'vw-konfig-titel' }, [A.el('strong', konfigTitel(k.schluessel)), marke]),
+        k.beschreibung ? A.el('div', k.beschreibung, { className: 'leise' }) : null,
+        A.el('code', k.schluessel)
+      ]),
       A.el('div', null, null, [A.el('div', null, { className: 'zeile' }, [eingabe, knopf]), fehler])
     ]);
+    return zeile;
   }
 
-  function reiterEinstellungen(ziel) {
+  function reiterEinstellungen(ziel, param) {
     var l = laedt(ziel);
     A.rufe('apiVerwaltungKonfig').then(function (liste) {
       l.remove();
-      ziel.appendChild(A.el('p', 'Änderungen wirken sofort für alle (Cache wird verworfen) und werden protokolliert. ID-Zähler verwaltet das System.', { className: 'leise' }));
-      var bereich = A.el('div');
-      var leiste = A.filterleiste([{ name: 'art', titel: 'Anzeigen', liste: [{ wert: 'bearbeitbar', text: 'nur bearbeitbare' }, { wert: 'zaehler', text: 'nur Zähler' }], start: 'bearbeitbar' }], zeichne, 'Einstellung suchen …');
-      ziel.appendChild(leiste);
-      ziel.appendChild(bereich);
-      function zeichne(z) {
-        A.leere(bereich);
-        var t = A.falte(z.suche || '');
-        liste.filter(function (k) {
-          if (z.art === 'bearbeitbar' && !k.bearbeitbar) return false;
-          if (z.art === 'zaehler' && k.bearbeitbar) return false;
-          return !t || A.falte(k.schluessel + ' ' + k.beschreibung).indexOf(t) >= 0;
-        }).forEach(function (k) { bereich.appendChild(konfigZeile(k)); });
+      var gliederung = konfigGliedern(liste);
+      var zeilen = {};   // Zeilen nur einmal bauen: Eingaben bleiben beim Wechsel der Bereiche erhalten
+      function zeileVon(k) { return zeilen[k.schluessel] || (zeilen[k.schluessel] = konfigZeile(k)); }
+      var aktiv = (param && param.gruppe && gliederung.some(function (x) { return x.gruppe.id === param.gruppe; })) ? param.gruppe : gliederung[0].gruppe.id;
+
+      ziel.appendChild(A.el('p', 'Änderungen wirken sofort für alle und werden protokolliert. Jede Einstellung wird einzeln gespeichert.', { className: 'leise' }));
+
+      var suche = A.el('input', null, { type: 'search', placeholder: 'Einstellung suchen …', className: 'suche' });
+      suche.setAttribute('aria-label', 'Einstellung suchen');
+      var nurOffen = A.el('input', null, { type: 'checkbox', id: 'vw-nur-offen' });
+      var anzahlOffen = liste.filter(function (k) { return konfigStatus(k); }).length;
+      var offenLabel = A.el('label', null, { htmlFor: 'vw-nur-offen', className: 'vw-schalter' }, [nurOffen, A.el('span', 'Nur offene Punkte (' + anzahlOffen + ')')]);
+      ziel.appendChild(A.el('div', null, { className: 'filterleiste' }, [suche, offenLabel]));
+
+      var nav = A.el('nav', null, { className: 'vw-bereiche', aria: { label: 'Bereiche der Einstellungen' } });
+      var inhalt = A.el('div', null, { className: 'vw-bereich' });
+      ziel.appendChild(A.el('div', null, { className: 'vw-einstellungen' }, [nav, inhalt]));
+
+      var knoepfe = {};
+      gliederung.forEach(function (x) {
+        var offen = 0;
+        x.teile.forEach(function (t) { t.eintraege.forEach(function (k) { if (konfigStatus(k) === 'offen') offen++; }); });
+        var b = A.el('button', null, { type: 'button' }, [
+          A.el('span', x.gruppe.titel),
+          offen ? A.el('span', String(offen), { className: 'vw-zahl', title: offen + ' offen', aria: { label: offen + ' offen' } }) : null
+        ]);
+        b.addEventListener('click', function () {
+          aktiv = x.gruppe.id; suche.value = ''; nurOffen.checked = false; zeichne();
+          inhalt.scrollIntoView({ block: 'nearest' });
+        });
+        knoepfe[x.gruppe.id] = b;
+        nav.appendChild(b);
+      });
+
+      function teilKarte(titel, eintraege) {
+        return A.el('section', null, { className: 'karte vw-teil' }, [titel ? A.el('h3', titel) : null].concat(eintraege.map(zeileVon)));
       }
-      zeichne(leiste.zustand);
-    }).catch(function () {
-      fehlerText(ziel, 'Die Einstellungen konnten nicht geladen werden.', function () { A.leere(ziel); reiterEinstellungen(ziel); });
+
+      function zeichne() {
+        A.leere(inhalt);
+        var t = A.falte(suche.value || '').trim();
+        var gefiltert = !!t || nurOffen.checked;
+        Object.keys(knoepfe).forEach(function (id) {
+          if (!gefiltert && id === aktiv) knoepfe[id].setAttribute('aria-current', 'true');
+          else knoepfe[id].removeAttribute('aria-current');
+        });
+        if (!gefiltert) {
+          var x = gliederung.filter(function (y) { return y.gruppe.id === aktiv; })[0];
+          inhalt.appendChild(A.el('h2', x.gruppe.titel));
+          if (x.gruppe.text) inhalt.appendChild(A.el('p', x.gruppe.text, { className: 'leise' }));
+          x.teile.forEach(function (teil) { inhalt.appendChild(teilKarte(teil.titel, teil.eintraege)); });
+          return;
+        }
+        var treffer = 0;
+        gliederung.forEach(function (x) {
+          var teile = x.teile.map(function (teil) {
+            return { titel: teil.titel, eintraege: teil.eintraege.filter(function (k) {
+              if (nurOffen.checked && !konfigStatus(k)) return false;
+              return !t || A.falte([k.schluessel, konfigTitel(k.schluessel), k.beschreibung, x.gruppe.titel, teil.titel].join(' ')).indexOf(t) >= 0;
+            }) };
+          }).filter(function (teil) { return teil.eintraege.length; });
+          if (!teile.length) return;
+          inhalt.appendChild(A.el('h2', x.gruppe.titel));
+          teile.forEach(function (teil) { treffer += teil.eintraege.length; inhalt.appendChild(teilKarte(teil.titel, teil.eintraege)); });
+        });
+        if (!treffer) inhalt.appendChild(A.el('p', 'Keine Einstellung gefunden.', { className: 'leise' }));
+      }
+      suche.addEventListener('input', A.verzoegert(zeichne, 150));
+      nurOffen.addEventListener('change', zeichne);
+      zeichne();
+    }).catch(function (e) {
+      if (window.console) console.error(e);
+      fehlerText(ziel, 'Die Einstellungen konnten nicht geladen werden.', function () { A.leere(ziel); reiterEinstellungen(ziel, param); });
     });
   }
 
@@ -394,7 +610,7 @@
       var inhalt = A.el('div');
       ziel.appendChild(inhalt);
       if (aktiv === 'benutzer') reiterBenutzer(inhalt);
-      else if (aktiv === 'einstellungen') reiterEinstellungen(inhalt);
+      else if (aktiv === 'einstellungen') reiterEinstellungen(inhalt, param);
       else if (aktiv === 'stammdaten') reiterStammdaten(inhalt, param);
       else if (aktiv === 'datenqualitaet') reiterDatenqualitaet(inhalt);
       else if (aktiv === 'system') reiterSystem(inhalt);

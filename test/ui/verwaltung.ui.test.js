@@ -25,13 +25,25 @@ test('Mitgliederverwalter: Benutzer, Einstellungen, Stammdaten, Datenqualität, 
     assert.ok(ui.objekte('Benutzer').some(b => b.email === 'neu.leitung@tsv-ergoldsbach.de' && b.abteilung_id === 3));
 
     await p.getByRole('tab', { name: 'Einstellungen' }).click();
+    const bereiche = p.getByRole('navigation', { name: 'Bereiche der Einstellungen' });
+    await bereiche.getByRole('button', { name: /^Verein/ }).waitFor();
+    assert.strictEqual(await bereiche.getByRole('button', { name: /^Weitere/ }).count(), 0, 'jeder Schlüssel ist einem Bereich zugeordnet');
+    assert.strictEqual(await p.locator('.vw-konfig', { hasText: 'mandat_verfall_monate' }).count(), 0, 'nur der gewählte Bereich ist sichtbar');
+    await bereiche.getByRole('button', { name: /^SEPA-Lastschrift/ }).click();
+    await p.getByRole('heading', { name: 'Gläubiger und Vereinskonto' }).waitFor();
+    await p.locator('.vw-konfig', { hasText: 'verein_glaeubiger_id' }).getByText('offen', { exact: true }).waitFor();
     const zeile = p.locator('.vw-konfig', { hasText: 'mandat_verfall_monate' });
+    assert.ok(await zeile.getByRole('button', { name: 'Speichern' }).isDisabled(), 'Speichern erst nach einer Änderung');
     await zeile.locator('input').fill('drei');
     await zeile.getByRole('button', { name: 'Speichern' }).click();
     await zeile.getByText('Bitte eine ganze Zahl angeben.').waitFor();
     await zeile.locator('input').fill('30');
     await zeile.getByRole('button', { name: 'Speichern' }).click();
-    await p.getByText('Einstellung „mandat_verfall_monate“ gespeichert.').waitFor();
+    await p.getByText('Einstellung „Mandat verfällt nach Monaten“ (mandat_verfall_monate) gespeichert.').waitFor();
+    // Suche über alle Bereiche
+    await p.getByRole('searchbox', { name: 'Einstellung suchen' }).fill('antwortadresse');
+    await p.locator('.vw-konfig', { hasText: 'mail_antwort_an_finanzen' }).waitFor();
+    assert.strictEqual(await p.locator('.vw-konfig', { hasText: 'mandat_verfall_monate' }).count(), 0);
     assert.strictEqual(ui.objekte('_Konfig').find(k => k.schluessel === 'mandat_verfall_monate').wert, '30');
 
     await p.getByRole('tab', { name: 'Stammdaten' }).click();
