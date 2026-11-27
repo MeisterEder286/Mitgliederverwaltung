@@ -249,16 +249,18 @@ var Auswertung = (function () {
     var arten = {}, gemeinschaften = {}, ohne = 0;
     aktive(daten, ix, stichtag).forEach(function (m) {
       var g = m.beitragsgemeinschaft_id ? gem[m.beitragsgemeinschaft_id] : null;
-      if (g && g.festbetrag !== null && g.festbetrag !== undefined && g.festbetrag !== '') {
+      // Beträge zum Stichtag (nach einer Beitragsänderung gilt davor betrag_vorher/festbetrag_vorher)
+      var fest = Beitrag.festbetragAm(g, stichtag);
+      if (g && fest !== null) {
         var e = gemeinschaften[g.beitragsgemeinschaft_id] = gemeinschaften[g.beitragsgemeinschaft_id] ||
-          { beitragsgemeinschaft_id: g.beitragsgemeinschaft_id, bezeichnung: g.bezeichnung, festbetrag: Number(g.festbetrag), personen: 0 };
+          { beitragsgemeinschaft_id: g.beitragsgemeinschaft_id, bezeichnung: g.bezeichnung, festbetrag: fest, personen: 0 };
         e.personen++;
         return;
       }
       var b = ix.beitragsart[m.beitragsart_id];
       if (!b) { ohne++; return; }
       var a = arten[b.beitragsart_id] = arten[b.beitragsart_id] ||
-        { beitragsart_id: b.beitragsart_id, bezeichnung: b.bezeichnung, betrag: Number(b.betrag) || 0, anzahl: 0, summe: 0 };
+        { beitragsart_id: b.beitragsart_id, bezeichnung: b.bezeichnung, betrag: Beitrag.betragAm(b, stichtag), anzahl: 0, summe: 0 };
       a.anzahl++;
       a.summe = Math.round(a.anzahl * a.betrag * 100) / 100;
     });

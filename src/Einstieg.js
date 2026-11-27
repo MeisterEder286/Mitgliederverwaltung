@@ -20,17 +20,31 @@
  *   - Fehlerseiten sind bewusst nichtssagend (A9); Details stehen nur im Ausführungsprotokoll.
  */
 
-/** Liefert die Oberfläche aus. */
+/** Globales Objekt (Top-Level-this) – für apiMessen, um eine api…-Funktion über ihren Namen zu finden. */
+var GLOBAL_ = this;
+
+/**
+ * Liefert die Oberfläche aus. Mit ?messen=1 hängt das Messwerk einen Bericht an – nur für Rollen mit messung_lesen
+ * (Api.ausfuehren prüft das); er steht dann als <script type="application/json" id="mess-start"> in der Seite.
+ */
 function doGet(e) {
+  var messen = !!(e && e.parameter && e.parameter.messen === '1');
+  if (messen) Messung.diagnoseAnfordern();
   var antwort = Api.ausfuehren('doGet', 'start', function (ktx) {
     return Konfig.wert('snapshot_einbetten') === 'ja' ? Startdaten_(ktx) : null;
   });
   if (!antwort || !antwort.ok) {
     return KeinZugang_(antwort && antwort.fehler && antwort.fehler.art);
   }
+  var t0 = Date.now();
   var t = HtmlService.createTemplateFromFile('client/index');
   t.startdatenJson = antwort.daten ? JsonEinbetten_(antwort.daten) : '';
-  return Seite_(t);
+  var seite = Seite_(t);
+  if (antwort._mess) {
+    antwort._mess.seite_ms = Date.now() - t0;   // Vorlage auswerten (alle client/*.html einbinden)
+    seite.append('<script type="application/json" id="mess-start">' + JsonEinbetten_(antwort._mess) + '</script>');
+  }
+  return seite;
 }
 
 /** Titel und Viewport für jede ausgelieferte Seite (mobile-first, B7). */
@@ -136,6 +150,25 @@ function apiNachlauf() {
   return Api.ausfuehren('apiNachlauf', 'start', function () { return { eintraege: Protokoll.nachtragen() }; });
 }
 
+/**
+ * Messwerk: ruft die öffentliche Funktion `name` mit `args` auf und fordert dabei den Messbericht (_mess) an.
+ * Keine neue Angriffsfläche: Es lassen sich nur api…-Funktionen aufrufen, die ohnehin öffentlich sind; jede prüft
+ * ihre eigene Aktion. Den Bericht hängt Api.ausfuehren nur für Rollen mit messung_lesen an – alle anderen bekommen
+ * die gewöhnliche Antwort.
+ */
+function apiMessen(name, args) {
+  var n = String(name || '');
+  if (!/^api[A-Z][A-Za-z0-9]*$/.test(n) || n === 'apiMessen' || typeof GLOBAL_[n] !== 'function') {
+    return { ok: false, fehler: { art: 'fachlich', meldung: 'Unbekannte Funktion.' } };
+  }
+  Messung.diagnoseAnfordern();
+  try {
+    return GLOBAL_[n].apply(null, Array.isArray(args) ? args : []);
+  } finally {
+    Messung.diagnoseUebernehmen();   // nie über diesen Aufruf hinaus gelten lassen
+  }
+}
+
 /** Auswertung der Server-Messwerte für die Admin-Ansicht. */
 function apiMessungen() {
   return Api.ausfuehren('apiMessungen', 'messung_lesen', function () { return Messung.auswertung(); });
@@ -157,6 +190,12 @@ function apiClientMessungen(liste) {
 function setup() {
   Zugriff.nurFunktionskonto();
   return Setup.ausfuehren();
+}
+
+/** Legt in der Eingangstabelle (Script Property EINGANG_ID) den Tab „Eingang“ an bzw. ergänzt fehlende Spalten. */
+function eingangEinrichten() {
+  Zugriff.nurFunktionskonto();
+  return BeitrittModul.eingangEinrichten();
 }
 
 /** Legt den stündlichen Trigger zum Wegschreiben der Messwerte an (vorhandene werden ersetzt). */

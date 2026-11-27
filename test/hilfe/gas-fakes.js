@@ -24,6 +24,9 @@
  *
  * Zeilen: deleteRow(nr) / deleteRows(nr, anzahl) entfernen Zeilen (Raster schrumpft wie in Sheets).
  *
+ * Weitere Dateien: opt.weitereDateien = { 'ID': { Tab: [[Kopf…], …] } } – openById('ID') liefert sie; ihre Tabs
+ *   liest der Test über daten('ID/Tab').
+ *
  * Rückgabe: { globale, datei, daten(tab), zaehler, cache, properties, trigger }
  *   zaehler.sheets  alle Aufrufe an SpreadsheetApp/Sheet/Range/Sheets-API (Builder ausgenommen)
  *   zaehler.<methode>  Aufrufe je Methode, z. B. batchGet, getValues, setValues, appendRow, openById
@@ -58,6 +61,15 @@ function erzeugeFakes(opt) {
   Object.keys(opt.tabs || {}).forEach(t => {
     tabs[t] = (opt.tabs[t] || []).map(z => z.slice());
     groesse[t] = { zeilen: Math.max(1000, tabs[t].length), spalten: Math.max(26, ...tabs[t].map(z => z.length)) };
+  });
+  // Weitere Dateien (z. B. Eingangstabelle): Tabs liegen intern unter „<Datei-ID>/<Tab>“
+  const weitere = opt.weitereDateien || {};
+  Object.keys(weitere).forEach(id => {
+    Object.keys(weitere[id]).forEach(t => {
+      const n = id + '/' + t;
+      tabs[n] = weitere[id][t].map(z => z.slice());
+      groesse[n] = { zeilen: Math.max(1000, tabs[n].length), spalten: Math.max(26, ...tabs[n].map(z => z.length)) };
+    });
   });
 
   function letzteZeile(daten) {
@@ -110,6 +122,7 @@ function erzeugeFakes(opt) {
         return out;
       },
       getValue() { return range.getValues()[0][0]; },
+      getDisplayValues() { return range.getValues().map(z => z.map(v => String(v))); },
       setValues(werte) { zaehle('setValues'); schreib(werte); return range; },
       setValue(v) { zaehle('setValue'); schreib([[v]]); return range; },
       setNumberFormat() { zaehle('setNumberFormat'); return range; },
@@ -126,7 +139,7 @@ function erzeugeFakes(opt) {
 
   function blatt(name) {
     return {
-      getName() { return name; },
+      getName() { return name.slice(name.indexOf('/') + 1); },
       getLastRow() { zaehle('getLastRow'); return letzteZeile(tabs[name]); },
       getLastColumn() { zaehle('getLastColumn'); return letzteSpalte(tabs[name]); },
       getMaxRows() { zaehle('getMaxRows'); return groesse[name].zeilen; },
@@ -167,7 +180,8 @@ function erzeugeFakes(opt) {
     getId() { return dbId; },
     getName() { return 'Mitgliederverwaltung (Test)'; },
     getSheetByName(n) { zaehle('getSheetByName'); return tabs[n] ? blatt(n) : null; },
-    getSheets() { zaehle('getSheets'); return Object.keys(tabs).map(blatt); },
+    getSheets() { zaehle('getSheets'); return Object.keys(tabs).filter(n => n.indexOf('/') < 0).map(blatt); },
+    getSpreadsheetTimeZone() { return opt.tabellenZeitzone || zeitzone; },
     insertSheet(n) {
       zaehle('insertSheet');
       if (tabs[n]) throw new Error('Fake: Tab existiert bereits: ' + n);
@@ -185,9 +199,27 @@ function erzeugeFakes(opt) {
     return b;
   }
 
+  function weitereDatei(id) {
+    const n = t => id + '/' + t;
+    return {
+      getId() { return id; },
+      getName() { return 'Weitere Datei ' + id; },
+      getSheetByName(t) { zaehle('getSheetByName'); return tabs[n(t)] ? blatt(n(t)) : null; },
+      getSheets() { zaehle('getSheets'); return Object.keys(tabs).filter(x => x.indexOf(id + '/') === 0).map(blatt); },
+      insertSheet(t) {
+        zaehle('insertSheet');
+        if (tabs[n(t)]) throw new Error('Fake: Tab existiert bereits: ' + t);
+        tabs[n(t)] = [];
+        groesse[n(t)] = { zeilen: 1000, spalten: 26 };
+        return blatt(n(t));
+      }
+    };
+  }
+
   const SpreadsheetApp = {
     openById(id) {
       zaehle('openById');
+      if (weitere[id]) return weitereDatei(id);
       if (id !== dbId) throw new Error('Fake: unbekannte Datei-ID ' + id);
       return datei;
     },
@@ -200,9 +232,32 @@ function erzeugeFakes(opt) {
     return m[1].replace(/''/g, "'");
   }
 
+  // A1-Bereich "'Tab'!B3" oder "'Tab'!B3:D4" → { tab, r, c } (für values.batchUpdate)
+  function zerlegeA1(bereichText) {
+    const tab = tabAusBereich(bereichText);
+    const m = /!([A-Z]+)(\d+)(?::[A-Z]+\d+)?$/.exec(bereichText);
+    if (!m) throw new Error('Fake: values.batchUpdate braucht einen Bereich mit Startzelle: ' + bereichText);
+    const c = m[1].split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+    return { tab, r: Number(m[2]), c };
+  }
+
   const Sheets = {
     Spreadsheets: {
       Values: {
+        // values.batchUpdate(resource, id): schreibt wie setValues (USER_ENTERED wird nicht weiter nachgebildet)
+        batchUpdate(resource, id) {
+          zaehle('valuesBatchUpdate');
+          if (id !== dbId) throw new Error('Fake: unbekannte Datei-ID ' + id);
+          (resource.data || []).forEach(d => {
+            const z = zerlegeA1(d.range);
+            if (!tabs[z.tab]) throw new Error('Unable to parse range: ' + d.range);
+            const werte = d.values || [];
+            const breite = Math.max(1, ...werte.map(w => w.length));
+            bereich(z.tab, z.r, z.c, werte.length, breite).setValues(werte.map(w => { const x = w.slice(); while (x.length < breite) x.push(''); return x; }));
+            zaehler.setValues--; zaehler.sheets--;   // nicht doppelt zählen
+          });
+          return { totalUpdatedCells: (resource.data || []).reduce((n, d) => n + (d.values || []).reduce((m, w) => m + w.length, 0), 0) };
+        },
         batchGet(id, optionen) {
           zaehle('batchGet');
           if (id !== dbId) throw new Error('Fake: unbekannte Datei-ID ' + id);
@@ -211,17 +266,27 @@ function erzeugeFakes(opt) {
               const name = tabAusBereich(r);
               if (!tabs[name]) throw new Error('Unable to parse range: ' + r);
               // Spaltenbereich 'Tab'!C:C mit majorDimension COLUMNS → [[Zellen der Spalte]] (leere am Ende abgeschnitten)
-              const sp = /!([A-Z]+):\1$/.exec(r);
-              if (sp && optionen.majorDimension === 'COLUMNS') {
-                const idx = sp[1].split('').reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
+              const spalteM = /!([A-Z]+):\1$/.exec(r);
+              if (spalteM && optionen.majorDimension === 'COLUMNS') {
+                const idx = spalteM[1].split('').reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) - 1;
                 const spalte = tabs[name].map(z => (z[idx] === null || z[idx] === undefined ? '' : z[idx]));
                 let n = spalte.length;
                 while (n > 0 && spalte[n - 1] === '') n--;
                 return n ? { range: r, values: [spalte.slice(0, n)] } : { range: r };
               }
-              if (sp || optionen.majorDimension) throw new Error('Fake: Bereich/majorDimension nicht unterstützt: ' + r);
+              if (spalteM || optionen.majorDimension) throw new Error('Fake: Bereich/majorDimension nicht unterstützt: ' + r);
+              // Teilbereich 'Tab'!B2 bzw. 'Tab'!A2:O51 (sonst ganzer Tab)
+              const m = /!([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(r);
+              const sp = t => t.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+              let quelle = tabs[name].slice(0, letzteZeile(tabs[name]));
+              if (m) {
+                const r1 = Number(m[2]), c1 = sp(m[1]);
+                const r2 = m[4] ? Number(m[4]) : r1, c2 = m[3] ? sp(m[3]) : c1;
+                quelle = quelle.slice(r1 - 1, r2).map(z => z.slice(c1 - 1, c2));
+              }
               // Wie die echte API: leere Zeilen/Zellen am Ende werden abgeschnitten
-              const d = tabs[name].slice(0, letzteZeile(tabs[name])).map(z => {
+              while (quelle.length && quelle[quelle.length - 1].every(v => v === '' || v === null || v === undefined)) quelle.pop();
+              const d = quelle.map(z => {
                 const zeile = z.map(v => (v === null || v === undefined ? '' : v));
                 let n = zeile.length;
                 while (n > 0 && zeile[n - 1] === '') n--;

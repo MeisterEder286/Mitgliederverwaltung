@@ -60,17 +60,20 @@
   // ================================================================== Hilfen
 
   var TITEL = {
+    online_schluessel: 'Schlüssel im Online-Formular', als_gemeinschaft: 'Als Gemeinschaft (Familie/Ehepaar)',
+    betrag_vorher: 'Betrag vor „gültig ab“',
     max_erwachsene: 'Höchstens Erwachsene', max_kinder: 'Höchstens Kinder', kinder_bis_alter: 'Kinder bis Alter (einschließlich)',
     ausbildung_bis_alter: 'Mit Ausbildung bis Alter (einschließlich)', alter_von: 'Alter von', alter_bis: 'Alter bis (einschließlich)'
   };
   /** Erklärungen in den Stammdaten-Formularen je Tab und Feld. */
   var HILFE = {
-    Gemeinschaftsart: {
-      betrag: { hilfe: 'Pauschale je Gemeinschaft und Jahr; wird beim Anlegen als Festbetrag übernommen.' },
-      max_erwachsene: { hilfe: 'z. B. 2. Leer = unbegrenzt.' },
-      max_kinder: { hilfe: 'Leer = beliebig viele, 0 = keine Kinder (Ehegattenbeitrag).' },
-      kinder_bis_alter: { hilfe: '17 heißt: bis zum 18. Geburtstag. Leer = Einstellung familie_kinder_bis_alter.' },
-      ausbildung_bis_alter: { hilfe: 'Mit Schule/Studium/Ausbildung (voraussichtliches Ende am Mitglied) höchstens bis zu diesem Alter. Leer = keine Verlängerung.' }
+    Beitragsart: {
+      als_gemeinschaft: { hilfe: 'Leer = Einzelbeitrag je Person. Familie/Ehepaar: Der Betrag gilt einmal für alle (Familien-/Ehegattenbeitrag); dann gelten die Regeln darunter.' },
+      max_erwachsene: { hilfe: 'Nur für Familie/Ehepaar: z. B. 2. Leer = unbegrenzt.' },
+      max_kinder: { hilfe: 'Nur für Familie/Ehepaar: leer = beliebig viele, 0 = keine Kinder (Ehegattenbeitrag).' },
+      kinder_bis_alter: { hilfe: 'Nur für Familie/Ehepaar: 17 heißt bis zum 18. Geburtstag. Leer = Einstellung familie_kinder_bis_alter.' },
+      ausbildung_bis_alter: { hilfe: 'Nur für Familie/Ehepaar: mit Schule/Studium/Ausbildung (voraussichtliches Ende am Mitglied) höchstens bis zu diesem Alter. Leer = keine Verlängerung.' },
+      online_schluessel: { hilfe: 'Tarif-Schlüssel im Online-Aufnahmeantrag der Homepage, z. B. „familienbeitrag“ (mehrere durch Komma).' }
     }
   };
 
@@ -470,7 +473,6 @@
     { tab: 'Abteilung', titel: 'Abteilungen', name: 'bezeichnung' },
     { tab: 'Funktionsart', titel: 'Funktionsarten', name: 'bezeichnung' },
     { tab: 'Beitragsart', titel: 'Beitragsarten', name: 'bezeichnung' },
-    { tab: 'Gemeinschaftsart', titel: 'Familien-/Ehegattenbeitrag (Regeln)', name: 'bezeichnung' },
     { tab: 'Qualifikationsart', titel: 'Nachweisarten', name: 'bezeichnung' },
     { tab: 'Ehrungsregel', titel: 'Ehrungsstufen', name: 'bezeichnung' },
     { tab: 'Aufbewahrungsfrist', titel: 'Aufbewahrungsfristen', name: 'datenkategorie' }

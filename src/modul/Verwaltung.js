@@ -24,11 +24,11 @@
 var Verwaltung = (function () {
 
   var VERWALTUNGSROLLEN = ['Vorstand', 'Mitgliederverwalter'];
-  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Gemeinschaftsart', 'Qualifikationsart', 'Ehrungsregel', 'Aufbewahrungsfrist'];
-  var SNAPSHOT_TABS = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Gemeinschaftsart', 'Qualifikationsart', 'Ehrungsregel'];
+  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel', 'Aufbewahrungsfrist'];
+  var SNAPSHOT_TABS = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel'];
   var PRUEF_TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
-    'Beitragsart', 'Gemeinschaftsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
-    'Ehrungsregel', 'Ehrung', 'Einwilligung'];
+    'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
+    'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Benutzer', 'Notiz'];   // Benutzer/Notiz nur für Verweisprüfungen (keine Inhalte in den Befunden)
   // Welche Ämter (Funktionsart.bezeichnung, Anfang) zu welcher Rolle passen – für die Warnliste (V10)
   var AMT_ZU_ROLLE = {
     Abteilungsleiter: ['Abteilungsleiter'],
@@ -82,6 +82,9 @@ var Verwaltung = (function () {
           meldung: 'Aktiver Zugang „' + b.rolle + '“, aber kein laufendes passendes Amt' +
             (b.rolle === 'Abteilungsleiter' ? ' in dieser Abteilung' : '') + '. Bitte prüfen, ob der Zugang noch nötig ist.' });
       }
+    });
+    Rechte.mehrfachrollenWarnungen(benutzer).forEach(function (w) {
+      warn.push({ benutzer_id: w.benutzer_id, email: w.email, rolle: w.rollen.join(' + '), meldung: w.meldung, art: 'mehrfachrolle' });
     });
     return warn;
   }
@@ -209,6 +212,7 @@ var Verwaltung = (function () {
       case 'zahl':
         if (!/^\d+$/.test(w)) nein('Bitte eine ganze Zahl angeben.');
         if (s === 'beitragsjahr' && !/^20\d\d$/.test(w)) nein('Bitte ein Jahr wie 2027 angeben.');
+        if (s === 'jugend_bis_alter' && (Number(w) < 10 || Number(w) > 27)) nein('Bitte ein Alter zwischen 10 und 27 angeben.');
         return w;
       case 'janein':
         if (w !== 'ja' && w !== 'nein') nein('Bitte „ja“ oder „nein“.');
@@ -332,12 +336,12 @@ var Verwaltung = (function () {
 
   function hinweise(ktx) {
     var k = Konfig.alle();
-    var d = DB.lese(['Beitragsart', 'Gemeinschaftsart', 'Ehrungsregel', 'Funktionsart', 'Qualifikationsart', 'Aufbewahrungsfrist', 'Benutzer', 'Betroffenenanfrage']);
+    var d = DB.lese(['Beitragsart', 'Ehrungsregel', 'Funktionsart', 'Qualifikationsart', 'Aufbewahrungsfrist', 'Benutzer', 'Betroffenenanfrage']);
     var h = [];
     var g = Iban.glaeubigerIdPruefen(k.verein_glaeubiger_id || '');
     if (!g.ok) h.push({ art: 'warnung', text: g.fehler === 'platzhalter' ? 'Die SEPA-Gläubiger-ID ist noch der Platzhalter.' : 'Die SEPA-Gläubiger-ID ist ungültig.', ziel: { ansicht: 'verwaltung', param: { reiter: 'einstellungen', gruppe: 'sepa' } } });
     if (k.sepa_format && k.sepa_format !== 'pain.008.001.08') h.push({ art: 'hinweis', text: 'SEPA-Format steht auf ' + k.sepa_format + ' – für künftige Läufe pain.008.001.08.', ziel: { ansicht: 'verwaltung', param: { reiter: 'einstellungen', gruppe: 'sepa' } } });
-    [['Beitragsart', 'Beitragsarten'], ['Gemeinschaftsart', 'Familien-/Ehegattenbeiträge'], ['Ehrungsregel', 'Ehrungsstufen'], ['Funktionsart', 'Funktionsarten'], ['Qualifikationsart', 'Nachweisarten'], ['Aufbewahrungsfrist', 'Aufbewahrungsfristen']].forEach(function (p) {
+    [['Beitragsart', 'Beitragsarten'], ['Ehrungsregel', 'Ehrungsstufen'], ['Funktionsart', 'Funktionsarten'], ['Qualifikationsart', 'Nachweisarten'], ['Aufbewahrungsfrist', 'Aufbewahrungsfristen']].forEach(function (p) {
       var n = (d[p[0]] || []).filter(function (z) { return /BEISPIEL|PRÜFEN|VORSCHLAG/.test(String(z.bemerkung || '') + ' ' + String(z.rechtsgrundlage || '')); }).length;
       if (n) h.push({ art: 'hinweis', text: n + ' ' + p[1] + ' sind noch als BEISPIEL/PRÜFEN/VORSCHLAG markiert – bitte bestätigen oder anpassen.', ziel: { ansicht: 'verwaltung', param: { reiter: 'stammdaten', tab: p[0] } } });
     });

@@ -18,6 +18,15 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   In „Mitglieder“ setzt „Filter zurücksetzen“ Suche und Filter wieder auf den Grundzustand (Status „aktiv“).
 - **Listen drucken/exportieren:** jeweils über „Drucken“ (auch „Als PDF speichern“) oder „CSV“ (öffnet in Excel).
   Jeder Export wird mit Name, Zeit und Liste protokolliert. Kontaktlisten bitte nicht in Messenger-Gruppen weitergeben.
+- **E-Mail an alle / an meine Abteilung** (Mitglieder → ganz unten „E-Mail-Verteiler“): Schnellknöpfe „Alle aktiven
+  Mitglieder“, „Abteilung“ (Auswahlliste) bzw. für Abteilungsleiter „Meine Abteilung …“ sowie „Aktuelle Auswahl“ (die
+  oben gefilterte Liste). Das Programm sendet dabei **nichts**: Es zeigt die Adressen zum Kopieren („Kopieren“ oder
+  „Im Mailprogramm öffnen“) – im eigenen Mailprogramm **immer ins Feld „BCC“** einfügen. Trennzeichen Semikolon
+  (Outlook) oder Komma (Gmail, Thunderbird, Apple Mail); bei vielen Adressen in Blöcken zu 50, je Block eine Mail.
+  Minderjährige sind über die Adresse der gesetzlichen Vertretung enthalten, doppelte Adressen (Familien) nur einmal.
+  Wer keine Adresse hat, steht unter „Ohne E-Mail-Adresse“. Für Newsletter/Werbung den Haken „nur mit Einwilligung
+  Newsletter per E-Mail“ setzen. Das Abrufen wird wie ein Export protokolliert. Wer „Schreiben“ darf, kann von dort
+  mit „Stattdessen über „Schreiben“ senden“ eine Vorlage (Anlass „Allgemein“) an dieselben Personen schicken.
 - **„Der Datensatz wurde inzwischen geändert“:** Jemand anderes hat gleichzeitig gespeichert. Die aktuelle Fassung wird
   geladen; Änderung bitte noch einmal eintragen.
 - **Fehler-Nr.:** Bei unerwarteten Fehlern erscheint eine Nummer. Diese bitte an die Mitgliederverwaltung melden.
@@ -26,6 +35,18 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   geöffnet wird sie nur mit passender Berechtigung.
 - **Nicht gespeicherte Eingaben:** Wer beim Bearbeiten wegklickt, wird vorher gefragt.
 - **„Rückgängig“:** Manche Aktionen (z. B. „Post kam zurück“) lassen sich direkt in der Bestätigungsmeldung zurücknehmen.
+
+## Dashboard (Vorstand, Mitgliederverwaltung, Kasse)
+
+„Dashboard“ zeigt den Verein auf einen Blick, oben wählbar nach Jahr:
+
+- **Kacheln:** Mitglieder aktuell, Veränderung seit Jahresbeginn, Eintritte, Austritte, eingegangene Beiträge, anstehende Ehrungen (Klick öffnet „Ehrungen“).
+- **Mitgliederverlauf:** Bestand zum Monatsende, das Vorjahr gestrichelt; darunter Ein- und Austritte je Monat.
+- **Einnahmen** (nur mit Finanzsicht): eingegangene Beiträge je Monat nach Buchungsdatum, Soll/Ist/offen/Quote je Beitragsjahr.
+- **Ehrungen in den nächsten Jahren** (nur mit Recht für Ehrungen): Anzahl je Jahr, in der Tabelle je Ehrung aufgeschlüsselt. Prognose bei unverändertem Bestand.
+- **Altersstruktur, Abteilungen, Austrittsgründe** des Jahres.
+
+Zu jedem Diagramm gibt es die Zahlen als aufklappbare Tabelle. Das Dashboard enthält nur Zahlen, keine Namen.
 
 ## Abteilungsleitung
 - **Meine Abteilung:** alle Mitglieder Ihrer Abteilung mit Kontakt und Geburtsdatum. Filter nach aktiv/passiv, Alter, Funktion.
@@ -37,12 +58,17 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   Eintrag“ – **niemals Inhalte**, kein Upload (§ 72a SGB VIII).
 
 ## Jugendleitung
-- Sicht auf Minderjährige und auf alle Funktionsträger mit Nachweispflicht; Nachweise erfassen wie oben.
+- Sicht auf Jugendmitglieder und auf alle Funktionsträger mit Nachweispflicht; Nachweise erfassen wie oben.
+  Bis zu welchem Alter jemand als Jugendmitglied gilt, stellt die Verwaltung unter Einstellungen ein (`jugend_bis_alter`, Standard 17).
 
 ## Kasse
 - **Finanzen → Einzugsstand:** Soll, eingezogen, offen, Rücklastschriften; Mahnliste drucken oder „Mahnungen erstellen“.
 - **Nachzügler:** Neue Mitglieder nach dem Jahreslauf → Sollstellungen „Nachzügler anlegen“ → SEPA-Lauf (nimmt nur, was noch nie eingezogen wurde).
 - **Rechnungen** für Überweiser: Finanzen → Rechnungen → auswählen → Schreiben.
+- **Beitragserhöhung** (nach JHV-Beschluss, vor dem Jahreslauf): Finanzen → Beitragsänderung → Jahr wählen, neue Beträge
+  je Beitragsart und je Familien-Pauschale eintragen → „Vorschau berechnen“ (alt/neu je Konto) → „Übernehmen“ →
+  „Vorabinformation erstellen“ (Vorlage „Beitragsänderung“ mit `{{beitrag_bisher}}`/`{{beitrag_neu}}`). Frühere Jahre
+  rechnen weiter mit dem alten Betrag. Nur möglich, solange es für das Jahr noch keine Sollstellungen gibt.
 - **Sollstellungen:** einmal im Jahr „Probelauf“ → „Anlegen“.
 - **SEPA-Lauf:** Probelauf prüfen (Ausschlüsse mit Grund) → „XML erzeugen“ → Datei im Online-Banking hochladen.
   Danach „alle als bezahlt buchen“; Rücklastschriften einzeln mit Grund erfassen (Gebühr automatisch).
@@ -78,6 +104,14 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   Familie, wählt man „Ganze Familie wechselt mit“ oder sie verlässt die Gemeinschaft. Darunter: in die Gemeinschaft des
   neuen Kontos aufnehmen oder eine neue nach Regel (Familien-/Ehegattenbeitrag) mit den übrigen Zahlern des Kontos
   bilden. Wird ein altes Konto danach von niemandem mehr genutzt, erscheint ein Hinweis zum Stilllegen.
+- **Online-Anträge von der Homepage:** Startseite-Kachel „neue Online-Aufnahmeanträge“ bzw. Mitglieder → „Beitritte aus XML
+  importieren“ → oben „Online-Anträge von der Homepage“. Anträge ankreuzen (das PDF mit Unterschrift lässt sich daneben
+  öffnen) → „Ausgewählte prüfen“ → wie unten. Beim Übernehmen wird das PDF automatisch als Dokument verknüpft
+  (Aufnahmeantrag bei jeder Person, SEPA-Mandat am Konto), Einwilligungen aus dem Formular werden angelegt, der Tarif
+  kommt aus den Stammdaten (Familienpreis, Einzelbeitrag). Doppelt abgeschickte oder zurückgezogene Anträge mit „Nicht
+  übernehmen“ und kurzem Grund abschließen.
+  Voraussetzung: In Verwaltung → Stammdaten haben Beitragsarten und Abteilungen ihren „Schlüssel im Online-Formular“
+  (z. B. `familienbeitrag`, `fussball`). Fehlt einer, zeigt die Vorschau eine Warnung.
 - **Beitritte aus XML importieren:** Mitglieder → „Beitritte aus XML importieren“ (braucht auch das Recht, Konten zu
   bearbeiten). Eine oder mehrere Antrags-Dateien (XML wie bisher aus Access) auswählen – sie werden nur im Browser gelesen.
   Die Vorschau zeigt je Antrag die Personen mit vorläufiger Nummer, das Konto (IBAN nur maskiert), ggf. den
@@ -89,13 +123,17 @@ angezeigt wird, liefert das System für diese Rolle auch gar nicht aus.
   importiert wurde. Danach „Aufnahmebestätigungen erstellen“. Mandatsdatum = Eintrittsdatum – mit dem unterschriebenen
   Mandat abgleichen.
 - **Austritt:** im Mitglied → „Austritt“. Ist die Person Zahler für andere, fragt das System, wie es mit dem Konto weitergeht.
-- **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!).
-- **Beitragsregeln einstellen:** Verwaltung → Stammdaten → „Familien-/Ehegattenbeitrag (Regeln)“. Je Regel: Betrag,
-  höchstens wie viele Erwachsene und Kinder (leer = beliebig viele, 0 = keine), Kinder bis Alter (17 = bis 18) und mit
-  Ausbildung bis Alter (leer = keine Verlängerung). Vorbelegt: **Familienbeitrag** (2 Erwachsene, beliebig viele Kinder
-  bis 18, in Ausbildung bis 25) und **Ehegattenbeitrag** (2 Erwachsene, keine Kinder). Der **Kinderbeitrag** (bis 18)
-  ist eine Beitragsart mit Altersgrenze (Stammdaten → Beitragsarten). Jede Gemeinschaft bekommt ihre Regel in
-  Finanzen → Gemeinschaften (bestehende Gemeinschaften einmal zuordnen – sonst Hinweis „ohne Regel“).
+- **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!). Neue IBAN bei
+  gleichem Inhaber: Das Mandat gilt weiter, der nächste SEPA-Lauf meldet der Bank die Mandatsänderung automatisch
+  (Probelauf und Kontrollliste zeigen „Änderung“).
+- **Beitragsregeln einstellen:** alles an einer Stelle – Verwaltung → Stammdaten → **Beitragsarten**. Einzeltarife
+  (Erwachsene, Kinderbeitrag bis 18 über „Alter von/bis“, Fördermitglied) und die Pauschalen **Familienbeitrag** und
+  **Ehegattenbeitrag** (Feld „Als Gemeinschaft“ = Familie bzw. Ehepaar). Für die Pauschalen zusätzlich: höchstens wie
+  viele Erwachsene und Kinder (leer = beliebig viele, 0 = keine), Kinder bis Alter (17 = bis 18) und mit Ausbildung bis
+  Alter (leer = keine Verlängerung). Vorbelegt: Familienbeitrag (2 Erwachsene, beliebig viele Kinder bis 18, in
+  Ausbildung bis 25), Ehegattenbeitrag (2 Erwachsene, keine Kinder). Derselbe Eintrag gilt für den Online-Antrag
+  („Schlüssel im Online-Formular“) und die Beitragsänderung zum 01.01. Jede Gemeinschaft bekommt ihren Tarif in
+  Finanzen → Gemeinschaften („Regel“; bestehende Gemeinschaften einmal zuordnen – sonst Hinweis „ohne Regel“).
 - **Abweichungen:** Familien → „Abweichungen“ listet alles, was nicht zu den Regeln passt (zu viele Erwachsene/Kinder,
   Kind über der Altersgrenze ohne Ausbildung, Ausbildung ohne voraussichtliches Ende, Festbetrag ≠ Betrag der Regel,
   Gemeinschaft mit nur einer Person, Beitragsart passt nicht zum Alter – z. B. Kinderbeitrag über 18). Alter zählt zum

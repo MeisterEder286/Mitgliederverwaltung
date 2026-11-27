@@ -42,6 +42,44 @@ test('Beitragsart: zum Jahr gültige Zeile gleicher Bezeichnung (Preisänderung)
   assert.strictEqual(g.Beitrag.sollJeKonto(2, d, 2027).betrag, 120);
 });
 
+test('Beitragsänderung ab 2027: Vorschau je Konto, Felder mit Stichtag, frühere Jahre rechnen mit altem Betrag', () => {
+  const { g, d } = beitragsdaten();
+  const r = rein(g.Beitrag.beitragsaenderung(d, 2027, {
+    arten: [{ beitragsart_id: 1, betrag: 110 }, { beitragsart_id: 2, betrag: 45 }],
+    festbetraege: [{ alt: 180, neu: 200 }]
+  }));
+  assert.deepStrictEqual(r.fehler, []);
+  assert.deepStrictEqual(r.arten, [{ beitragsart_id: 1, bezeichnung: 'Erwachsene', alt: 100, neu: 110 }], 'unveränderte Jugend fehlt');
+  assert.deepStrictEqual(r.gemeinschaften.map(x => [x.beitragsgemeinschaft_id, x.alt, x.neu]), [[1, 180, 200]]);
+  assert.deepStrictEqual(r.aenderungen.Beitragsart[1], { betrag: 110, betrag_vorher: 100, gueltig_ab: '2027-01-01' });
+  assert.deepStrictEqual(r.aenderungen.Beitragsgemeinschaft[1], { festbetrag: 200, festbetrag_vorher: 180, festbetrag_ab: '2027-01-01' });
+  const wagner = r.konten.find(k => k.beitragskonto_id === 1);
+  assert.deepStrictEqual([wagner.alt, wagner.neu, wagner.differenz], [280, 310, 30]);
+  assert.ok(r.konten.every(k => k.differenz !== 0));
+  assert.strictEqual(r.summe_neu - r.summe_alt, r.konten.reduce((n, k) => n + k.differenz, 0));
+
+  // Felder übernehmen: 2026 bleibt 280 (Nachlauf/Rechnung), 2027 rechnet 310 – eine Zeile je Tarif
+  Object.assign(d.Beitragsart[0], r.aenderungen.Beitragsart[1]);
+  Object.assign(d.Beitragsgemeinschaft[0], r.aenderungen.Beitragsgemeinschaft[1]);
+  assert.strictEqual(g.Beitrag.sollJeKonto(1, d, 2026).betrag, 280);
+  assert.strictEqual(g.Beitrag.sollJeKonto(1, d, 2027).betrag, 310);
+  assert.strictEqual(d.Beitragsart.filter(a => a.bezeichnung === 'Erwachsene').length, 1);
+  // erneut planen für dasselbe Jahr: der ursprüngliche Vorjahresbetrag bleibt betrag_vorher
+  const r2 = rein(g.Beitrag.beitragsaenderung(d, 2027, { arten: [{ beitragsart_id: 1, betrag: 115 }] }));
+  assert.deepStrictEqual(r2.aenderungen.Beitragsart[1], { betrag: 115, betrag_vorher: 100, gueltig_ab: '2027-01-01' });
+  // Tarifwechsel und Familien-Vorschlag finden die Art auch vor dem Stichtag (mit altem Betrag)
+  assert.strictEqual(g.Beitrag.artVerfuegbar(d.Beitragsart[0], '2026-06-01'), true);
+  assert.strictEqual(g.Beitrag.betragAm(d.Beitragsart[0], '2026-06-01'), 100);
+});
+
+test('Beitragsänderung: gesperrt bei vorhandenen Sollstellungen, Eingabefehler', () => {
+  const { g, d } = beitragsdaten();
+  const r = rein(g.Beitrag.beitragsaenderung(d, 2026, { arten: [{ beitragsart_id: 1, betrag: 110 }] }));
+  assert.match(r.fehler.join(' '), /bereits \d+ Sollstellung/);
+  const f = rein(g.Beitrag.beitragsaenderung(d, 2027, { arten: [{ beitragsart_id: 1, betrag: -5 }, { beitragsart_id: 77, betrag: 1 }], festbetraege: [{ alt: 180, neu: null }] }));
+  assert.strictEqual(f.fehler.length, 3);
+});
+
 test('Mandatsverfall nach 36 Monaten ohne Nutzung (Fischer ohne Einzug seit Mandatsdatum)', () => {
   const { g, d } = beitragsdaten();
   const fischer = d.Beitragskonto.find(k => k.beitragskonto_id === 4);

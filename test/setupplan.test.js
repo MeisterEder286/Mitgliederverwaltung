@@ -78,7 +78,7 @@ test('leeres Sheet: alle Tabs, Köpfe, Formate, Startbelegung, ID-Zähler', () =
   assert.deepStrictEqual(auswahl.find(a => a.name === 'ehrenmitglied').werte, ['ja', 'nein']);
 
   const seeds = plan.schritte.filter(s => s.art === 'startbelegung').map(s => s.tab).sort();
-  assert.deepStrictEqual(seeds, ['Abteilung', 'Aufbewahrungsfrist', 'Beitragsart', 'Ehrungsregel', 'Funktionsart', 'Gemeinschaftsart', 'Qualifikationsart', 'Vorlage']);
+  assert.deepStrictEqual(seeds, ['Abteilung', 'Aufbewahrungsfrist', 'Beitragsart', 'Ehrungsregel', 'Funktionsart', 'Qualifikationsart', 'Vorlage']);
 
   // Startbelegung typgerecht und in Kopf-Reihenfolge, version = 1
   const ba = plan.schritte.find(s => s.art === 'startbelegung' && s.tab === 'Beitragsart');
@@ -120,7 +120,7 @@ test('vorhandener Tab: keine Umsortierung, Zusatzspalte gemeldet, fehlende angeh
   const g = lade();
   const soll = rein(g.Schema.TABELLEN.Abteilung.spalten.map(s => s.name));
   // vertauscht, ohne "version", mit Zusatzspalte
-  const ist = ['bezeichnung', 'abteilung_id', 'notiz_alt', 'blsv_sportart', 'meldepflichtig', 'aktiv', 'bemerkung', 'geaendert_am', 'geaendert_von'];
+  const ist = ['bezeichnung', 'abteilung_id', 'notiz_alt', 'blsv_sportart', 'meldepflichtig', 'aktiv', 'online_schluessel', 'bemerkung', 'geaendert_am', 'geaendert_von'];
   const plan = rein(g.SetupPlan.plane({ Abteilung: { kopf: ist, zeilen: 5, maxId: 5 } }));
   const s = plan.schritte.filter(x => x.tab === 'Abteilung');
 
@@ -141,7 +141,7 @@ test('vorhandener Tab: keine Umsortierung, Zusatzspalte gemeldet, fehlende angeh
 
 test('Startbelegung folgt der vorhandenen Spaltenreihenfolge', () => {
   const g = lade();
-  const ist = ['bezeichnung', 'abteilung_id', 'blsv_sportart', 'meldepflichtig', 'aktiv', 'bemerkung', 'version', 'geaendert_am', 'geaendert_von'];
+  const ist = ['bezeichnung', 'abteilung_id', 'blsv_sportart', 'meldepflichtig', 'aktiv', 'online_schluessel', 'bemerkung', 'version', 'geaendert_am', 'geaendert_von'];
   const plan = rein(g.SetupPlan.plane({ Abteilung: { kopf: ist, zeilen: 0 } }));
   const sb = plan.schritte.find(x => x.art === 'startbelegung' && x.tab === 'Abteilung');
   assert.deepStrictEqual(sb.kopf, ist);

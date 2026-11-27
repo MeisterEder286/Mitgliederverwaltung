@@ -12,7 +12,7 @@ const { erzeugeFakes, beispielTabs } = require('./hilfe/gas-fakes');
 
 const HEUTE = '2026-10-25';
 const TABS = ['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
-  'Beitragsart', 'Gemeinschaftsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
+  'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation',
   'Ehrungsregel', 'Ehrung', 'Einwilligung', 'Vorlage', 'Dokument', 'Anschreiben', 'Notiz', '_Konfig', 'Benutzer', '_Protokoll', '_Messung'];
 
 function aufbau(email) {

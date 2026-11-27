@@ -10,7 +10,8 @@
   Besonderheiten:
     - Keine externen Ressourcen (Schriften, Bibliotheken, CDNs), nur Systemschriften (B8).
     - <base target="_top">: Links (z. B. Impressum) öffnen außerhalb des Apps-Script-Rahmens.
-    - Scriptlets <? ?> nie innerhalb ausführbarer <script>-Blöcke (npm run check prüft das).
+    - Scriptlets nie innerhalb ausführbarer <script>-Blöcke (npm run check prüft das).
+    - Scriptlet-Zeichen nie in Kommentaren schreiben – Apps Script wertet sie auch dort aus.
 -->
 <!DOCTYPE html>
 <html lang="de">
@@ -47,6 +48,7 @@
   <script type="application/json" id="startdaten"><?!= startdatenJson ?></script>
   <?!= include_('client/kern') ?>
   <?!= include_('client/ansicht_start') ?>
+  <?!= include_('client/ansicht_dashboard') ?>
   <?!= include_('client/ansicht_mitglieder') ?>
   <?!= include_('client/ansicht_beitritt') ?>
   <?!= include_('client/ansicht_funktionen') ?>

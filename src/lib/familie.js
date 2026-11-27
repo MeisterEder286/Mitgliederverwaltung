@@ -10,7 +10,7 @@
  *             Beitragskonto, Beitragsart, Sollstellung), `konfig` = _Konfig als { schluessel: wert }.
  * Wer darf was: – (Rechenfunktionen). Lesen mit konto_lesen, Umstellen mit mitglied_bearbeiten (Servermodul).
  * Besonderheiten:
- *   - Regeln: je Gemeinschaft aus ihrer Gemeinschaftsart (Familienbeitrag/Ehegattenbeitrag: Höchstzahl Erwachsene/
+ *   - Regeln: je Gemeinschaft aus ihrer Beitragsart „als Gemeinschaft“ (Familienbeitrag/Ehegattenbeitrag: Höchstzahl Erwachsene/
  *     Kinder, kinder_bis_alter, ausbildung_bis_alter, Betrag) – fehlt sie, gelten die _Konfig-Werte.
  *     abweichungen() meldet alles, was davon abweicht (auch Einzel-Beitragsarten, deren Altersgrenze nicht passt).
  *   - _Konfig: familie_kinder_bis_alter (Standard 17), familie_ausbildung_bis_alter (25),
@@ -100,11 +100,11 @@ var Familie = (function () {
 
   /** Passende Einzel-Beitragsart nach Alter (aktive Arten mit Altersgrenze bevorzugt). */
   function vorschlagArt(daten, alter, tag) {
-    var aktive = (daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false && (!a.gueltig_ab || a.gueltig_ab <= tag); });
+    var aktive = (daten.Beitragsart || []).filter(function (a) { return Beitrag.artVerfuegbar(a, tag) && !a.als_gemeinschaft; });
     var mitGrenze = function (a) { return hat(a.alter_von) || hat(a.alter_bis); };
     var passt = aktive.filter(function (a) { return Beitrag.altersbereichPasst(a, alter); });
     var art = passt.filter(mitGrenze)[0] || passt[0] || null;
-    return art ? { beitragsart_id: art.beitragsart_id, bezeichnung: art.bezeichnung, betrag: Number(art.betrag || 0) } : null;
+    return art ? { beitragsart_id: art.beitragsart_id, bezeichnung: art.bezeichnung, betrag: Beitrag.betragAm(art, tag) } : null;
   }
 
   /** Bewertung eines Kindes zum Stichtag. */
@@ -145,7 +145,7 @@ var Familie = (function () {
     heute = heute || tag;
     var ix = index(daten);
     var artVon = {};
-    (daten.Gemeinschaftsart || []).forEach(function (a) { artVon[a.gemeinschaftsart_id] = a; });
+    (daten.Beitragsart || []).forEach(function (a) { artVon[a.beitragsart_id] = a; });
     var eintraege = [], gemeinschaften = [];
     Object.keys(ix.jeGemeinschaft).forEach(function (gid) {
       var g = ix.gemeinschaft[gid];
@@ -154,7 +154,7 @@ var Familie = (function () {
       if (!mitglieder.length) return;
       var konto = ix.konto[mitglieder[0].beitragskonto_id] || null;
       var rolle = rollen(mitglieder, konto, tag);
-      var e = einstellungenFuer(konfig, hat(g.gemeinschaftsart_id) ? artVon[g.gemeinschaftsart_id] : null);
+      var e = einstellungenFuer(konfig, hat(g.beitragsart_id) ? artVon[g.beitragsart_id] : null);
       var bleibende = 0, liste = [];
       mitglieder.forEach(function (m) {
         var b = rolle[m.mitglied_id] === 'kind' ? bewerte(m, tag, heute, e)
@@ -249,7 +249,7 @@ var Familie = (function () {
     return { aenderungen: aenderungen, hinweise: hinweise.filter(function (h, i, a) { return a.indexOf(h) === i; }), fehler: fehler };
   }
 
-  // ================================================================== Regeln je Gemeinschaftsart, Abweichungen
+  // ================================================================== Regeln je Familien-/Ehegattenbeitrag, Abweichungen
 
   /** Titel und Schwere der Abweichungen (Bericht „Abweichungen von den Beitragsregeln“, Datenqualität). */
   var ABWEICHUNGEN = {
@@ -262,11 +262,12 @@ var Familie = (function () {
     nur_eine_person: { schwere: 'warnung', titel: 'Gemeinschaft mit nur einer aktiven Person' },
     ohne_regel: { schwere: 'hinweis', titel: 'Gemeinschaft mit Festbetrag ohne zugeordnete Regel (Familien-/Ehegattenbeitrag)' },
     regel_inaktiv: { schwere: 'warnung', titel: 'Zugeordnete Regel ist nicht mehr aktiv' },
-    beitragsart_alter: { schwere: 'warnung', titel: 'Beitragsart passt nicht zum Alter (z. B. Kinderbeitrag über 18)' }
+    beitragsart_alter: { schwere: 'warnung', titel: 'Beitragsart passt nicht zum Alter (z. B. Kinderbeitrag über 18)' },
+    beitragsart_gemeinschaft: { schwere: 'warnung', titel: 'Familien-/Ehegattenbeitrag als Beitragsart einer einzelnen Person' }
   };
 
   /**
-   * Einstellungen für eine Gemeinschaft: die Regel (Gemeinschaftsart) geht vor _Konfig.
+   * Einstellungen für eine Gemeinschaft: die Regel (Beitragsart mit als_gemeinschaft) geht vor _Konfig.
    * ausbildungBis === null heißt: keine Verlängerung durch Ausbildung (z. B. Ehegattenbeitrag).
    */
   function einstellungenFuer(konfig, art) {
@@ -293,7 +294,7 @@ var Familie = (function () {
 
   /**
    * Prüft eine Gemeinschaft (oder eine geplante) gegen ihre Regel zum Stichtag tag.
-   * mitglieder: aktive Personen (Mitglied-Zeilen, bei geplanten mit vorläufigen IDs). art: Gemeinschaftsart oder null.
+   * mitglieder: aktive Personen (Mitglied-Zeilen, bei geplanten mit vorläufigen IDs). art: Beitragsart (als Gemeinschaft) oder null.
    * Liefert { erwachsene, kinder, abweichungen: [{ regel, schwere, titel, meldung, mitglied_id }] }.
    */
   function pruefeGemeinschaft(g, art, mitglieder, konto, tag, heute, konfig) {
@@ -337,7 +338,7 @@ var Familie = (function () {
     var tag = stichtag(konfig, Number(String(heute).slice(0, 4)));
     var ix = index(daten);
     var arten = {};
-    (daten.Gemeinschaftsart || []).forEach(function (a) { arten[a.gemeinschaftsart_id] = a; });
+    (daten.Beitragsart || []).forEach(function (a) { arten[a.beitragsart_id] = a; });
     var aus = [];
     Object.keys(ix.jeGemeinschaft).forEach(function (gid) {
       var g = ix.gemeinschaft[gid];
@@ -345,7 +346,7 @@ var Familie = (function () {
       var mitglieder = ix.jeGemeinschaft[gid].filter(function (m) { return m.anonymisiert !== true && aktivAm(m, ix, heute); });
       if (!mitglieder.length) return;
       var konto = ix.konto[mitglieder[0].beitragskonto_id] || null;
-      var art = hat(g.gemeinschaftsart_id) ? arten[g.gemeinschaftsart_id] || null : null;
+      var art = hat(g.beitragsart_id) ? arten[g.beitragsart_id] || null : null;
       pruefeGemeinschaft(g, art, mitglieder, konto, tag, heute, konfig).abweichungen.forEach(function (a) {
         a.gemeinschaft_id = g.beitragsgemeinschaft_id; a.gemeinschaft = g.bezeichnung; a.regel_name = art ? art.bezeichnung : null;
         aus.push(a);
@@ -358,6 +359,12 @@ var Familie = (function () {
       var g = m.beitragsgemeinschaft_id ? ix.gemeinschaft[m.beitragsgemeinschaft_id] : null;
       if (hatFestbetrag(g)) return;   // zahlt über die Pauschale, die Einzelart wirkt nicht
       var a = bArten[m.beitragsart_id];
+      if (a && a.als_gemeinschaft) {
+        aus.push({ regel: 'beitragsart_gemeinschaft', schwere: ABWEICHUNGEN.beitragsart_gemeinschaft.schwere, titel: ABWEICHUNGEN.beitragsart_gemeinschaft.titel,
+          meldung: name(m) + ': „' + a.bezeichnung + '“ ist als Beitragsart eingetragen – Familien-/Ehegattenbeitrag läuft über eine Beitragsgemeinschaft.',
+          mitglied_id: m.mitglied_id, name: name(m), gemeinschaft_id: null, gemeinschaft: null, regel_name: a.bezeichnung });
+        return;
+      }
       var alter = Mitgliedschaft.alter(m.geburtsdatum, tag);
       // passt zum Stichtag ODER heute → keine Abweichung (der Wechsel kommt mit dem Tarifwechsel zum Jahreswechsel)
       if (!a || alter === null || Beitrag.altersbereichPasst(a, alter) || Beitrag.altersbereichPasst(a, Mitgliedschaft.alter(m.geburtsdatum, heute))) return;

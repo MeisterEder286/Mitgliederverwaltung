@@ -20,7 +20,7 @@
  *   - Finanzlisten (konten, gemeinschaften, sollstellungen) nur mit Sichtklasse „finanz“,
  *     qualifikationen nur mit „hochsensibel“, Ampel fz_ampel nur mit „hochsensibel“.
  * Besonderheiten:
- *   - IBAN/BIC stehen NIE in der Basis und damit nie im Cache oder beim Client. Ersatz: iban_maskiert, iban_ok.
+ *   - IBAN/BIC (auch iban_vorher) stehen NIE in der Basis und damit nie im Cache oder beim Client. Ersatz: iban_maskiert, iban_ok.
  *     Den Klartext lädt nur die Funktion „IBAN aufdecken“ einzeln und protokolliert (Phase 4).
  *   - Abgeleitete Felder an mitglieder: status_abgeleitet, mitglied_seit, alter, jugend, gekuendigt_zum,
  *     abteilungen (laufende, sichtbare abteilung_ids), funktionen_laufend (funktionsart_ids), fz_ampel.
@@ -40,7 +40,6 @@ var SnapshotKern = (function () {
     Funktionsart: 'funktionsarten',
     Funktion: 'funktionen',
     Beitragsart: 'beitragsarten',
-    Gemeinschaftsart: 'gemeinschaftsarten',
     Beitragsgemeinschaft: 'gemeinschaften',
     Beitragskonto: 'konten',
     Sollstellung: 'sollstellungen',
@@ -55,7 +54,7 @@ var SnapshotKern = (function () {
     Notiz: 'notizen'
   };
   var TABS = Object.keys(LISTEN);
-  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Gemeinschaftsart', 'Qualifikationsart', 'Ehrungsregel', 'Vorlage'];
+  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel', 'Vorlage'];
   // Schriftverkehr: nur mit Sichtklasse „finanz“; Zeilen nur zu sichtbaren Personen/Konten.
   var KORRESPONDENZ = ['Dokument', 'Anschreiben'];
   // Große Textfelder bleiben aus Basis und Snapshot heraus; sie werden bei Bedarf einzeln geladen.
@@ -151,7 +150,7 @@ var SnapshotKern = (function () {
 
   function kontoOhneIban(k) {
     var o = {};
-    Object.keys(k).forEach(function (f) { if (f !== 'iban' && f !== 'bic') o[f] = k[f]; });
+    Object.keys(k).forEach(function (f) { if (f !== 'iban' && f !== 'bic' && f !== 'iban_vorher') o[f] = k[f]; });
     o.iban_maskiert = k.iban ? ibanMaskiert(k.iban) : null;
     o.iban_ok = k.iban ? ibanOk(k.iban) : null;
     return o;
@@ -403,6 +402,15 @@ var SnapshotKern = (function () {
     return !!personenkreisGemerkt(basis, ix, ktx, heute).ids[Number(id)];
   }
 
+  /**
+   * Darf der Kontext genau diese Zeile sehen (und damit ändern)? Gleiche Regel wie im Client-Snapshot –
+   * z. B. Qualifikationen für Abteilungsleiter nur bei laufender Funktion in der eigenen Abteilung.
+   */
+  function zeileSichtbarFuer(basis, ktx, heute, tab, zeile) {
+    var ix = indexiere(basis);
+    return !!zeile && zeileSichtbar(tab, zeile, personenkreis(basis, ix, ktx, heute), ktx);
+  }
+
   // ------------------------------------------------------------------ Write-through
 
   /**
@@ -477,7 +485,7 @@ var SnapshotKern = (function () {
   return {
     LISTEN: LISTEN, TABS: TABS, BEREICHE: BEREICHE, bereichVon: bereichVon, nurBereiche: nurBereiche, packe: packe,
     ibanOk: ibanOk, ibanMaskiert: ibanMaskiert,
-    basisAusTabs: basisAusTabs, fuer: fuer, mitgliedSichtbar: mitgliedSichtbar,
+    basisAusTabs: basisAusTabs, fuer: fuer, mitgliedSichtbar: mitgliedSichtbar, zeileSichtbarFuer: zeileSichtbarFuer,
     aenderungAnwenden: aenderungAnwenden, antwortFuer: antwortFuer, fzAmpel: function (basis, id, heute) {
       return fzAmpel(id, indexiere(basis), heute);
     }

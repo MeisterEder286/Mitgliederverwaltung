@@ -79,13 +79,13 @@ var FamilieModul = (function () {
       eintraege: relevant,
       prognose: Familie.prognose(x.daten, jahr, n, x.konfig, h),
       anschreiben: anschreibenListe(relevant),
-      beitragsarten: (x.daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false; })
+      beitragsarten: (x.daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false && !a.als_gemeinschaft; })
         .map(function (a) { return { beitragsart_id: a.beitragsart_id, bezeichnung: a.bezeichnung, betrag: a.betrag }; })
     };
   }
 
   /**
-   * Abweichungen von den Beitragsregeln (Gemeinschaftsart: Familien-/Ehegattenbeitrag; Altersgrenzen der
+   * Abweichungen von den Beitragsregeln (Beitragsarten „als Gemeinschaft“: Familien-/Ehegattenbeitrag; Altersgrenzen der
    * Beitragsarten) zum heutigen Tag, dazu die Regeln selbst zur Anzeige.
    */
   function abweichungen(ktx) {
@@ -93,8 +93,8 @@ var FamilieModul = (function () {
     var h = heute();
     return {
       stand: h, stichtag: Familie.stichtag(x.konfig, Number(h.slice(0, 4))),
-      regeln: (x.daten.Gemeinschaftsart || []).filter(function (a) { return a.aktiv !== false; }).map(function (a) {
-        return { gemeinschaftsart_id: a.gemeinschaftsart_id, bezeichnung: a.bezeichnung, betrag: a.betrag, text: Familie.regelText(a, x.konfig) };
+      regeln: (x.daten.Beitragsart || []).filter(function (a) { return a.aktiv !== false && a.als_gemeinschaft; }).map(function (a) {
+        return { beitragsart_id: a.beitragsart_id, bezeichnung: a.bezeichnung, betrag: a.betrag, text: Familie.regelText(a, x.konfig) };
       }),
       abweichungen: Familie.abweichungen(x.daten, x.konfig, h)
     };

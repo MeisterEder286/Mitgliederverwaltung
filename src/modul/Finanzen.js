@@ -14,6 +14,7 @@
  *   - sollstellung_bearbeiten: Jahreslauf anlegen, Zahlungsstatus buchen
  *   - sepa_lauf: Probelauf, Freigabe, XML-Datei
  *   - mitglied_bearbeiten: Tarifwechsel übernehmen (ändert die Beitragsart am Mitglied)
+ *   - stammdaten_bearbeiten: Beitragsänderung übernehmen (neue Tarife/Pauschalen ab 01.01.; Vorschau mit konto_lesen)
  * Besonderheiten:
  *   - Massenschreiben (Sollstellungslauf ~850 Zeilen, SEPA-Vermerke, Sammelbuchungen) läuft NICHT zeilenweise über
  *     DB.einfuegen/DB.aktualisieren (das wären tausende Tabellenzugriffe), sondern über massenEinfuegen /
@@ -255,7 +256,8 @@ var Finanzen = (function () {
   function kontoSpeichern(ktx, id, version, werte) {
     werte = werte || {};
     return DB.mitSperre(function () {
-      var konten = DB.lese(['Beitragskonto']).Beitragskonto;   // mit Klartext – nur hier, nur zum Prüfen/Schreiben
+      var gelesen = DB.lese(['Beitragskonto', 'Sollstellung']);   // mit Klartext – nur hier, nur zum Prüfen/Schreiben
+      var konten = gelesen.Beitragskonto;
       var hinweise = [];
       if (id === null || id === undefined || id === '') {
         var w = kontoPruefen(werte, null, konten);
@@ -276,19 +278,38 @@ var Finanzen = (function () {
       var w2 = kontoPruefen(werte, alt, konten);
       if (w2.iban !== undefined && Iban.normalisiere(w2.iban || '') === Iban.normalisiere(alt.iban || '')) delete w2.iban;
       if (w2.aktiv === false) pruefeStilllegen(id);
+      kontowechselVermerken(alt, w2, gelesen.Sollstellung);
       var r = DB.aktualisieren('Beitragskonto', id, w2, version, ktx);
-      Protokoll.schreibe(ktx, Protokoll.ausDiff('Beitragskonto', id, r.diff));
+      // iban_vorher/iban_geaendert_am sind Ableitungen aus der IBAN-Änderung, die schon protokolliert wird
+      Protokoll.schreibe(ktx, Protokoll.ausDiff('Beitragskonto', id, r.diff.filter(function (x) { return x.feld !== 'iban_vorher' && x.feld !== 'iban_geaendert_am'; })));
       var felder = r.diff.map(function (x) { return x.feld; });
       if (felder.indexOf('kontoinhaber_name') >= 0 || felder.indexOf('kontoinhaber_mitglied_id') >= 0) {
         hinweise.push('Neuer Kontoinhaber: Dafür ist ein neues, unterschriebenes Mandat nötig (neue Mandatsreferenz und -datum, erster Einzug als FRST).');
       } else if (felder.indexOf('iban') >= 0) {
-        hinweise.push('IBAN geändert: Bei gleichem Kontoinhaber gilt das Mandat weiter (Mandatsänderung wird beim nächsten Einzug wirksam).');
+        hinweise.push('IBAN geändert: Bei gleichem Kontoinhaber gilt das Mandat weiter. Der nächste Einzug meldet der Bank die Mandatsänderung (Konto- bzw. Bankwechsel).');
       }
       var antwort = Snapshot.schreibe(ktx, [{ tab: 'Beitragskonto', neu: r.neu }]);
       antwort.hinweise = hinweise;
       antwort.konto_id = id;
       return antwort;
     });
+  }
+
+  /**
+   * Merkt sich bei einem Kontowechsel unter demselben Mandat die zuletzt eingezogene IBAN (iban_vorher), damit der
+   * nächste SEPA-Lauf die Mandatsänderung meldet. Neues Mandat oder neuer Inhaber: nichts zu melden. Eine noch nicht
+   * übermittelte Änderung behält die ursprüngliche IBAN; zurück auf diese IBAN hebt die Änderung auf.
+   */
+  function kontowechselVermerken(alt, w, sollstellungen) {
+    function geaendert(f) { return w[f] !== undefined && (w[f] || null) !== (alt[f] || null); }
+    var neuesMandat = geaendert('mandatsreferenz') || geaendert('mandatsdatum') || geaendert('kontoinhaber_name') || geaendert('kontoinhaber_mitglied_id');
+    if (w.iban === undefined && !neuesMandat) return;
+    var neueIban = w.iban !== undefined ? w.iban : alt.iban;
+    if (neuesMandat || !neueIban) { w.iban_vorher = null; w.iban_geaendert_am = null; return; }
+    if (!alt.iban) return;
+    var offen = Sepa.mandatsaenderung(alt, sollstellungen);
+    if (!offen) { w.iban_vorher = alt.iban; w.iban_geaendert_am = heute(); return; }
+    if (Iban.normalisiere(neueIban) === Iban.normalisiere(alt.iban_vorher)) { w.iban_vorher = null; w.iban_geaendert_am = null; }
   }
 
   function aktivePersonenAufKonto(kontoId) {
@@ -355,12 +376,12 @@ var Finanzen = (function () {
   function gemeinschaftSpeichern(ktx, id, version, werte) {
     werte = werte || {};
     var w = {};
-    ['bezeichnung', 'gemeinschaftsart_id', 'festbetrag', 'aktiv', 'bemerkung'].forEach(function (f) { if (Object.prototype.hasOwnProperty.call(werte, f)) w[f] = werte[f]; });
-    if (w.gemeinschaftsart_id === '') w.gemeinschaftsart_id = null;
-    if (w.gemeinschaftsart_id !== undefined && w.gemeinschaftsart_id !== null) {
-      w.gemeinschaftsart_id = Number(w.gemeinschaftsart_id);
-      var regel = nachId(basis().tabs.Gemeinschaftsart || [], 'gemeinschaftsart_id')[w.gemeinschaftsart_id];
-      if (!regel) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'gemeinschaftsart_id', meldung: 'Diese Regel gibt es nicht.' }]);
+    ['bezeichnung', 'beitragsart_id', 'festbetrag', 'aktiv', 'bemerkung'].forEach(function (f) { if (Object.prototype.hasOwnProperty.call(werte, f)) w[f] = werte[f]; });
+    if (w.beitragsart_id === '') w.beitragsart_id = null;
+    if (w.beitragsart_id !== undefined && w.beitragsart_id !== null) {
+      w.beitragsart_id = Number(w.beitragsart_id);
+      var regel = nachId(basis().tabs.Beitragsart || [], 'beitragsart_id')[w.beitragsart_id];
+      if (!regel || !regel.als_gemeinschaft) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'beitragsart_id', meldung: 'Diese Regel gibt es nicht.' }]);
       // mit Regel und ohne eigenen Festbetrag: Betrag der Regel übernehmen
       var neuG = id === null || id === undefined || id === '';
       if ((neuG && (w.festbetrag === undefined || w.festbetrag === null || w.festbetrag === '')) ||
@@ -600,8 +621,13 @@ var Finanzen = (function () {
       s.anzahl++; s.summe = Beitrag.runde(s.summe + p.betrag);
     });
     var warnungen = [];
-    var ohneAdresse = l.posten.filter(function (p) { return !(p.adresse && p.adresse.strasse && p.adresse.plz && p.adresse.ort); }).length;
+    var ohneAdresse = l.posten.filter(function (p) { return !Sepa.adresseVollstaendig(p.adresse); }).length;
     if (ohneAdresse) warnungen.push(ohneAdresse + ' Zahler ohne vollständige Anschrift – die Adresse wird in der Datei weggelassen (mit der Hausbank klären, ob das zulässig ist).');
+    var h = heute();
+    var vergangen = l.posten.filter(function (p) { return p.einzugsdatum && p.einzugsdatum < h; }).length;
+    if (vergangen) warnungen.push(vergangen + ' Lastschrift(en) mit Einzugsdatum in der Vergangenheit – für die Datei bitte ein neues Einzugsdatum angeben.');
+    var mitAenderung = l.posten.filter(function (p) { return p.aenderung; }).length;
+    if (mitAenderung) warnungen.push(mitAenderung + ' Lastschrift(en) mit Mandatsänderung (Konto- oder Bankwechsel seit dem letzten Einzug) – wird in der Datei gemeldet.');
     var g = glaeubiger(x.konfig);
     var pruef = Sepa.pruefeFuerDatei(l.posten.length ? l : { posten: [{ betrag: 1, einzugsdatum: '2000-01-01', mandatsreferenz: 'X', konto: 0 }] }, g)
       .filter(function (t) { return !/^Konto /.test(t); });
@@ -644,7 +670,7 @@ var Finanzen = (function () {
       x.daten.Sollstellung = frisch.Sollstellung;
       var l = sepaUmfang(Sepa.lauf(x.daten, jahr, sepaOptionen(x.konfig, einzugsdatum)), x.daten.Sollstellung, modus);
       if (!l.posten.length) throw Fehler.fachlich('Der Lauf enthält keine Posten – es gibt keine offenen, einziehbaren Sollstellungen für ' + jahr + '.');
-      var datei = Sepa.xml(l, glaeubiger(x.konfig), { erstelltAm: DB.jetzt() });
+      var datei = Sepa.xml(l, glaeubiger(x.konfig), { erstelltAm: DB.jetzt(), heute: heute() });
       if (!datei.ok) throw Fehler.fachlich('Die SEPA-Datei kann noch nicht erzeugt werden: ' + datei.fehler.join(' '));
       var aend = {};
       l.posten.forEach(function (p) { aend[p.sollstellung_id] = { sepa_sequenz: p.sequenz, einzugsdatum: p.einzugsdatum }; });
@@ -691,6 +717,63 @@ var Finanzen = (function () {
       Protokoll.schreibe(ktx, prot);
       var a = Snapshot.schreibe(ktx, erg.map(function (e) { return { tab: 'Mitglied', neu: e.neu }; }));
       a.anzahl = erg.length;
+      return a;
+    });
+  }
+
+  /** Eingabe der Beitragsänderung aus dem Browser auf Zahlen bringen (alles Weitere prüft Beitrag.beitragsaenderung). */
+  function aenderungEingabe(e) {
+    e = e || {};
+    function liste(x) { return Array.isArray(x) ? x.slice(0, 200) : []; }
+    return {
+      arten: liste(e.arten).map(function (a) { return { beitragsart_id: Number(a && a.beitragsart_id), betrag: a && a.betrag }; }),
+      festbetraege: liste(e.festbetraege).map(function (f) { return { alt: f && f.alt, neu: f && f.neu }; })
+    };
+  }
+
+  /** Grundlage: Snapshot-Basis, Tarife/Pauschalen/Sollstellungen frisch aus der Tabelle. */
+  function aenderungDaten() {
+    var x = daten();
+    var frisch = DB.lese(['Beitragsart', 'Beitragsgemeinschaft', 'Sollstellung']);
+    x.daten.Beitragsart = frisch.Beitragsart; x.daten.Beitragsgemeinschaft = frisch.Beitragsgemeinschaft; x.daten.Sollstellung = frisch.Sollstellung;
+    return x;
+  }
+
+  /** Vorschau der Beitragsänderung ab 01.01. des Jahres: Tarife, Pauschalen, Wirkung je Konto. */
+  function beitragsaenderungVorschau(ktx, jahr, eingabe) {
+    var x = aenderungDaten();
+    jahr = jahrPruefen(jahr, x.konfig);
+    var r = Beitrag.beitragsaenderung(x.daten, jahr, aenderungEingabe(eingabe), { konfig: x.konfig });
+    delete r.aenderungen;
+    return r;
+  }
+
+  /**
+   * Beitragsänderung übernehmen: neue Beträge mit Stichtag 01.01. schreiben, alte bleiben als betrag_vorher/
+   * festbetrag_vorher für frühere Jahre. Liefert die betroffenen Konten (für die Vorabinformation).
+   */
+  function beitragsaenderungUebernehmen(ktx, jahr, eingabe) {
+    return DB.mitSperre(function () {
+      var x = aenderungDaten();
+      jahr = jahrPruefen(jahr, x.konfig);
+      if (jahr <= Number(heute().slice(0, 4))) throw Fehler.fachlich('Eine Beitragsänderung ist nur für ein künftiges Beitragsjahr möglich.');
+      var r = Beitrag.beitragsaenderung(x.daten, jahr, aenderungEingabe(eingabe), { konfig: x.konfig });
+      if (r.fehler.length) throw Fehler.fachlich(r.fehler.join(' '));
+      if (!r.arten.length && !r.gemeinschaften.length) throw Fehler.fachlich('Es ändert sich kein Betrag.');
+      var aend = [];
+      var prot = [];
+      ['Beitragsart', 'Beitragsgemeinschaft'].forEach(function (tab) {
+        if (!Object.keys(r.aenderungen[tab]).length) return;
+        massenAktualisieren(tab, r.aenderungen[tab], ktx).forEach(function (e) {
+          var id = tab === 'Beitragsart' ? e.neu.beitragsart_id : e.neu.beitragsgemeinschaft_id;
+          prot = prot.concat(Protokoll.ausDiff(tab, id, e.diff).map(function (p) { p.kommentar = 'Beitragsänderung ab ' + jahr; return p; }));
+          aend.push({ tab: tab, neu: e.neu });
+        });
+      });
+      Protokoll.schreibe(ktx, prot);
+      var a = Snapshot.schreibe(ktx, aend);
+      a.jahr = jahr; a.arten = r.arten; a.gemeinschaften = r.gemeinschaften; a.konten = r.konten;
+      a.summe_alt = r.summe_alt; a.summe_neu = r.summe_neu;
       return a;
     });
   }
@@ -764,6 +847,7 @@ var Finanzen = (function () {
     sammelBezahlt: sammelBezahlt,
     sepaProbelauf: sepaProbelauf, sepaFreigeben: sepaFreigeben, sepaXml: sepaXml,
     klaerliste: klaerliste, tarifwechsel: tarifwechsel, tarifwechselUebernehmen: tarifwechselUebernehmen,
+    beitragsaenderungVorschau: beitragsaenderungVorschau, beitragsaenderungUebernehmen: beitragsaenderungUebernehmen,
     buchhaltung: buchhaltung, exportVermerken: exportVermerken,
     // für Tests
     massenEinfuegen: massenEinfuegen, massenAktualisieren: massenAktualisieren

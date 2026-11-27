@@ -16,6 +16,11 @@
  *     PLZ, Ort, Land. Unvollständige Adressen werden weggelassen [A: für Zahler im EWR ist die Adresse optional –
  *     mit der Hausbank bestätigen]; die Klärliste (Beitrag.klaerliste) meldet sie.
  *   - Gläubiger-ID wird geprüft; mit dem Platzhalter aus _Konfig entsteht KEINE Datei, sondern eine Fehlerliste.
+ *   - Mandatsänderung (AmdmntInd): Wechselt der Zahler unter demselben Mandat das Konto (Beitragskonto.iban_vorher/
+ *     iban_geaendert_am, gesetzt vom Servermodul), meldet der nächste Einzug die Änderung – gleiche Bank: alte IBAN
+ *     (OrgnlDbtrAcct), andere Bank: SMNDA (OrgnlDbtrAgt). Erledigt, sobald danach ein Einzug bezahlt ist. Kein
+ *     Änderungshinweis, wenn unter dem Mandat noch nie eingezogen wurde oder das Mandat jünger ist als der Wechsel.
+ *     Sequenz bleibt wie abgeleitet (seit Rulebook 2016 ist FRST bei SMNDA nicht mehr Pflicht) [A: mit Hausbank klären].
  *
  * UPDATE-PROZEDUR bei einem künftigen Formatwechsel (Bus-Faktor, Übergabe §7):
  *   1. Neues XSD (z. B. pain.008.001.1x) von der Hausbank bzw. aus der DK-Spezifikation (Anlage 3) besorgen und
@@ -71,6 +76,44 @@ var Sepa = (function () {
     return frueher ? 'RCUR' : 'FRST';
   }
 
+  // ------------------------------------------------------------------ Mandatsänderung
+
+  /** Gleiche Bank? Nur für zwei DE-IBANs über die Bankleitzahl (Stellen 5–12) entscheidbar; sonst nein (→ SMNDA). */
+  function gleicheBank(a, b) {
+    a = Iban.normalisiere(a || ''); b = Iban.normalisiere(b || '');
+    return a.slice(0, 2) === 'DE' && b.slice(0, 2) === 'DE' && a.slice(4, 12) === b.slice(4, 12);
+  }
+
+  /**
+   * Offene Mandatsänderung eines Kontos für den nächsten Einzug oder null.
+   * konto: { beitragskonto_id, iban, iban_vorher, iban_geaendert_am, mandatsdatum }; sollstellungen: alle Sollstellungen;
+   * optionen: { ausser: sollstellung_id (die gerade einzuziehende) }.
+   * Liefert { art: 'konto', alteIban } (gleiche Bank) oder { art: 'bank' } (SMNDA).
+   */
+  function mandatsaenderung(konto, sollstellungen, optionen) {
+    optionen = optionen || {};
+    if (!konto || !konto.iban_vorher || !konto.iban_geaendert_am) return null;
+    var alt = Iban.normalisiere(konto.iban_vorher), neu = Iban.normalisiere(konto.iban || '');
+    if (!neu || alt === neu) return null;
+    var seit = konto.iban_geaendert_am;
+    if (konto.mandatsdatum && konto.mandatsdatum >= seit) return null;   // neues Mandat nach dem Wechsel
+    var eigene = (sollstellungen || []).filter(function (s) {
+      return s.beitragskonto_id === konto.beitragskonto_id && s.sollstellung_id !== optionen.ausser && s.sepa_sequenz &&
+        ERFOLGREICH.indexOf(s.status) >= 0 && s.einzugsdatum && (!konto.mandatsdatum || s.einzugsdatum >= konto.mandatsdatum);
+    });
+    if (!eigene.some(function (s) { return s.einzugsdatum < seit; })) return null;   // unter dem Mandat noch nie eingezogen
+    if (eigene.some(function (s) { return s.einzugsdatum >= seit; })) return null;   // Änderung schon übermittelt
+    return gleicheBank(alt, neu) ? { art: 'konto', alteIban: alt } : { art: 'bank' };
+  }
+
+  function aenderungXml(a) {
+    if (!a) return '';
+    return '<AmdmntInd>true</AmdmntInd><AmdmntInfDtls>' +
+      (a.art === 'konto' ? '<OrgnlDbtrAcct><Id><IBAN>' + escape(a.alteIban) + '</IBAN></Id></OrgnlDbtrAcct>'
+        : '<OrgnlDbtrAgt><FinInstnId><Othr><Id>SMNDA</Id></Othr></FinInstnId></OrgnlDbtrAgt>') +
+      '</AmdmntInfDtls>';
+  }
+
   // ------------------------------------------------------------------ Lauf
 
   function verwendungszweck(vorlage, werte) {
@@ -112,7 +155,9 @@ var Sepa = (function () {
       if (!pr.ok) return aus(Iban.fehlertext(pr.fehler));
       if (!k.mandatsreferenz || !k.mandatsdatum) return aus('Mandat unvollständig (Referenz oder Datum fehlt)');
       if (k.mandatsdatum > heute) return aus('Mandatsdatum liegt in der Zukunft');
-      var ms = Beitrag.mandatStatus(k, daten, heute, opt);
+      var einzug = optionen.einzugsdatum || s.einzugsdatum || Beitrag.faelligkeit(daten, opt, jahr);
+      // Verfall zum Einzugsdatum prüfen: ein Mandat, das bis zur Fälligkeit 36 Monate ungenutzt ist, deckt den Einzug nicht
+      var ms = Beitrag.mandatStatus(k, daten, einzug > heute ? einzug : heute, opt);
       if (ms.verfallen) return aus('Mandat verfallen (zuletzt genutzt ' + ms.letzteNutzung + ')');
       var bic = Iban.pruefeBic(k.bic);
       var nummern = (ix.mitgliederJeKonto[k.beitragskonto_id] || []).filter(function (m) {
@@ -125,13 +170,14 @@ var Sepa = (function () {
         sequenz: sequenz(k.beitragskonto_id, daten.Sollstellung, k, { ausser: s.sollstellung_id, immerRcur: optionen.immerRcur }),
         mandatsreferenz: k.mandatsreferenz,
         mandatsdatum: k.mandatsdatum,
+        aenderung: mandatsaenderung(k, daten.Sollstellung, { ausser: s.sollstellung_id }),
         name: k.kontoinhaber_name,
         iban: pr.iban,
         bic: bic.ok ? bic.bic : '',
         adresse: Beitrag.zahleradresse(k, daten),
         verwendungszweck: bereinige(verwendungszweck(vorlage, { jahr: jahr, konto: k.beitragskonto_id, name: k.kontoinhaber_name, nummern: nummern }), 140),
         endToEndId: kennung('TSV-' + jahr + '-K' + k.beitragskonto_id + '-S' + s.sollstellung_id),
-        einzugsdatum: optionen.einzugsdatum || s.einzugsdatum || Beitrag.faelligkeit(daten, opt, jahr)
+        einzugsdatum: einzug
       };
       posten.push(p);
       summe += p.betrag;
@@ -141,7 +187,14 @@ var Sepa = (function () {
 
   // ------------------------------------------------------------------ XML
 
-  function adresseVollstaendig(a) { return !!(a && a.strasse && a.plz && a.ort); }
+  /** ISO-Ländercode der Adresse (Standard DE) oder null, wenn das Freitextfeld keinen zweistelligen Code enthält. */
+  function landCode(a) {
+    var l = String((a && a.land) || 'DE').trim().toUpperCase();
+    return /^[A-Z]{2}$/.test(l) ? l : null;
+  }
+
+  /** Vollständig für die strukturierte Adresse: Straße, PLZ, Ort und ein gültiger Ländercode (sonst lehnt das XSD ab). */
+  function adresseVollstaendig(a) { return !!(a && a.strasse && a.plz && a.ort && landCode(a)); }
 
   function adresseXml(a, einr) {
     if (!adresseVollstaendig(a)) return '';
@@ -151,7 +204,7 @@ var Sepa = (function () {
       (a.hausnummer ? '<BldgNb>' + escape(bereinige(a.hausnummer, 16)) + '</BldgNb>' : '') +
       '<PstCd>' + escape(bereinige(a.plz, 16)) + '</PstCd>' +
       '<TwnNm>' + escape(bereinige(a.ort, 35)) + '</TwnNm>' +
-      '<Ctry>' + escape(String(a.land || 'DE').toUpperCase().slice(0, 2)) + '</Ctry>' +
+      '<Ctry>' + landCode(a) + '</Ctry>' +
       '</PstlAdr>';
   }
 
@@ -161,8 +214,9 @@ var Sepa = (function () {
 
   /**
    * Prüft Gläubigerangaben und Lauf. Liefert eine Liste von Fehlertexten (leer = in Ordnung).
+   * heute ('JJJJ-MM-TT', optional): Einzugsdaten davor sind unzulässig (die Bank lehnt die Datei ab).
    */
-  function pruefeFuerDatei(lauf, glaeubiger) {
+  function pruefeFuerDatei(lauf, glaeubiger, heute) {
     var f = [];
     if (!glaeubiger) return ['Gläubigerdaten fehlen.'];
     var gid = Iban.glaeubigerIdPruefen(glaeubiger.glaeubigerId);
@@ -178,18 +232,21 @@ var Sepa = (function () {
       if (!(p.betrag > 0) || p.betrag > 999999999.99) f.push('Konto ' + p.konto + ': ungültiger Betrag.');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(p.einzugsdatum || ''))) f.push('Konto ' + p.konto + ': Einzugsdatum fehlt.');
     });
+    var vergangen = heute ? (lauf && lauf.posten || []).filter(function (p) { return p.einzugsdatum && p.einzugsdatum < heute; }).length : 0;
+    if (vergangen) f.push(vergangen + ' Lastschrift(en) mit Einzugsdatum in der Vergangenheit – bitte ein neues Einzugsdatum angeben.');
     return f;
   }
 
   /**
    * Erzeugt die pain.008.001.08-Datei.
    * glaeubiger: { name, iban, bic?, glaeubigerId, adresse?: { strasse, hausnummer, plz, ort, land } }
-   * optionen:   { erstelltAm: 'JJJJ-MM-TTThh:mm:ss' (Standard: jetzt, UTC), msgId, batchBooking (Standard true) }
+   * optionen:   { erstelltAm: 'JJJJ-MM-TTThh:mm:ss' (Standard: jetzt, UTC), msgId, batchBooking (Standard true),
+   *               heute: 'JJJJ-MM-TT' (prüft, dass kein Einzugsdatum in der Vergangenheit liegt) }
    * Liefert { ok: true, xml, msgId, anzahl, summe, dateiname } oder { ok: false, fehler: [texte] }.
    */
   function xml(lauf, glaeubiger, optionen) {
     optionen = optionen || {};
-    var fehler = pruefeFuerDatei(lauf, glaeubiger);
+    var fehler = pruefeFuerDatei(lauf, glaeubiger, optionen.heute);
     if (fehler.length) return { ok: false, fehler: fehler };
 
     var erstellt = optionen.erstelltAm || new Date().toISOString().slice(0, 19);
@@ -219,7 +276,7 @@ var Sepa = (function () {
           '<PmtId><EndToEndId>' + escape(kennung(p.endToEndId)) + '</EndToEndId></PmtId>' +
           '<InstdAmt Ccy="EUR">' + betrag(p.betrag) + '</InstdAmt>' +
           '<DrctDbtTx><MndtRltdInf><MndtId>' + escape(kennung(p.mandatsreferenz)) + '</MndtId>' +
-          '<DtOfSgntr>' + escape(p.mandatsdatum) + '</DtOfSgntr></MndtRltdInf></DrctDbtTx>' +
+          '<DtOfSgntr>' + escape(p.mandatsdatum) + '</DtOfSgntr>' + aenderungXml(p.aenderung) + '</MndtRltdInf></DrctDbtTx>' +
           '<DbtrAgt>' + agentXml(p.bic) + '</DbtrAgt>' +
           '<Dbtr><Nm>' + escape(bereinige(p.name, 70)) + '</Nm>' + adresseXml(p.adresse) + '</Dbtr>' +
           '<DbtrAcct><Id><IBAN>' + escape(p.iban) + '</IBAN></Id></DbtrAcct>' +
@@ -266,12 +323,13 @@ var Sepa = (function () {
   function kontrollliste(lauf) {
     return lauf.posten.map(function (p) {
       return { konto: p.konto, name: p.name, iban: Iban.maskiere(p.iban), mandat: p.mandatsreferenz, sequenz: p.sequenz,
+        aenderung: !p.aenderung ? '' : p.aenderung.art === 'konto' ? 'Kontowechsel (alte IBAN ' + Iban.maskiere(p.aenderung.alteIban) + ')' : 'Bankwechsel (SMNDA)',
         einzug: p.einzugsdatum, betrag: p.betrag, zweck: p.verwendungszweck };
     });
   }
 
   return {
-    NAMESPACE: NAMESPACE, bereinige: bereinige, kennung: kennung, sequenz: sequenz, lauf: lauf,
-    pruefeFuerDatei: pruefeFuerDatei, xml: xml, kontrollliste: kontrollliste
+    NAMESPACE: NAMESPACE, bereinige: bereinige, kennung: kennung, sequenz: sequenz, mandatsaenderung: mandatsaenderung, lauf: lauf,
+    pruefeFuerDatei: pruefeFuerDatei, xml: xml, kontrollliste: kontrollliste, adresseVollstaendig: adresseVollstaendig
   };
 })();

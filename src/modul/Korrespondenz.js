@@ -221,13 +221,22 @@ var Korrespondenz = (function () {
         if (alM) ansprechpartner = [alM.vorname, alM.nachname].filter(Boolean).join(' ');
       }
     }
+    // Beitragsänderung: Jahressoll des Kontos im Vorjahr und im Briefjahr (nur mit Finanzsicht)
+    var aenderung = null;
+    if (anlass === 'Beitragsänderung' && k && jahr) {
+      aenderung = Beitrag.mitIndex(d, function () {
+        return { bisher: Beitrag.sollJeKonto(e.konto.beitragskonto_id, d, jahr - 1, { konfig: b.konfig || {} }).betrag,
+          neu: Beitrag.sollJeKonto(e.konto.beitragskonto_id, d, jahr, { konfig: b.konfig || {} }).betrag };
+      });
+    }
     var geb = e.mitglied ? e.mitglied.geburtsdatum : null;   // Alter steuert die Anschrift (Vertretung) – kein Feldinhalt
     return {
       mitglied: m, konto: k, inhaber: inh, sollstellung: s, zeitraum: zeitraum,
       abteilungen: abteilungen, funktionen: funktionen, beitragsart: beitragsart, gemeinschaft: gemeinschaft,
       alter: geb ? Mitgliedschaft.alter(geb, h) : null,
       alter_im_jahr: geb && m && !leer(m.geburtsdatum) ? Mitgliedschaft.alterImJahr(geb, Number(h.slice(0, 4))) : null,
-      jahr: jahr, heute: h, konfig: b.konfig || {}, ehrung: ehrung, ansprechpartner: ansprechpartner, zusatz: zusatz || {}
+      jahr: jahr, heute: h, konfig: b.konfig || {}, ehrung: ehrung, ansprechpartner: ansprechpartner, zusatz: zusatz || {},
+      beitragsaenderung: aenderung
     };
   }
 
@@ -413,10 +422,10 @@ var Korrespondenz = (function () {
       if (!frist || leer(frist.dauer_monate)) return 0;
       var monate = Number(frist.dauer_monate);
       var liste = (d.Anschreiben || []).filter(function (a) {
-        if (leer(a.inhalt) && leer(a.empfaenger)) return false;
+        if (leer(a.inhalt) && leer(a.empfaenger) && leer(a.email_an)) return false;
         var bezug = frist.bezugspunkt === 'Ende Geschäftsjahr' ? String(a.datum).slice(0, 4) + '-12-31' : a.datum;
         return Mitgliedschaft.plusMonate(bezug, monate) < h;
-      }).map(function (a) { return { id: a.anschreiben_id, aenderungen: { inhalt: null, empfaenger: null }, version: null }; });
+      }).map(function (a) { return { id: a.anschreiben_id, aenderungen: { inhalt: null, empfaenger: null, email_an: null }, version: null }; });
       if (!liste.length) return 0;
       var r = DB.aktualisiereViele('Anschreiben', liste, ktx);
       Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: 'Anschreiben', datensatz_id: '-', kommentar: 'Fristbereinigung: Inhalt von ' + r.length + ' Schreiben geleert' }]);

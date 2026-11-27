@@ -14,6 +14,11 @@
  *   - „Erwartet = importiert“: Die Zahl der <Daten16>-Einträge muss der Zahl angelegter + zugeordneter Personen
  *     entsprechen (wie im Access-Modul), sonst wird zurückgerollt.
  *   - Kein IBAN-Klartext an den Browser und ins Protokoll (nur maskiert).
+ *   - Eingang von der Homepage: Online-Anträge stehen als XML im Tab „Eingang“ einer GETRENNTEN Datei (Script
+ *     Property EINGANG_ID, nie die Datenbank selbst). Gelesen wird sie mit dem vorhandenen Scope spreadsheets;
+ *     die XML zerlegt der Server (src/lib/eingang.js), der Browser bekommt nur Namen und die maskierte Vorschau.
+ *     Je Antrag wird unter der Sperre erneut geprüft, ob er noch „neu“ ist, und nach der Übernahme sofort
+ *     abgeschlossen – so entsteht kein Antrag doppelt, auch wenn zwei Personen gleichzeitig importieren.
  */
 var BeitrittModul = (function () {
 
@@ -72,7 +77,7 @@ var BeitrittModul = (function () {
 
   /** Einen Antrag atomar übernehmen. Läuft innerhalb DB.mitSperre. */
   function einen(ktx, antrag, ent) {
-    var d = DB.lese(['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilungszugehoerigkeit', 'Beitragskonto', 'Abteilung', 'Beitragsart', '_Konfig']);
+    var d = DB.lese(['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilungszugehoerigkeit', 'Beitragskonto', 'Abteilung', 'Beitragsart', 'Einwilligung', '_Konfig']);
     var konfig = {};
     (d._Konfig || []).forEach(function (z) { if (z.schluessel) konfig[z.schluessel] = z.wert === null ? '' : String(z.wert); });
     var nummern = Beitritt.nummernkreis(d, konfig.mitgliedsnummer_naechste);
@@ -90,7 +95,16 @@ var BeitrittModul = (function () {
         var dub = p.dubletten[0];
         if (!dub) throw Fehler.fachlich(antrag.datei + ': ' + p.name + ' hat keinen passenden Eintrag für einen Wiedereintritt.');
         if (dub.status === 'aktiv') throw Fehler.fachlich(antrag.datei + ': ' + p.name + ' ist bereits aktives Mitglied (Nr. ' + dub.mitgliedsnummer + ') – Antrag überspringen oder als neue Person anlegen.');
+        // wie Mitglieder.wiedereintritt: für eine verstorbene Person kein Wiedereintritt
+        if (dub.status === 'verstorben') throw Fehler.fachlich(antrag.datei + ': ' + p.name + ' (Nr. ' + dub.mitgliedsnummer + ') ist als verstorben erfasst – kein Wiedereintritt möglich.');
         wieder[t.Mitglied[p.index].mitglied_id] = dub;
+      }
+    });
+    // Ohne gültiges Eintrittsdatum legt die Migration keinen Mitgliedschaftszeitraum an (Prüfliste eintritt_fehlt) –
+    // die Person wäre ohne Status, Beitrag und BLSV-Zählung. Dann nichts speichern.
+    t.Mitglied.forEach(function (m, i) {
+      if (!(t.Mitgliedschaftszeitraum || []).some(function (z) { return z.mitglied_id === m.mitglied_id; })) {
+        throw Fehler.fachlich(antrag.datei + ': Das Eintrittsdatum von ' + (plan.personen[i] ? plan.personen[i].name : 'Person ' + (i + 1)) + ' ist ungültig – bitte im Antrag korrigieren.');
       }
     });
     if (!ent.gemeinschaft && t.Beitragsgemeinschaft.length) {
@@ -99,7 +113,20 @@ var BeitrittModul = (function () {
       t.Beitragsgemeinschaft = [];
     }
 
-    var geschrieben = [];
+    // Für das Zurückrollen: eingefügte Zeilen (werden entfernt), Änderungen an Zeilen (alte Werte werden
+    // zurückgeschrieben) und der Nummernzähler (alter Wert). Vorher wurden nur Einfügungen zurückgenommen –
+    // ein Wiedereintritt blieb dann halb gespeichert, der Zähler sprang trotz „nichts gespeichert“ (Prüfbefund H4).
+    var geschrieben = [], geaendert = [], zaehler = null;
+    function aendere(tab, liste) {
+      var r = DB.aktualisiereViele(tab, liste, ktx);
+      var feld = Schema.TABELLEN[tab].idSpalte;
+      r.forEach(function (x) {
+        var alt = {};
+        x.diff.forEach(function (d) { alt[d.feld] = d.alt; });
+        geaendert.push({ tab: tab, id: x.neu[feld], alt: alt });
+      });
+      return r;
+    }
     function rein(tab, objekte) {
       if (!objekte.length) return [];
       var r = DB.einfuegenViele(tab, objekte, ktx);
@@ -172,7 +199,7 @@ var BeitrittModul = (function () {
         zugWieder.push({ id: alt.zugehoerigkeit_id, version: alt.version, aenderungen: { austrittsdatum: null, status: z.status, eintrittsdatum: z.eintrittsdatum } });
       });
       var zug = rein('Abteilungszugehoerigkeit', zugNeu);
-      DB.aktualisiereViele('Abteilungszugehoerigkeit', zugWieder, ktx).forEach(function (r) { zug.push(r.neu); });
+      aendere('Abteilungszugehoerigkeit', zugWieder).forEach(function (r) { zug.push(r.neu); });
       // 5. Nachträge: Vertretung, Kontoinhaber, Wiedereintritte
       var nachMitglied = [];
       t.Mitglied.forEach(function (m) {
@@ -191,15 +218,21 @@ var BeitrittModul = (function () {
       nachMitglied.forEach(function (x) { Object.keys(x.aenderungen).forEach(function (f) { if (x.aenderungen[f] === undefined) delete x.aenderungen[f]; }); });
       var mitgliedNeu = {};
       angelegt.forEach(function (m) { mitgliedNeu[m.mitglied_id] = m; });
-      DB.aktualisiereViele('Mitglied', nachMitglied, ktx).forEach(function (r) { mitgliedNeu[r.neu.mitglied_id] = r.neu; });
-      if (kontoNeu) {
+      aendere('Mitglied', nachMitglied).forEach(function (r) { mitgliedNeu[r.neu.mitglied_id] = r.neu; });
+      // 5b. Einwilligungen (Online-Antrag); bei Wiedereintritt keine doppelte laufende Einwilligung derselben Art
+      var laufend = {};
+      (d.Einwilligung || []).forEach(function (x) { if (!x.widerrufen_am) laufend[x.mitglied_id + '|' + x.art] = true; });
+      var einw = rein('Einwilligung', (t.Einwilligung || []).map(function (x) {
+        var o = Object.assign({}, x); o.mitglied_id = idVon[x.mitglied_id]; return o;
+      }).filter(function (x) { return !laufend[x.mitglied_id + '|' + x.art]; }));
+      if (kontoNeu && !plan.konto_extern) {
         var inhaberId = idVon[t.Mitglied[0].mitglied_id];
-        var kr = DB.aktualisiereViele('Beitragskonto', [{ id: kontoNeu.beitragskonto_id, aenderungen: { kontoinhaber_mitglied_id: inhaberId }, version: 1 }], ktx);
+        var kr = aendere('Beitragskonto', [{ id: kontoNeu.beitragskonto_id, aenderungen: { kontoinhaber_mitglied_id: inhaberId }, version: 1 }]);
         if (kr.length) kontoNeu = kr[0].neu;
       }
 
       // 6. Nummernzähler fortschreiben (zuletzt – nur wenn alles geklappt hat)
-      if (angelegt.length) Konfig.setze('mitgliedsnummer_naechste', nummern.stand(), 'Nächste freie Mitgliedsnummer');
+      if (angelegt.length) zaehler = { alt: Konfig.setze('mitgliedsnummer_naechste', nummern.stand(), 'Nächste freie Mitgliedsnummer') };
 
       // Protokoll (ohne IBAN-Klartext) und Snapshot
       if (kontoNeu) {
@@ -211,6 +244,8 @@ var BeitrittModul = (function () {
       Object.keys(mitgliedNeu).forEach(function (id) { aenderungen.push({ tab: 'Mitglied', neu: mitgliedNeu[id] }); });
       zr.forEach(function (z) { aenderungen.push({ tab: 'Mitgliedschaftszeitraum', neu: z }); });
       zug.forEach(function (z) { aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: z }); });
+      einw.forEach(function (z) { aenderungen.push({ tab: 'Einwilligung', neu: z }); });
+      if (einw.length) protokoll.push({ aktion: 'angelegt', tabelle: 'Einwilligung', datensatz_id: einw.map(function (z) { return z.einwilligung_id; }).join(','), kommentar: 'aus dem Online-Antrag: ' + plan.einwilligungen.join(', ') });
       var zeilen = t.Mitglied.map(function (m, i) {
         var id = idVon[m.mitglied_id];
         var x = mitgliedNeu[id] || {};
@@ -225,15 +260,29 @@ var BeitrittModul = (function () {
       return { datei: antrag.datei, ok: true, personen: zeilen, konto_id: kontoNeu ? kontoNeu.beitragskonto_id : null,
         gemeinschaft: gemNeu ? gemNeu.bezeichnung : null, warnungen: plan.warnungen, snapshot: snap };
     } catch (e) {
-      // Zurückrollen: bereits geschriebene Zeilen dieses Antrags wieder entfernen (rückwärts)
+      // Zurückrollen (rückwärts): 1. Zähler, 2. Änderungen an bestehenden Zeilen, 3. eingefügte Zeilen entfernen
+      if (zaehler) {
+        try { Konfig.setze('mitgliedsnummer_naechste', zaehler.alt === null ? '' : zaehler.alt, 'Nächste freie Mitgliedsnummer'); }
+        catch (e2) { console.error('Beitritt: Zurückrollen Nummernzähler fehlgeschlagen: ' + (e2 && e2.message)); }
+      }
+      for (var j = geaendert.length - 1; j >= 0; j--) {
+        try { DB.aktualisiereViele(geaendert[j].tab, [{ id: geaendert[j].id, aenderungen: geaendert[j].alt, version: null }], ktx); }
+        catch (e2) { console.error('Beitritt: Zurückrollen ' + geaendert[j].tab + ' ' + geaendert[j].id + ' fehlgeschlagen: ' + (e2 && e2.message)); }
+      }
       for (var i = geschrieben.length - 1; i >= 0; i--) {
         try { DB.entfernen(geschrieben[i].tab, geschrieben[i].ids); } catch (e2) { console.error('Beitritt: Zurückrollen ' + geschrieben[i].tab + ' fehlgeschlagen: ' + (e2 && e2.message)); }
       }
+      // Der Cache kann schon Zeilen dieses Antrags enthalten (Fehler nach Snapshot.schreibe) – neu aufbauen lassen
+      if (geschrieben.length || geaendert.length) { try { Snapshot.verwerfen(); } catch (e2) { /* unkritisch */ } }
       throw e;
     }
   }
 
-  function importieren(ktx, antraege, entscheidungen) {
+  /**
+   * haken (optional, Eingang): { vorher(i) → Grund zum Auslassen oder null, nachher(i, ergebnis) } – beide laufen
+   * innerhalb derselben Sperre wie der Antrag.
+   */
+  function importieren(ktx, antraege, entscheidungen, haken) {
     pruefeRechte(ktx);
     var liste = bereinigt(antraege);
     var ergebnisse = [], aktualisiert = {}, entfernt = {};
@@ -241,7 +290,21 @@ var BeitrittModul = (function () {
       var ent = entscheidungFuer(entscheidungen, i);
       if (ent.ueberspringen) { ergebnisse.push({ datei: a.datei, ok: false, grund: 'übersprungen' }); return; }
       try {
-        var r = DB.mitSperre(function () { return einen(ktx, a, ent); });
+        var r = DB.mitSperre(function () {
+          var grund = haken && haken.vorher ? haken.vorher(i) : null;
+          if (grund) return { datei: a.datei, ok: false, grund: grund };
+          var e = einen(ktx, a, ent);
+          // Der Antrag ist gespeichert – ein Fehler danach (Eingang abschließen, PDF verknüpfen) darf ihn nicht als
+          // „nicht importiert“ melden, sonst würde er ein zweites Mal übernommen.
+          if (haken && haken.nachher) {
+            try { haken.nachher(i, e); } catch (e2) {
+              console.error('Beitritt ' + a.datei + ': Nacharbeit fehlgeschlagen: ' + (e2 && e2.message));
+              e.warnungen = (e.warnungen || []).concat(['Übernommen, aber der Online-Antrag konnte nicht abgeschlossen werden – bitte mit „Nicht übernehmen“ (Grund: bereits übernommen) schließen und das PDF als Dokument nachtragen.']);
+            }
+          }
+          return e;
+        });
+        if (!r.ok) { ergebnisse.push(r); return; }
         Object.keys(r.snapshot.aktualisiert || {}).forEach(function (k) { aktualisiert[k] = (aktualisiert[k] || []).concat(r.snapshot.aktualisiert[k]); });
         Object.keys(r.snapshot.entfernt || {}).forEach(function (k) { entfernt[k] = (entfernt[k] || []).concat(r.snapshot.entfernt[k]); });
         delete r.snapshot;
@@ -264,5 +327,197 @@ var BeitrittModul = (function () {
     };
   }
 
-  return { vorschau: vorschau, importieren: importieren };
+  // ================================================================== Eingang von der Homepage
+
+  var EINGANG_CACHE = 'eingang:offen';
+
+  /** ID der Eingangstabelle aus den Script Properties (nie vom Client); null = nicht eingerichtet. */
+  function eingangId() {
+    var p = PropertiesService.getScriptProperties();
+    var id = p.getProperty('EINGANG_ID');
+    if (!id) return null;
+    if (id === p.getProperty('DB_ID')) throw new Error('EINGANG_ID darf nicht die Datenbank sein – siehe docs/BETRIEB.md');
+    return id;
+  }
+
+  function eingangBlatt() {
+    var id = eingangId();
+    if (!id) return null;
+    var b = SpreadsheetApp.openById(id).getSheetByName(Eingang.TAB);
+    DB.zaehle(2);
+    if (!b) throw Fehler.fachlich('In der Eingangstabelle fehlt der Tab „' + Eingang.TAB + '“ – bitte eingangEinrichten() ausführen (docs/BETRIEB.md).');
+    return b;
+  }
+
+  function zeitText(v) {
+    if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+    return v === '' || v === null || v === undefined ? null : String(v);
+  }
+
+  /** Tab lesen → { kopf, zeilen }. Prüft die Pflichtspalten. */
+  function eingangLesen(b) {
+    var werte = b.getDataRange().getValues();
+    DB.zaehle(2);
+    var fehlt = Eingang.fehlendeSpalten(werte[0] || []);
+    if (fehlt.length) throw Fehler.fachlich('Eingangstabelle: Spalte(n) ' + fehlt.join(', ') + ' fehlen – bitte eingangEinrichten() ausführen.');
+    var zeilen = Eingang.zeilen(werte);
+    zeilen.forEach(function (z) { z.eingang_am = zeitText(z.eingang_am); z.unterschrift_am = zeitText(z.unterschrift_am); });
+    return { kopf: werte[0].map(function (k) { return String(k).trim(); }), zeilen: zeilen };
+  }
+
+  function eingangAbschliessen(b, kopf, zeile, werte) {
+    kopf.forEach(function (h, j) {
+      if (!Object.prototype.hasOwnProperty.call(werte, h)) return;
+      b.getRange(zeile.zeile, j + 1).setValue(Werte.zelleSchreiben(String(werte[h]), { typ: 'Text' }));   // Formelschutz
+      DB.zaehle(1);
+    });
+    try { CacheService.getScriptCache().remove(EINGANG_CACHE); } catch (e) { /* nur Zähler */ }
+  }
+
+  function idListe(ids) {
+    if (!Array.isArray(ids) || !ids.length) throw Fehler.fachlich('Bitte mindestens einen Antrag auswählen.');
+    if (ids.length > Beitritt.MAX_ANTRAEGE) throw Fehler.fachlich('Höchstens ' + Beitritt.MAX_ANTRAEGE + ' Anträge auf einmal.');
+    return ids.map(function (x) { return String(x).trim(); });
+  }
+
+  /** Offene Zeilen zu den IDs in Auswahlreihenfolge. */
+  function auswahl(zeilen, ids) {
+    var je = {};
+    zeilen.forEach(function (z) { if (Eingang.offen(z)) je[z.eingang_id] = z; });
+    return ids.map(function (id) { return je[id]; }).filter(Boolean);
+  }
+
+  /** Übersicht: offene Anträge (nur Namen) und die letzten erledigten. */
+  function eingang(ktx) {
+    pruefeRechte(ktx);
+    var b = eingangBlatt();
+    if (!b) return { eingerichtet: false };
+    var e = eingangLesen(b);
+    var offen = e.zeilen.filter(Eingang.offen);
+    var erledigt = e.zeilen.filter(function (z) { return !Eingang.offen(z); }).slice(-10).reverse();
+    return {
+      eingerichtet: true,
+      offen: offen.map(Eingang.fuerListe),
+      erledigt: erledigt.map(function (z) {
+        return { eingang_id: z.eingang_id, datei: Eingang.fuerListe(z).datei, status: z.status, erledigt_am: zeitText(z.erledigt_am), ergebnis: String(z.ergebnis || '') };
+      })
+    };
+  }
+
+  /** Zahl offener Anträge für die Startseite (10 min zwischengespeichert); null = nicht eingerichtet. */
+  function eingangAnzahl(ktx) {
+    pruefeRechte(ktx);
+    if (!eingangId()) return null;
+    var c = CacheService.getScriptCache();
+    var v = c.get(EINGANG_CACHE);
+    if (v !== null && v !== undefined) return { anzahl: Number(v) };
+    var n = eingangLesen(eingangBlatt()).zeilen.filter(Eingang.offen).length;
+    c.put(EINGANG_CACHE, String(n), 600);
+    return { anzahl: n };
+  }
+
+  /** Anträge zu den IDs zerlegen; nicht lesbare getrennt. */
+  function eingangAntraege(ids) {
+    var b = eingangBlatt();
+    if (!b) throw Fehler.fachlich('Die Eingangstabelle ist nicht eingerichtet (Script Property EINGANG_ID).');
+    var e = eingangLesen(b);
+    var gute = [], schlecht = [];
+    auswahl(e.zeilen, ids).forEach(function (z) {
+      var a = Eingang.antrag(z);
+      if (a.fehler) schlecht.push({ eingang_id: z.eingang_id, datei: a.datei, fehler: a.fehler });
+      else gute.push({ eingang_id: z.eingang_id, antrag: a });
+    });
+    return { blatt: b, gute: gute, schlecht: schlecht };
+  }
+
+  function eingangVorschau(ktx, ids) {
+    pruefeRechte(ktx);
+    var x = eingangAntraege(idListe(ids));
+    var v = x.gute.length ? vorschau(ktx, x.gute.map(function (g) { return g.antrag; })) : { antraege: [], hinweis: null };
+    v.antraege.forEach(function (a, i) { a.eingang_id = x.gute[i].eingang_id; });
+    v.nicht_lesbar = x.schlecht;
+    return v;
+  }
+
+  /** entscheidungen tragen eingang_id statt index (die Reihenfolge kann sich seit der Vorschau geändert haben). */
+  function eingangImportieren(ktx, ids, entscheidungen) {
+    pruefeRechte(ktx);
+    var x = eingangAntraege(idListe(ids));
+    if (!x.gute.length) throw Fehler.fachlich('Keiner der ausgewählten Anträge ist (noch) offen und lesbar.');
+    var ent = (Array.isArray(entscheidungen) ? entscheidungen : []).map(function (e) {
+      var i = -1;
+      x.gute.forEach(function (g, j) { if (e && String(e.eingang_id) === g.eingang_id) i = j; });
+      return i < 0 ? null : Object.assign({}, e, { index: i });
+    }).filter(Boolean);
+    var aktuell = null;
+    var r = importieren(ktx, x.gute.map(function (g) { return g.antrag; }), ent, {
+      vorher: function (i) {
+        aktuell = eingangLesen(x.blatt);   // unter der Sperre frisch: noch offen?
+        var z = auswahl(aktuell.zeilen, [x.gute[i].eingang_id])[0];
+        return z ? null : 'bereits von jemand anderem übernommen oder abgelehnt';
+      },
+      nachher: function (i, e) {
+        var z = auswahl(aktuell.zeilen, [x.gute[i].eingang_id])[0];
+        var nummern = e.personen.map(function (p) { return p.nummer; }).join(', ');
+        // Unterschriebenes PDF verknüpfen (Aufnahmeantrag je Person, SEPA-Mandat am Konto)
+        var konto = e.konto_id ? (DB.lese(['Beitragskonto']).Beitragskonto || []).filter(function (k) { return k.beitragskonto_id === e.konto_id; })[0] : null;
+        var doks = Eingang.dokumente(z, e, !!(konto && konto.zahlweg === 'Lastschrift'));
+        if (doks.length) {
+          var neu = DB.einfuegenViele('Dokument', doks, ktx);
+          var snap = Snapshot.schreibe(ktx, neu.map(function (d) { return { tab: 'Dokument', neu: d }; }));
+          e.snapshot.aktualisiert = e.snapshot.aktualisiert || {};
+          Object.keys(snap.aktualisiert || {}).forEach(function (k) { e.snapshot.aktualisiert[k] = (e.snapshot.aktualisiert[k] || []).concat(snap.aktualisiert[k]); });
+          Protokoll.schreibe(ktx, [{ aktion: 'angelegt', tabelle: 'Dokument', datensatz_id: neu.map(function (d) { return d.dokument_id; }).join(','), kommentar: 'Unterschriebener Online-Antrag verknüpft' }]);
+          e.dokumente = neu.length;
+        } else if (!z.pdf_link) {
+          e.warnungen = (e.warnungen || []).concat(['Kein unterschriebenes PDF im Eingang – Antrag/Mandat bitte als Dokument nachtragen.']);
+        }
+        eingangAbschliessen(x.blatt, aktuell.kopf, z, Eingang.abschluss(Eingang.STATUS.uebernommen, DB.jetzt(), ktx.email, 'Nr. ' + nummern));
+        Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: 'Eingang', datensatz_id: x.gute[i].eingang_id, feld: 'status', neu_wert: 'uebernommen', kommentar: 'Online-Antrag übernommen: Nr. ' + nummern }]);
+      }
+    });
+    r.ergebnisse.forEach(function (e, i) { e.eingang_id = x.gute[i] ? x.gute[i].eingang_id : null; });
+    r.nicht_lesbar = x.schlecht;
+    return r;
+  }
+
+  /** Antrag ablehnen bzw. als erledigt markieren (z. B. Doppel-Absendung). grund: kurzer Text, ohne Bankdaten. */
+  function eingangAblehnen(ktx, id, grund) {
+    pruefeRechte(ktx);
+    var g = String(grund || '').replace(/\s+/g, ' ').trim();
+    if (!g) throw Fehler.fachlich('Bitte eingeben.', [{ feld: 'grund', meldung: 'Bitte kurz angeben, warum der Antrag nicht übernommen wird.' }]);
+    return DB.mitSperre(function () {
+      var b = eingangBlatt();
+      if (!b) throw Fehler.fachlich('Die Eingangstabelle ist nicht eingerichtet (Script Property EINGANG_ID).');
+      var e = eingangLesen(b);
+      var z = auswahl(e.zeilen, [String(id)])[0];
+      if (!z) throw Fehler.fachlich('Dieser Antrag ist nicht mehr offen. Bitte die Ansicht neu laden.');
+      eingangAbschliessen(b, e.kopf, z, Eingang.abschluss(Eingang.STATUS.abgelehnt, DB.jetzt(), ktx.email, g));
+      // Grund bewusst nicht ins Protokoll (Freitext, N1)
+      Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: 'Eingang', datensatz_id: z.eingang_id, feld: 'status', neu_wert: 'abgelehnt', kommentar: 'Online-Antrag nicht übernommen' }]);
+      return { eingang_id: z.eingang_id, status: Eingang.STATUS.abgelehnt };
+    });
+  }
+
+  /** Nur Funktionskonto (Editor): Tab „Eingang“ in der Eingangstabelle anlegen bzw. fehlende Spalten anhängen. */
+  function eingangEinrichten() {
+    var id = eingangId();
+    if (!id) throw new Error('Script Property EINGANG_ID fehlt – siehe docs/BETRIEB.md');
+    var ss = SpreadsheetApp.openById(id);
+    var b = ss.getSheetByName(Eingang.TAB) || ss.insertSheet(Eingang.TAB);
+    var letzte = b.getLastColumn();
+    var kopf = letzte ? b.getRange(1, 1, 1, letzte).getValues()[0].map(function (k) { return String(k).trim(); }) : [];
+    var fehlt = Eingang.SPALTEN.filter(function (s) { return kopf.indexOf(s) < 0; });
+    if (fehlt.length) b.getRange(1, kopf.length + 1, 1, fehlt.length).setValues([fehlt]);
+    b.setFrozenRows(1);
+    var text = fehlt.length ? 'Eingang: Spalten ergänzt: ' + fehlt.join(', ') : 'Eingang: keine Änderungen nötig.';
+    console.log(text);
+    return text;
+  }
+
+  return {
+    vorschau: vorschau, importieren: importieren,
+    eingang: eingang, eingangAnzahl: eingangAnzahl, eingangVorschau: eingangVorschau, eingangImportieren: eingangImportieren,
+    eingangAblehnen: eingangAblehnen, eingangEinrichten: eingangEinrichten
+  };
 })();

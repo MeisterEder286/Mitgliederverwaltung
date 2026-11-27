@@ -27,6 +27,11 @@ var Cache = (function () {
 
   function cache() { return CacheService.getScriptCache(); }
 
+  /** Cache-Zugriff fürs Messwerk zählen und zeitlich erfassen (Abschnitt „cache“). */
+  function miss(methode, fn) {
+    return (typeof Messung !== 'undefined' && Messung.miss ? Messung.miss : function (a, i, f) { return f(); })('cache', { methode: methode }, fn);
+  }
+
   function packe(objekt) {
     var json = JSON.stringify(objekt);
     if (!PACKEN) return 'J' + json;
@@ -54,30 +59,32 @@ var Cache = (function () {
       }
       var dauer = Math.min(sekunden || MAX_SEKUNDEN, MAX_SEKUNDEN);
       var c = cache();
-      c.putAll(teile, dauer);
-      c.put(schluessel + ':kopf', JSON.stringify({ generation: generation, teile: n }), dauer);
+      miss('putAll', function () { c.putAll(teile, dauer); });
+      miss('put', function () { c.put(schluessel + ':kopf', JSON.stringify({ generation: generation, teile: n }), dauer); });
       return n;
     } catch (e) {
       console.warn('Cache.speichere(' + schluessel + ') fehlgeschlagen: ' + (e && e.message));
+      // Den bisherigen Stand nicht weiter ausliefern – sonst sähen alle Leser bis zu 6 h die Fassung VOR der Änderung
+      verwerfe(schluessel);
       return 0;
     }
   }
 
   /** Kopf vorhanden? (ein Cache-Aufruf, ohne die Teile zu laden) */
   function vorhanden(schluessel) {
-    try { return !!cache().get(schluessel + ':kopf'); } catch (e) { return false; }
+    try { return !!miss('get', function () { return cache().get(schluessel + ':kopf'); }); } catch (e) { return false; }
   }
 
   /** Lädt ein Objekt oder null (nicht vorhanden, Teil fehlt, defekt). */
   function lade(schluessel) {
     try {
       var c = cache();
-      var kopfText = c.get(schluessel + ':kopf');
+      var kopfText = miss('get', function () { return c.get(schluessel + ':kopf'); });
       if (!kopfText) return null;
       var kopf = JSON.parse(kopfText);
       var namen = [];
       for (var i = 0; i < kopf.teile; i++) namen.push(schluessel + ':g' + kopf.generation + ':' + i);
-      var teile = c.getAll(namen);
+      var teile = miss('getAll', function () { return c.getAll(namen); });
       var text = '';
       for (var j = 0; j < namen.length; j++) {
         if (typeof teile[namen[j]] !== 'string') return null;

@@ -8,13 +8,13 @@
  */
 var Startbelegung = {
   "Abteilung": {
-    kopf: ["abteilung_id","bezeichnung","blsv_sportart","meldepflichtig","aktiv","bemerkung"],
+    kopf: ["abteilung_id","bezeichnung","blsv_sportart","meldepflichtig","aktiv","online_schluessel","bemerkung"],
     zeilen: [
-      ["1","Fußball","Fußball","ja","ja",""],
-      ["2","Turnen","Turnen","ja","ja",""],
-      ["3","Tennis","Tennis","ja","ja",""],
-      ["4","Stockschützen","Eisstocksport","ja","ja","BLSV-Bezeichnung weicht ab"],
-      ["5","Skiabteilung","Skisport","nein","nein","Ruht seit 2019 — nicht löschen, sonst reißt die Historie"]
+      ["1","Fußball","Fußball","ja","ja","fussball",""],
+      ["2","Turnen","Turnen","ja","ja","fitness-turnen","BEISPIEL-Schlüssel – mit dem Online-Formular abgleichen"],
+      ["3","Tennis","Tennis","ja","ja","",""],
+      ["4","Stockschützen","Eisstocksport","ja","ja","","BLSV-Bezeichnung weicht ab"],
+      ["5","Skiabteilung","Skisport","nein","nein","","Ruht seit 2019 — nicht löschen, sonst reißt die Historie"]
     ]
   },
   "Aufbewahrungsfrist": {
@@ -35,11 +35,13 @@ var Startbelegung = {
     ]
   },
   "Beitragsart": {
-    kopf: ["beitragsart_id","bezeichnung","betrag","alter_von","alter_bis","intervall","aktiv","gueltig_ab","bemerkung"],
+    kopf: ["beitragsart_id","bezeichnung","betrag","alter_von","alter_bis","intervall","aktiv","gueltig_ab","online_schluessel","als_gemeinschaft","max_erwachsene","max_kinder","kinder_bis_alter","ausbildung_bis_alter","bemerkung"],
     zeilen: [
-      ["1","Erwachsene","100","18","","jährlich","ja","2024-01-01","BEISPIELBETRAG — echten Satz eintragen"],
-      ["2","Jugendliche bis 18","45","0","17","jährlich","ja","2024-01-01","BEISPIELBETRAG"],
-      ["3","Fördermitglied","50","","","jährlich","ja","2024-01-01","BEISPIELBETRAG"]
+      ["1","Erwachsene","100","18","","jährlich","ja","2024-01-01","erwachsene, rentner","","","","","","BEISPIELBETRAG — echten Satz eintragen"],
+      ["2","Jugendliche bis 18","45","0","17","jährlich","ja","2024-01-01","kind, jugendliche","","","","","","BEISPIELBETRAG"],
+      ["3","Fördermitglied","50","","","jährlich","ja","2024-01-01","","","","","","","BEISPIELBETRAG"],
+      ["4","Familienbeitrag","180","","","jährlich","ja","2024-01-01","familienbeitrag","Familie","2","","17","25","BEISPIELBETRAG – einmal je Familie: 2 Erwachsene, beliebig viele Kinder bis 18, mit Ausbildung bis 25"],
+      ["5","Ehegattenbeitrag","150","","","jährlich","ja","2024-01-01","ehegattenbeitrag","Ehepaar","2","0","","","BEISPIELBETRAG – einmal je Ehepaar: 2 Erwachsene ohne Kinder"]
     ]
   },
   "Ehrungsregel": {
@@ -77,13 +79,6 @@ var Startbelegung = {
       ["13","Kassenprüfer","Verein","nein","Wahl JHV","ja","ja","PRÜFEN: Liste gegen die Satzung abgleichen"]
     ]
   },
-  "Gemeinschaftsart": {
-    kopf: ["gemeinschaftsart_id","bezeichnung","betrag","max_erwachsene","max_kinder","kinder_bis_alter","ausbildung_bis_alter","aktiv","bemerkung"],
-    zeilen: [
-      ["1","Familienbeitrag","180","2","","17","25","ja","BEISPIELBETRAG — 2 Erwachsene, beliebig viele Kinder bis 18, mit Ausbildung bis 25"],
-      ["2","Ehegattenbeitrag","150","2","0","","","ja","BEISPIELBETRAG — 2 Erwachsene ohne Kinder"]
-    ]
-  },
   "Qualifikationsart": {
     kopf: ["qualifikationsart_id","bezeichnung","kategorie","wiedervorlage_monate","max_alter_zeugnis_monate","loeschfrist_monate","aktiv","bemerkung"],
     zeilen: [
@@ -102,7 +97,7 @@ var Startbelegung = {
       ["3","Rechnung Mitgliedsbeitrag","Rechnung","Mitgliedsbeitrag {{jahr}} – Rechnung","{{briefanrede}},\n\nfür das Beitragsjahr {{jahr}} stellen wir Ihnen den Mitgliedsbeitrag in Höhe von {{betrag}} in Rechnung.\n\nBitte überweisen Sie den Betrag bis zum {{faellig_am}} auf das Vereinskonto (siehe Briefkopf) unter Angabe Ihrer Mitgliedsnummer {{mitgliedsnummer}}.\n\nBequemer geht es per Lastschrift: Ein SEPA-Mandat erhalten Sie gerne bei der Mitgliederverwaltung.\n\nMit freundlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
       ["4","Mahnung Mitgliedsbeitrag","Mahnung","{{mahnstufe}}. Mahnung – Mitgliedsbeitrag {{jahr}}","{{briefanrede}},\n\nsicher ist es Ihrer Aufmerksamkeit entgangen: Der Mitgliedsbeitrag für {{jahr}} ist noch offen.{{#wenn gebuehr}} Bei der Lastschrift ist eine Rücklastschrift entstanden; die Bankgebühr von {{gebuehr}} ist im offenen Betrag enthalten.{{/wenn}}\n\nOffener Betrag: {{offen}}\n\nBitte überweisen Sie den Betrag bis zum {{faellig_am}} auf das Vereinskonto unter Angabe Ihrer Mitgliedsnummer {{mitgliedsnummer}}. Sollte sich Ihre Zahlung mit diesem Schreiben überschnitten haben, betrachten Sie es bitte als gegenstandslos.\n\nMit freundlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
       ["5","SEPA-Vorabinformation","SEPA-Vorabinformation","Vorabinformation zum Lastschrifteinzug {{jahr}}","{{briefanrede}},\n\nwir ziehen den Mitgliedsbeitrag für {{jahr}} in Höhe von {{betrag}} am {{einzugsdatum}} von Ihrem Konto {{iban_maskiert}} (Kontoinhaber: {{kontoinhaber}}) ein.\n\nMandatsreferenz: {{mandatsreferenz}}\nGläubiger-Identifikationsnummer: {{glaeubiger_id}}\n\nBitte sorgen Sie für ausreichende Deckung. Fällt der Einzugstag auf ein Wochenende oder einen Feiertag, erfolgt die Belastung am nächsten Bankarbeitstag.\n\nMit freundlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
-      ["6","Beitragsänderung","Beitragsänderung","Änderung Ihres Mitgliedsbeitrags ab {{jahr}}","{{briefanrede}},\n\nab dem Beitragsjahr {{jahr}} gilt für Sie die Beitragsart „{{beitragsart}}“ mit einem Jahresbeitrag von {{beitrag}}.\n\n{{#wenn mandatsreferenz}}Der Beitrag wird wie gewohnt per Lastschrift (Mandatsreferenz {{mandatsreferenz}}) eingezogen.{{/wenn}}\n\nBei Fragen wenden Sie sich gerne an die Mitgliederverwaltung.\n\nMit freundlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
+      ["6","Beitragsänderung","Beitragsänderung","Änderung Ihres Mitgliedsbeitrags ab {{jahr}}","{{briefanrede}},\n\ndie Mitgliederversammlung hat neue Beiträge beschlossen. Ab dem Beitragsjahr {{jahr}} beträgt der Jahresbeitrag für Ihr Beitragskonto {{beitrag_neu}}{{#wenn beitrag_bisher}} (bisher {{beitrag_bisher}}){{/wenn}}.\n\n{{#wenn mandatsreferenz}}Der Beitrag wird wie gewohnt per Lastschrift (Mandatsreferenz {{mandatsreferenz}}, Gläubiger-ID {{glaeubiger_id}}) eingezogen. Ihr Mandat gilt weiter, Sie müssen nichts unternehmen.{{/wenn}}\n\nBei Fragen wenden Sie sich gerne an die Mitgliederverwaltung.\n\nMit freundlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
       ["7","Umstellung auf Einzelbeitrag","Umstellung Einzelbeitrag","Ihr Mitgliedsbeitrag ab {{jahr}}","{{briefanrede}},\n\nbisher waren Sie über den Familienbeitrag beim TSV Ergoldsbach e. V. versichert. Da die Voraussetzungen dafür ab {{jahr}} nicht mehr vorliegen, führen wir Sie ab dann mit einem eigenen Beitrag: „{{beitragsart}}“, {{beitrag}} im Jahr.\n\n{{#wenn mandatsreferenz}}Der Beitrag wird weiterhin vom bisherigen Konto (Kontoinhaber {{kontoinhaber}}) eingezogen. Wenn Sie den Beitrag künftig selbst zahlen möchten, senden Sie uns bitte ein eigenes SEPA-Mandat.{{/wenn}}\n\nBefinden Sie sich noch in Schule, Studium oder Ausbildung, senden Sie uns bitte einen Nachweis – dann prüfen wir eine Verlängerung des Familienbeitrags.\n\nMit freundlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
       ["8","Ausbildungsnachweis anfordern","Ausbildungsnachweis anfordern","Nachweis über Schule, Studium oder Ausbildung","{{briefanrede}},\n\nSie sind bis zum {{ausbildung_bis}} über den Familienbeitrag beim TSV Ergoldsbach e. V. geführt, weil Sie sich in Schule, Studium oder Ausbildung befinden.\n\nDamit das auch danach so bleiben kann, benötigen wir einen aktuellen Nachweis (z. B. Immatrikulations- oder Schulbescheinigung, Ausbildungsvertrag). Ohne Nachweis stellen wir ab dem folgenden Beitragsjahr auf einen eigenen Beitrag um.\n\nMit freundlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
       ["9","Ehrung – Einladung","Ehrung","Einladung zur Ehrung – {{ehrung}}","{{briefanrede}},\n\nim Namen der Vorstandschaft dürfen wir Ihnen herzlich gratulieren: Sie werden für „{{ehrung}}“ geehrt.\n\nWir laden Sie herzlich zur Ehrung ein und freuen uns auf Ihr Kommen. Den Termin teilen wir Ihnen gesondert mit.\n\nMit sportlichen Grüßen","ja","BEISPIEL – Text vor Gebrauch prüfen und an die Satzung/Beitragsordnung anpassen"],
@@ -135,7 +130,6 @@ var Startbelegung = {
       ["next_id_Funktionsart","14","ID-Zähler"],
       ["next_id_Funktion","16","ID-Zähler"],
       ["next_id_Beitragsart","4","ID-Zähler"],
-      ["next_id_Gemeinschaftsart","3","ID-Zähler"],
       ["next_id_Beitragsgemeinschaft","2","ID-Zähler"],
       ["next_id_Beitragskonto","12","ID-Zähler"],
       ["next_id_Sollstellung","13","ID-Zähler"],
@@ -144,7 +138,7 @@ var Startbelegung = {
       ["next_id_Ehrungsregel","13","ID-Zähler"],
       ["next_id_Ehrung","8","ID-Zähler"],
       ["next_id_Benutzer","6","ID-Zähler"],
-      ["antrag_eingangsdatei","DATEI-ID EINTRAGEN","Getrennte Tabelle Aufnahmeantraege_TSV_Ergoldsbach — einziges Ziel des öffentlichen Endpunkts"],
+      ["antrag_eingangsdatei","siehe Script Property EINGANG_ID","Die ID der getrennten Eingangstabelle steht in der Script Property EINGANG_ID (nie in _Konfig, A3) – docs/EINGANG.md"],
       ["antrag_abholung","stündlich","Zeitgesteuerter Abruf: offene Anträge lesen, Dublettenprüfung, danach hier archivieren"],
       ["antrag_drive_ordner","ORDNER-ID EINTRAGEN","Drive-Ordner für unterschriebene Aufnahmeanträge. Freigabe: eingeschränkt, NICHT „jeder mit dem Link“."],
       ["antrag_dateiname","JJJJ-MM-TT_Nachname_Vorname_Aufnahmeantrag.pdf","Namensschema, damit der Ordner auch nach Jahren durchsuchbar bleibt"],
@@ -168,7 +162,7 @@ var Startbelegung = {
       ["next_id_Betroffenenanfrage","2","ID-Zähler"],
       ["next_id_Statistik_Jahr","8","ID-Zähler"],
       ["next_id_Protokoll","4","ID-Zähler"],
-      ["jugend_bis_alter","17","Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). OFFEN: bestätigen"],
+      ["jugend_bis_alter","17","Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). Einstellbar 10–27, Standard 17."],
       ["snapshot_einbetten","ja","ja = Startdaten direkt in die Seite einbetten (spart einen Aufruf), nein = nachladen. Für Messvergleich."],
       ["cache_warmhalten","ja","ja = stündlicher Trigger hält Benutzer, Einstellungen und Snapshot im Cache warm (kein langsamer Kaltstart). nein = aus."],
       ["protokoll_nachgelagert","ja","ja = Protokolleinträge werden dauerhaft vorgemerkt und direkt nach dem Speichern im Hintergrund ins Protokoll übertragen (Speichern schneller). nein = sofort beim Speichern."],

@@ -1,0 +1,22 @@
+{
+  "format": "tsv-antrag-2",
+  "erstellt_am": "2026-10-25T21:30:00",
+  "tarif": "familienbeitrag",
+  "mitglied_ab": "2026-11-01",
+  "abteilungen": ["fussball", "fitness-turnen", "leichtathletik"],
+  "anschrift": { "strasse": "Hauptstraße 5", "plz": "84066", "ort": "Ergoldsbach" },
+  "personen": [
+    { "anrede": "Herr", "titel": "Dr.", "vorname": "Hans", "nachname": "Onlinebeispiel", "geburtsdatum": "1980-01-02",
+      "geschlecht": "m", "email": "hans@example.com", "telefon": "08771 12345" },
+    { "anrede": "Frau", "vorname": "Anna", "nachname": "Onlinebeispiel", "geburtsdatum": "1982-05-06", "geschlecht": "w" },
+    { "anrede": "Herr", "vorname": "Lukas", "nachname": "Onlinebeispiel", "geburtsdatum": "2012-09-30", "geschlecht": "m" }
+  ],
+  "konto": { "iban": "DE89370400440532013000", "bic": "COBADEFFXXX", "kontoinhaber": "Hans Onlinebeispiel" },
+  "unterschriften": {
+    "antrag": { "datum": "2026-10-25", "name": "Hans Onlinebeispiel", "als": "selbst" },
+    "sepa": { "datum": "2026-10-25", "name": "Hans Onlinebeispiel" }
+  },
+  "bestaetigt": { "datenschutz": true, "sepa_mandat": true },
+  "einwilligungen": { "fotos": true, "newsletter": false, "ehrungen": true },
+  "bemerkung": "SYNTHETISCH – alle Angaben erfunden"
+}

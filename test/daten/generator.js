@@ -151,7 +151,7 @@ function erzeugeVerein(optionen) {
   const fehlerliste = [];
 
   // ---- Stammdaten aus der Startbelegung
-  ['Abteilung', 'Funktionsart', 'Beitragsart', 'Gemeinschaftsart', 'Qualifikationsart', 'Ehrungsregel', 'Aufbewahrungsfrist'].forEach(tab => {
+  ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel', 'Aufbewahrungsfrist'].forEach(tab => {
     const sb = Start[tab];
     sb.zeilen.forEach(zeile => {
       const o = {};
@@ -365,7 +365,7 @@ function erzeugeVerein(optionen) {
       gemeinschaft = {
         beitragsgemeinschaft_id: neueId('Beitragsgemeinschaft'),
         bezeichnung: (h.typ === 'paar' ? 'Ehepaar ' : 'Familie ') + h.nachname,
-        gemeinschaftsart_id: h.typ === 'paar' ? 2 : 1,
+        beitragsart_id: h.typ === 'paar' ? 5 : 4,
         festbetrag: h.typ === 'paar' ? FESTBETRAG_PAAR : FESTBETRAG_FAMILIE,
         aktiv: h.personen.some(istAktiv), bemerkung: null,
         version: 1, geaendert_am: AENDERUNG, geaendert_von: 'migration@tsv-ergoldsbach.de'
@@ -420,7 +420,8 @@ function erzeugeVerein(optionen) {
     }
     const ersterZr = p._zeitraeume[p._zeitraeume.length - 1];
     gewaehlt.forEach(a => {
-      const ein = max(ersterZr.eintrittsdatum, zufallsDatum(z, jahrVon(ersterZr.eintrittsdatum), min(STICHTAG, plusMonate(ersterZr.eintrittsdatum, 36))));
+      const zufall = max(ersterZr.eintrittsdatum, zufallsDatum(z, jahrVon(ersterZr.eintrittsdatum), min(STICHTAG, plusMonate(ersterZr.eintrittsdatum, 36))));
+      const ein = istAktiv(p) || !austrittVon(p) ? zufall : min(zufall, austrittVon(p));   // nie nach dem Austritt (Prüfregel datum_reihenfolge)
       daten.Abteilungszugehoerigkeit.push({
         zugehoerigkeit_id: neueId('Abteilungszugehoerigkeit'), mitglied_id: p.mitglied_id, abteilung_id: a, passnummer: a === 1 && z.ja(0.4) ? 'SP-' + z.int(100000, 999999) : null,
         status: p._alter > 50 && z.ja(0.25) || z.ja(0.06) ? 'passiv' : 'aktiv',

@@ -91,6 +91,15 @@ var Snapshot = (function () {
 
   /** Für den Browser: nur die gewünschten Bereiche (Standard Kern), in Spaltenform gepackt. */
   function fuerClient(ktx, bereiche) {
+    return ansicht(function () { return fuerClientRoh(ktx, bereiche); });
+  }
+
+  /** Messwerk: Abschnitt „ansicht“ (Rollenschnitt, Packen, Write-through). */
+  function ansicht(fn) {
+    return (typeof Messung !== 'undefined' && Messung.abschnitt ? Messung.abschnitt : function (n, f) { return f(); })('ansicht', fn);
+  }
+
+  function fuerClientRoh(ktx, bereiche) {
     var b = (bereiche || ['kern']).filter(function (x) { return x === 'kern' || SnapshotKern.BEREICHE[x]; });
     return { bereiche: b, listen: SnapshotKern.packe(SnapshotKern.nurBereiche(fuer(ktx), b)) };
   }
@@ -102,6 +111,10 @@ var Snapshot = (function () {
    * weiterverwendet – sonst frisch aus dem Cache (eine ältere Kopie könnte fremde Speicherungen überschreiben).
    */
   function schreibe(ktx, aenderungen) {
+    return ansicht(function () { return schreibeRoh(ktx, aenderungen); });
+  }
+
+  function schreibeRoh(ktx, aenderungen) {
     var sperre = DB.sperre();
     var stand = basisSpeicher && sperre && basisSperre === sperre ? { basis: basisSpeicher, kopf: basisKopf } : ausCache();
     if (!stand) {
@@ -122,6 +135,11 @@ var Snapshot = (function () {
   /** Wirft Fehler.keinZugriff(), wenn die Person für ktx nicht sichtbar ist. */
   function pruefeMitglied(ktx, id) {
     if (!SnapshotKern.mitgliedSichtbar(basis(), ktx, heute(), id)) throw Fehler.keinZugriff();
+  }
+
+  /** Wirft Fehler.keinZugriff(), wenn die Zeile (z. B. ein Nachweis) für ktx nicht sichtbar ist – wie im Snapshot. */
+  function pruefeZeile(ktx, tab, zeile) {
+    if (!SnapshotKern.zeileSichtbarFuer(basis(), ktx, heute(), tab, zeile)) throw Fehler.keinZugriff();
   }
 
   /** Cache ungültig machen (nach Setup, Massenänderungen, direkten Eingriffen in die Tabelle). */
@@ -157,7 +175,7 @@ var Snapshot = (function () {
 
   return {
     fuerClient: fuerClient,
-    basis: basis, fuer: fuer, schreibe: schreibe, pruefeMitglied: pruefeMitglied, verwerfen: verwerfen,
+    basis: basis, fuer: fuer, schreibe: schreibe, pruefeMitglied: pruefeMitglied, pruefeZeile: pruefeZeile, verwerfen: verwerfen,
     warmhalten: warmhalten, mitlesen: mitlesen, letzterCache: letzterCache
   };
 })();

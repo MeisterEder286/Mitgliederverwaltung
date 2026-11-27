@@ -10,6 +10,7 @@
  *  4. Kopfkommentar in jeder Code-Datei (Sicherheitsregel C7).
  *  5. appsscript.json: gültiges JSON, nur erlaubte OAuth-Scopes (Sicherheitsregel A5).
  *  6. Getrenntes Backup-Projekt backup/: Syntax, Kopfkommentar, eigene Scope-Liste, KEINE Web-App.
+ *  7. Getrenntes Eingangs-Projekt eingang/: Syntax, Kopfkommentar, nur spreadsheets + drive.file, kennt DB_ID nicht.
  */
 'use strict';
 const fs = require('fs');
@@ -56,6 +57,13 @@ if (!fehler.length) {
 dateien(SRC, '.html').forEach(p => {
   const html = fs.readFileSync(p, 'utf8');
   if (!/^\s*<!--/.test(html)) fehler.push(rel(p) + ': Kopfkommentar <!-- … --> fehlt (C7)');
+  // Apps Script wertet Scriptlets auch in HTML-Kommentaren aus (z. B. wird ein leeres Ausgabe-Scriptlet zu
+  // „output._ = ;“ → SyntaxError beim evaluate()). Darum: keine Scriptlet-Zeichen in Kommentaren.
+  (html.match(/<!--[\s\S]*?-->/g) || []).forEach(k => {
+    if (/<\?|\?>/.test(k)) fehler.push(rel(p) + ': Scriptlet-Zeichen <? / ?> im HTML-Kommentar – Apps Script wertet sie aus');
+  });
+  // Leere Scriptlets ergeben ungültigen Code.
+  if (/<\?(=|!=)?\s*\?>/.test(html)) fehler.push(rel(p) + ': leeres Scriptlet');
   const re = /<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi;
   let m, nr = 0;
   while ((m = re.exec(html))) {
@@ -103,6 +111,28 @@ if (fs.existsSync(BACKUP)) {
     if (!bm.oauthScopes) fehler.push('backup/appsscript.json: oauthScopes fehlen');
     if (bm.webapp) fehler.push('backup/appsscript.json: das Backup-Projekt darf keine Web-App sein');
   } catch (e) { fehler.push('backup/appsscript.json: ' + e.message); }
+}
+
+// 7 – Eingangs-Projekt (öffentlicher Empfänger für Online-Anträge; eigenes Projekt, nie in src/)
+const EINGANG = path.join(__dirname, '..', 'eingang');
+const EINGANG_SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/drive.file'
+];
+if (fs.existsSync(EINGANG)) {
+  const ectx = vm.createContext({ console });
+  dateien(EINGANG, '.js').forEach(p => {
+    const code = fs.readFileSync(p, 'utf8');
+    if (!/^\s*\/\*\*/.test(code)) fehler.push(rel(p) + ': Kopfkommentar /** … */ fehlt (C7)');
+    if (/\bDB_ID\b/.test(code)) fehler.push(rel(p) + ': das Eingangs-Projekt darf die Datenbank (DB_ID) nicht kennen');
+    try { new vm.Script(code, { filename: rel(p) }).runInContext(ectx); } catch (e) { fehler.push(rel(p) + ': ' + e.message); }
+  });
+  try {
+    const em = JSON.parse(fs.readFileSync(path.join(EINGANG, 'appsscript.json'), 'utf8'));
+    if (!em.oauthScopes) fehler.push('eingang/appsscript.json: oauthScopes fehlen');
+    (em.oauthScopes || []).forEach(s => { if (!EINGANG_SCOPES.includes(s)) fehler.push('eingang/appsscript.json: nicht freigegebener Scope ' + s); });
+    if (!em.webapp || em.webapp.executeAs !== 'USER_DEPLOYING') fehler.push('eingang/appsscript.json: webapp.executeAs muss USER_DEPLOYING sein');
+  } catch (e) { fehler.push('eingang/appsscript.json: ' + e.message); }
 }
 
 if (fehler.length) {

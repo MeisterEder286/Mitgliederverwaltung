@@ -20,7 +20,8 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
    E-Mail-Versand vor dem Einschalten (`mail_aktiv = ja`) in der Testumgebung mit `mail_test_an` prüfen.
 6. **Setup:** Im Editor die Funktion `setup` ausführen. Sie legt alle Tabs mit Kopfzeilen, Formaten,
    Auswahllisten und der Startbelegung an und gibt einen Bericht aus. Mehrfaches Ausführen ist unschädlich
-   (bestehende Werte werden nie überschrieben).
+   (bestehende Werte werden nie überschrieben). Meldet der Bericht „ACHTUNG Zeitzone“, in der Tabelle unter
+   Datei → Einstellungen die Zeitzone des Skripts (`Europe/Berlin`) einstellen.
 7. **Startbelegung prüfen:** In den Tabs `Beitragsart`, `Ehrungsregel`, `Funktionsart`, `Qualifikationsart`,
    `Aufbewahrungsfrist`, `_Konfig` alle mit BEISPIEL/PRÜFEN markierten Werte anpassen.
 8. **Benutzer:** Im Tab `Benutzer` je Rollenzuweisung eine Zeile (E-Mail, Rolle, bei Abteilungsleitern
@@ -45,14 +46,17 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
     **Jeder in [Domain]**“. Die Deployment-ID und die exec-URL im zentralen Register (`docs/REGISTER.md`)
     eintragen.
 11. **Homepage:** WordPress-Seite `/verwaltung` mit Redirect-Block auf die exec-URL (Sicherheitsregel B3).
+12. **Online-Aufnahmeanträge (optional):** Eingangstabelle anlegen, Script Property `EINGANG_ID` setzen, im Editor
+    `eingangEinrichten` ausführen – Details und Spaltenvertrag in `docs/EINGANG.md`.
 
 ## 2. Updates
 
 - Lokal ändern → `npm run push` → im Editor **Bereitstellungen verwalten → bestehende Bereitstellung
   bearbeiten → Neue Version**. Nie ein neues Deployment anlegen, sonst ändert sich die URL (A1/B6).
 - Alternativ per clasp: `clasp deploy -i <DEPLOYMENT_ID> -d "Beschreibung"`.
-- **Nach jedem Update mit neuen Tabs oder Spalten** (z. B. 10/2026: `Vorlage`, `Dokument`, `Anschreiben`, Ausbildungsfelder; 11/2026: `Gemeinschaftsart` und Spalte
-  `Beitragsgemeinschaft.gemeinschaftsart_id` – danach in Finanzen → Gemeinschaften jeder Gemeinschaft ihre Regel zuordnen)
+- **Nach jedem Update mit neuen Tabs oder Spalten** (z. B. 10/2026: `Vorlage`, `Dokument`, `Anschreiben`, Ausbildungsfelder; 11/2026: Spalten `Beitragsart.max_erwachsene`, `max_kinder`, `kinder_bis_alter`,
+  `ausbildung_bis_alter` und `Beitragsgemeinschaft.beitragsart_id` – danach bei Familien-/Ehegattenbeitrag in den
+  Beitragsarten die Regeln eintragen und in Finanzen → Gemeinschaften jeder Gemeinschaft ihren Tarif zuordnen)
   im Editor `setup` ausführen – legt Fehlendes an und füllt neue Stammdaten-Tabs, ändert nichts Bestehendes.
 - Datenmodell ändern: CSV in `docs/daten/` anpassen → `npm run schema` → `npm run push` → `setup` ausführen
   (hängt neue Spalten hinten an, löscht nie etwas).
@@ -68,13 +72,18 @@ Rolle mit `messung_lesen` (Vorstand, Mitgliederverwalter) sieht in der Oberfläc
 Median und P90 je Server-Funktion (Server-ms, Tabellenzugriffe) und die im Browser gemessene Gesamtzeit.
 Rohdaten im Tab `_Messung` (keine Personendaten).
 
+Einzelaufrufe mit Aufschlüsselung (Sperre, Lesen, Schreiben, Log, Ansicht …): dort „Messmodus ein“ bzw. in der
+Browser-Konsole `App.messen(true)` / `App.messbericht()`; Erstaufruf mit `?messen=1` an der WebApp-URL. Sonden zum
+Apps-Script-Verhalten laufen im Editor nur gegen eine Kopie der Datenbank (Script Property `SONDE_DB_ID`).
+Anleitung und Ergebnisse: `docs/LEISTUNG.md`.
+
 ## 5. Bekannte Grenzen (C4) – zu prüfen, Stand meines Wissens
 
 | Grenze | Wert | Bedeutung hier |
 |---|---|---|
 | Laufzeit je Ausführung | 6 min | Setup und Migration bleiben deutlich darunter |
 | CacheService | 100 KB je Wert, max. 6 h | Snapshot wird in Teilstücke zerlegt (Phase 3) |
-| Script Properties | ca. 9 KB je Wert | nur `DB_ID` |
+| Script Properties | ca. 9 KB je Wert | `DB_ID`, optional `EINGANG_ID` |
 | Trigger-Laufzeit gesamt | je nach Kontotyp, für Nonprofits prüfen | stündlicher Messwert-Trigger: Sekunden pro Lauf; nächtliche Wartung: Sekunden bis wenige Minuten, Abbruch nach 4,5 min mit Fortsetzung |
 | Gleichzeitige Ausführungen | weiß ich nicht genau | wenige Nutzer, unkritisch |
 | E-Mail-Kontingent (MailApp) | je nach Kontotyp, Stand meines Wissens ca. 100 Empfänger/Tag (Consumer) bis 1.500 (Workspace) – prüfen | Versand prüft vorher `MailApp.getRemainingDailyQuota()`; reicht es nicht, wird nichts gesendet. Zusätzlich `_Konfig.mail_max_je_lauf` (Standard 100) |

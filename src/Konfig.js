@@ -19,7 +19,8 @@ var Konfig = (function () {
   function alle() {
     if (speicher) return speicher;
     var cache = CacheService.getScriptCache();
-    var json = cache.get(SCHLUESSEL);
+    var miss = (typeof Messung !== 'undefined' && Messung.miss ? Messung.miss : function (a, i, f) { return f(); });
+    var json = miss('cache', { methode: 'get konfig' }, function () { return cache.get(SCHLUESSEL); });
     if (json) {
       speicher = JSON.parse(json);
       return speicher;
@@ -28,7 +29,7 @@ var Konfig = (function () {
     DB.lese(['_Konfig'])._Konfig.forEach(function (z) {
       if (z.schluessel) werte[z.schluessel] = z.wert === null ? '' : String(z.wert);
     });
-    try { cache.put(SCHLUESSEL, JSON.stringify(werte), DAUER_S); } catch (e) { console.warn('Konfig: Cache nicht geschrieben – ' + e.message); }
+    try { miss('cache', { methode: 'put konfig' }, function () { cache.put(SCHLUESSEL, JSON.stringify(werte), DAUER_S); }); } catch (e) { console.warn('Konfig: Cache nicht geschrieben – ' + e.message); }
     speicher = werte;
     return speicher;
   }

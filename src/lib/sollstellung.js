@@ -105,7 +105,12 @@ var Sollstellungslauf = (function () {
       aenderung.buchungsdatum = ereignis.datum || null;
     } else if (art === 'storniert') {
       if (!ereignis.grund) throw fehler('Bitte den Grund der Stornierung angeben.');
-      aenderung.bemerkung = ((s.bemerkung ? s.bemerkung + ' · ' : '') + 'Storniert: ' + ereignis.grund).slice(0, 500);
+      // Der Storno-Grund ist der Nachweis – bei langer Bemerkung (Zusammensetzung) vorne kürzen, nie den Grund abschneiden
+      var grund = ('Storniert: ' + ereignis.grund).slice(0, 500);
+      var vorher = s.bemerkung ? String(s.bemerkung) : '';
+      var platz = 500 - grund.length - 3;
+      if (vorher && platz > 0) grund = (vorher.length > platz ? vorher.slice(0, Math.max(0, platz - 1)) + '…' : vorher) + ' · ' + grund;
+      aenderung.bemerkung = grund;
     }
     return aenderung;
   }

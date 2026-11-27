@@ -72,7 +72,7 @@ Mitglied,beitragsart_id,FK,nein,,finanz,"→ Beitragsart. Leer, wenn das Mitglie
 Mitglied,beitragskonto_id,FK,nein,,finanz,→ Beitragskonto. WER zahlt.
 Mitglied,beitragsgemeinschaft_id,FK,nein,,finanz,→ Beitragsgemeinschaft. Nur bei gedeckeltem Familien-/Ehegattenverbund.
 Mitglied,ausbildung_art,Auswahl,nein,ausbildung_art,finanz,Schule/Studium/Ausbildung/Freiwilligendienst – verlängert die Zugehörigkeit zum Familienbeitrag über die Altersgrenze hinaus. (Erweiterung 10/2026)
-Mitglied,ausbildung_bis,Datum,nein,,finanz,Voraussichtliches Ende (Ausbildung voraussichtlich abgeschlossen am) von Schule/Studium/Ausbildung. Bis dahin bleibt die Person im Familienbeitrag (höchstens bis Gemeinschaftsart.ausbildung_bis_alter bzw. _Konfig.familie_ausbildung_bis_alter).
+Mitglied,ausbildung_bis,Datum,nein,,finanz,Voraussichtliches Ende (Ausbildung voraussichtlich abgeschlossen am) von Schule/Studium/Ausbildung. Bis dahin bleibt die Person im Familienbeitrag (höchstens bis Beitragsart.ausbildung_bis_alter bzw. _Konfig.familie_ausbildung_bis_alter).
 Mitglied,ausbildung_nachweis_am,Datum,nein,,finanz,"Wann zuletzt ein Nachweis (Immatrikulation, Ausbildungsvertrag) vorgelegt wurde."
 Mitglied,vertreter_mitglied_id,FK,nein,,kontakt,"→ Mitglied. Gesetzliche Vertretung, falls selbst Mitglied. OFFENER PUNKT."
 Mitglied,vertreter_name,Text,nein,,kontakt,"Gesetzliche Vertretung, falls nicht Mitglied. OFFENER PUNKT."
@@ -105,6 +105,7 @@ Abteilung,bezeichnung,Text,ja,,intern,Vereinsinterner Name.
 Abteilung,blsv_sportart,Text,nein,,intern,"Bezeichnung laut BLSV, kann abweichen (Stockschützen → Eisstocksport)."
 Abteilung,meldepflichtig,ja/nein,ja,ja_nein,intern,Geht in die Bestandserhebung ein.
 Abteilung,aktiv,ja/nein,ja,ja_nein,intern,"Ruhende Abteilungen auf „nein“ setzen, nicht löschen."
+Abteilung,online_schluessel,Text,nein,,intern,"Schlüssel der Abteilung im Online-Aufnahmeantrag (Homepage), z. B. „fussball“; mehrere durch Komma. Leer = nicht online wählbar."
 Abteilung,bemerkung,Langtext,nein,,intern,—
 Abteilung,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
 Abteilung,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
@@ -146,32 +147,29 @@ Funktion,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (
 Funktion,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Beitragsart,beitragsart_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
 Beitragsart,bezeichnung,Text,ja,,intern,"z. B. Erwachsene, Jugendliche, Fördermitglied."
-Beitragsart,betrag,Dezimal,ja,,intern,Betrag je Intervall.
+Beitragsart,betrag,Dezimal,ja,,intern,Betrag je Intervall (gilt ab gueltig_ab).
+Beitragsart,betrag_vorher,Dezimal,nein,,intern,"Betrag vor gueltig_ab. Gesetzt von „Beitragsänderung“ in Finanzen, damit frühere Jahre (Nachlauf, Rechnungen) weiter mit dem alten Betrag rechnen. Leer = betrag galt schon immer."
 Beitragsart,alter_von,Ganzzahl,nein,,intern,Untere Altersgrenze. Steuert den automatischen Tarifwechsel.
 Beitragsart,alter_bis,Ganzzahl,nein,,intern,"Obere Altersgrenze, leer = nach oben offen."
 Beitragsart,intervall,Auswahl,ja,intervall,intern,—
 Beitragsart,aktiv,ja/nein,ja,ja_nein,intern,"Alte Tarife auf „nein“, damit die Historie stimmt."
-Beitragsart,gueltig_ab,Datum,nein,,intern,Ab wann der Betrag gilt.
+Beitragsart,gueltig_ab,Datum,nein,,intern,"Ab wann der Betrag gilt; davor gilt betrag_vorher (falls gesetzt)."
+Beitragsart,online_schluessel,Text,nein,,intern,"Schlüssel des Tarifs im Online-Aufnahmeantrag (Homepage), z. B. „erwachsene“ oder „kind, jugendliche“ (mehrere durch Komma)."
+Beitragsart,als_gemeinschaft,Auswahl,nein,gemeinschaft_art,intern,"Leer = Einzelbeitrag je Person. Familie/Ehepaar: Der Betrag gilt EINMAL für alle Personen; Beitritte legen dafür eine Beitragsgemeinschaft mit diesem Betrag an. Nicht als Beitragsart einer einzelnen Person verwenden."
+Beitragsart,max_erwachsene,Ganzzahl,nein,,intern,"Nur mit als_gemeinschaft: Höchstzahl Erwachsener (z. B. 2). Leer = unbegrenzt."
+Beitragsart,max_kinder,Ganzzahl,nein,,intern,"Nur mit als_gemeinschaft: Höchstzahl Kinder. Leer = unbegrenzt, 0 = keine Kinder (Ehegattenbeitrag)."
+Beitragsart,kinder_bis_alter,Ganzzahl,nein,,intern,"Nur mit als_gemeinschaft: Kinder gehören bis zu diesem Alter (einschließlich) dazu, z. B. 17 = bis 18. Leer = _Konfig.familie_kinder_bis_alter."
+Beitragsart,ausbildung_bis_alter,Ganzzahl,nein,,intern,"Nur mit als_gemeinschaft: mit Schule/Studium/Ausbildung (voraussichtliches Ende am Mitglied) höchstens bis zu diesem Alter. Leer = keine Verlängerung."
 Beitragsart,bemerkung,Langtext,nein,,intern,—
 Beitragsart,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
 Beitragsart,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
 Beitragsart,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
-Gemeinschaftsart,gemeinschaftsart_id,Ganzzahl,PK,,intern,Vom Skript vergeben.
-Gemeinschaftsart,bezeichnung,Text,ja,,intern,"z. B. Familienbeitrag, Ehegattenbeitrag."
-Gemeinschaftsart,betrag,Dezimal,ja,,intern,Pauschale je Gemeinschaft und Jahr. Wird beim Anlegen einer Gemeinschaft als Festbetrag übernommen; ein abweichender Festbetrag wird gemeldet.
-Gemeinschaftsart,max_erwachsene,Ganzzahl,nein,,intern,"Höchstzahl Erwachsener (z. B. 2). Leer = unbegrenzt."
-Gemeinschaftsart,max_kinder,Ganzzahl,nein,,intern,"Höchstzahl Kinder. Leer = unbegrenzt, 0 = keine Kinder (Ehegattenbeitrag)."
-Gemeinschaftsart,kinder_bis_alter,Ganzzahl,nein,,intern,"Kinder gehören bis zu diesem Alter (einschließlich) dazu, z. B. 17 = bis 18. Leer = _Konfig.familie_kinder_bis_alter."
-Gemeinschaftsart,ausbildung_bis_alter,Ganzzahl,nein,,intern,"Mit Schule/Studium/Ausbildung (voraussichtliches Ende am Mitglied) höchstens bis zu diesem Alter. Leer = keine Verlängerung."
-Gemeinschaftsart,aktiv,ja/nein,ja,ja_nein,intern,—
-Gemeinschaftsart,bemerkung,Langtext,nein,,intern,—
-Gemeinschaftsart,version,Ganzzahl,auto,,intern,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
-Gemeinschaftsart,geaendert_am,Zeitpunkt,auto,,intern,Letzte Änderung. Nur vom Skript. (V1)
-Gemeinschaftsart,geaendert_von,Text,auto,,intern,E-Mail des Bearbeiters. Nur vom Skript. (V1)
 Beitragsgemeinschaft,beitragsgemeinschaft_id,Ganzzahl,PK,,finanz,Vom Skript vergeben.
 Beitragsgemeinschaft,bezeichnung,Text,ja,,finanz,z. B. „Familie Wagner“.
-Beitragsgemeinschaft,gemeinschaftsart_id,FK,nein,,finanz,"→ Gemeinschaftsart (Familien-/Ehegattenbeitrag). Ihre Regeln werden geprüft, Abweichungen gemeldet. Leer = ohne Regeln."
-Beitragsgemeinschaft,festbetrag,Dezimal,nein,,finanz,"Pauschale, EINMAL je Gemeinschaft gezogen. Leer = Mitglieder zahlen Einzeltarife."
+Beitragsgemeinschaft,beitragsart_id,FK,nein,,finanz,"→ Beitragsart mit als_gemeinschaft (Familien-/Ehegattenbeitrag). Deren Regeln (Erwachsene, Kinder, Altersgrenzen) werden geprüft, Abweichungen gemeldet. Leer = ohne Regeln."
+Beitragsgemeinschaft,festbetrag,Dezimal,nein,,finanz,"Pauschale, EINMAL je Gemeinschaft gezogen. Leer = Mitglieder zahlen Einzeltarife. Gilt ab festbetrag_ab."
+Beitragsgemeinschaft,festbetrag_vorher,Dezimal,nein,,finanz,"Pauschale vor festbetrag_ab. Gesetzt von „Beitragsänderung“ in Finanzen."
+Beitragsgemeinschaft,festbetrag_ab,Datum,nein,,finanz,"Ab wann festbetrag gilt; davor festbetrag_vorher. Leer = festbetrag galt schon immer."
 Beitragsgemeinschaft,aktiv,ja/nein,ja,ja_nein,finanz,—
 Beitragsgemeinschaft,bemerkung,Langtext,nein,,finanz,—
 Beitragsgemeinschaft,version,Ganzzahl,auto,,finanz,"Zähler für optimistische Sperre, +1 je Änderung. Nur vom Skript. (V1)"
@@ -183,6 +181,8 @@ Beitragskonto,kontoinhaber_mitglied_id,FK,nein,,finanz,"→ Mitglied, falls der 
 Beitragskonto,zahlweg,Auswahl,ja,zahlweg,finanz,—
 Beitragskonto,iban,Text,bedingt,,finanz,SENSIBEL. Pflicht bei Lastschrift. Immer als Text formatieren.
 Beitragskonto,bic,Text,nein,,finanz,SENSIBEL. Bei DE-IBAN meist entbehrlich.
+Beitragskonto,iban_vorher,Text,nein,,finanz,"SENSIBEL. Zuletzt eingezogene IBAN vor einem Kontowechsel unter demselben Mandat. Nur vom Skript; wird für die Mandatsänderung (AmdmntInd) in der nächsten SEPA-Datei gebraucht und gilt als erledigt, sobald danach ein Einzug bezahlt ist."
+Beitragskonto,iban_geaendert_am,Datum,nein,,finanz,"Tag des Kontowechsels zu iban_vorher. Nur vom Skript."
 Beitragskonto,mandatsreferenz,Text,bedingt,,finanz,"SENSIBEL. Eindeutig, wird nie wiederverwendet."
 Beitragskonto,mandatsdatum,Datum,bedingt,,finanz,SENSIBEL. Unterschriftsdatum des Mandats.
 Beitragskonto,abw_strasse,Text,nein,,finanz,"Abweichende Rechnungsanschrift, getrennte Felder wegen pain.008.001.08."

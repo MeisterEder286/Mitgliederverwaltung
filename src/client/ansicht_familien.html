@@ -266,7 +266,7 @@
       if (!d.regeln.length) regeln.appendChild(A.el('li', 'Noch keine Regeln eingestellt.'));
       var kopf = [];
       if (A.darf('stammdaten_bearbeiten') && A.ansichten && A.ansichten.verwaltung) kopf.push(A.knopf('Regeln einstellen', function () {
-        A.zeige('verwaltung', { reiter: 'stammdaten', tab: 'Gemeinschaftsart' });
+        A.zeige('verwaltung', { reiter: 'stammdaten', tab: 'Beitragsart' });
       }, 'zweit klein'));
       inhalt.appendChild(A.abschnitt('Eingestellte Regeln', kopf, 'h3'));
       inhalt.appendChild(regeln);

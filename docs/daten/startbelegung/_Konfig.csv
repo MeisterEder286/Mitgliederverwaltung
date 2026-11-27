@@ -17,7 +17,6 @@ next_id_Abteilungszugehoerigkeit,16,ID-Zähler
 next_id_Funktionsart,14,ID-Zähler
 next_id_Funktion,16,ID-Zähler
 next_id_Beitragsart,4,ID-Zähler
-next_id_Gemeinschaftsart,3,ID-Zähler
 next_id_Beitragsgemeinschaft,2,ID-Zähler
 next_id_Beitragskonto,12,ID-Zähler
 next_id_Sollstellung,13,ID-Zähler
@@ -26,7 +25,7 @@ next_id_Qualifikation,10,ID-Zähler
 next_id_Ehrungsregel,13,ID-Zähler
 next_id_Ehrung,8,ID-Zähler
 next_id_Benutzer,6,ID-Zähler
-antrag_eingangsdatei,DATEI-ID EINTRAGEN,Getrennte Tabelle Aufnahmeantraege_TSV_Ergoldsbach — einziges Ziel des öffentlichen Endpunkts
+antrag_eingangsdatei,siehe Script Property EINGANG_ID,"Die ID der getrennten Eingangstabelle steht in der Script Property EINGANG_ID (nie in _Konfig, A3) – docs/EINGANG.md"
 antrag_abholung,stündlich,"Zeitgesteuerter Abruf: offene Anträge lesen, Dublettenprüfung, danach hier archivieren"
 antrag_drive_ordner,ORDNER-ID EINTRAGEN,"Drive-Ordner für unterschriebene Aufnahmeanträge. Freigabe: eingeschränkt, NICHT „jeder mit dem Link“."
 antrag_dateiname,JJJJ-MM-TT_Nachname_Vorname_Aufnahmeantrag.pdf,"Namensschema, damit der Ordner auch nach Jahren durchsuchbar bleibt"
@@ -50,7 +49,7 @@ next_id_Aufbewahrungsfrist,8,ID-Zähler
 next_id_Betroffenenanfrage,2,ID-Zähler
 next_id_Statistik_Jahr,8,ID-Zähler
 next_id_Protokoll,4,ID-Zähler
-jugend_bis_alter,17,Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). OFFEN: bestätigen
+jugend_bis_alter,17,"Bis zu diesem Alter (einschließlich) gilt jemand als Jugendmitglied (Sicht Jugendleiter). Einstellbar 10–27, Standard 17."
 snapshot_einbetten,ja,"ja = Startdaten direkt in die Seite einbetten (spart einen Aufruf), nein = nachladen. Für Messvergleich."
 cache_warmhalten,ja,"ja = stündlicher Trigger hält Benutzer, Einstellungen und Snapshot im Cache warm (kein langsamer Kaltstart). nein = aus."
 protokoll_nachgelagert,ja,"ja = Protokolleinträge werden dauerhaft vorgemerkt und direkt nach dem Speichern im Hintergrund ins Protokoll übertragen (Speichern schneller). nein = sofort beim Speichern."

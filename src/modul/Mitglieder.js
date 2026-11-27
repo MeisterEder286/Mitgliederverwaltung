@@ -17,7 +17,7 @@
  * Besonderheiten:
  *   - Mitglied.status ist ein Cache (Datenmodell). Er wird hier nach jeder Änderung an Zeiträumen/Sterbedatum
  *     aus Mitgliedschaft.status neu gesetzt. Austritte mit Datum in der Zukunft bleiben bis dahin „aktiv“ –
- *     der Status springt erst um, wenn danach wieder etwas gespeichert wird (OFFEN: nächtlicher Abgleich).
+ *     den Umschwung am Stichtag zieht die nächtliche Wartung nach (Wartung.statusNachziehen).
  *   - Mitgliedsnummer: aus _Konfig.mitgliedsnummer_naechste, belegte Nummern werden übersprungen, Nummern
  *     Ausgetretener werden nie neu vergeben (mitgliedsnummer_wiederverwendung = nein).
  *   - Austritt: „Guard statt Cascade“ (Übergabe §4). Ist die Person Inhaber eines Kontos, über das noch andere
@@ -31,7 +31,7 @@ var Mitglieder = (function () {
   var EXAKTSUCHE_MAX = 30;          // Suchen je Benutzer und Stunde
   var EXAKTSUCHE_MAX_TAG = 60;      // Suchen je Benutzer und Tag (Befund M3: Durchzählen erschweren)
   var TOKEN_DAUER_S = 600;          // so lange gilt ein Treffer-Token für „Zuordnen“
-  var EXPORTARTEN = ['liste', 'kontaktliste', 'jahrgangsliste', 'geburtstage', 'passive'];
+  var EXPORTARTEN = ['liste', 'kontaktliste', 'jahrgangsliste', 'geburtstage', 'passive', 'mailverteiler'];
 
   // ================================================================== Hilfen
 
@@ -41,8 +41,10 @@ var Mitglieder = (function () {
   function kopie(o) { var x = {}; Object.keys(o || {}).forEach(function (k) { x[k] = o[k]; }); return x; }
   function name(m) { return m ? [m.nachname, m.vorname].filter(Boolean).join(', ') : ''; }
   function falte(s) {
-    return String(s || '').trim().toLowerCase()
-      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss');
+    // NFC zuerst: „ü“ kann zerlegt (u + Trema) ankommen und würde sonst nicht zu „ue“; übrige Akzente entfernen
+    return String(s || '').normalize('NFC').trim().toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
   function istDatum(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s); }
 
@@ -146,7 +148,24 @@ var Mitglieder = (function () {
   // ================================================================== Bearbeiten
 
   /**
-   * Stammdaten speichern; optional in derselben Sperre auch „Wer zahlt?“ ändern (zahlungEingabe, siehe zahlungAendern).
+   * Regel „alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto“ (Datenmodell, Tab
+   * Beitragsgemeinschaft). Liefert Feldfehler; id = das bearbeitete Mitglied (beim Anlegen leer).
+   */
+  function gemeinschaftKontoFehler(gemeinschaftId, kontoId, id) {
+    if (leer(gemeinschaftId)) return [];
+    var andere = (daten().Mitglied || []).filter(function (m) {
+      return m.beitragsgemeinschaft_id === Number(gemeinschaftId) && m.mitglied_id !== Number(id) && m.beitragskonto_id;
+    });
+    if (!andere.length || Number(kontoId) === andere[0].beitragskonto_id) return [];
+    return [{ feld: 'beitragskonto_id', meldung: 'Alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto (Nr. ' + andere[0].beitragskonto_id + ').' }];
+  }
+
+  // Datenschutz-Status nur über den Datenschutz-Ablauf (Sperren/Anonymisieren mit Protokoll), nicht per
+  // normalem Bearbeiten oder Anlegen (Befund N2 der Sicherheitsprüfung).
+  var DATENSCHUTZ_FELDER = ['anonymisiert', 'anonymisiert_am', 'verarbeitung_eingeschraenkt', 'sperre_grund', 'loeschbar_ab'];
+
+  /**
+   * Stammdaten speichern; optional in derselben Sperre auch „Wer zahlt?“ ändern (zahlungEingabe, siehe zahlungPlanen).
    */
   function speichern(ktx, id, version, werte, zahlungEingabe) {
     var zahlungGeaendert = zahlungEingabe && ((zahlungEingabe.zahlung || {}).art || 'unveraendert') + '|' + ((zahlungEingabe.gemeinschaft || {}).art || 'unveraendert') !== 'unveraendert|unveraendert';
@@ -157,14 +176,17 @@ var Mitglieder = (function () {
       var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', werte || {}));
       delete felder.status;          // Cache, nur vom Skript
       delete felder.mitgliedsnummer; // bleibt lebenslang gleich
-      if (zahlungEingabe) { delete felder.beitragskonto_id; delete felder.beitragsgemeinschaft_id; }   // laufen über zahlungAendern
-      // Datenschutz-Status nur über den Datenschutz-Ablauf (Sperren/Anonymisieren mit Protokoll), nicht per
-      // normalem Bearbeiten (Befund N2 der Sicherheitsprüfung).
-      ['anonymisiert', 'anonymisiert_am', 'verarbeitung_eingeschraenkt', 'sperre_grund', 'loeschbar_ab']
-        .forEach(function (f) { delete felder[f]; });
+      if (zahlungEingabe) { delete felder.beitragskonto_id; delete felder.beitragsgemeinschaft_id; }   // laufen über zahlungPlanen
+      DATENSCHUTZ_FELDER.forEach(function (f) { delete felder[f]; });
       pruefeSchema('Mitglied', felder, true);
       var p = plausibel(felder, alt);
-      feldfehler(p.fehler);
+      var fehler = p.fehler;
+      var hat = function (f) { return Object.prototype.hasOwnProperty.call(felder, f); };
+      if (hat('beitragsgemeinschaft_id') || hat('beitragskonto_id')) {
+        fehler = fehler.concat(gemeinschaftKontoFehler(hat('beitragsgemeinschaft_id') ? felder.beitragsgemeinschaft_id : alt.beitragsgemeinschaft_id,
+          hat('beitragskonto_id') ? felder.beitragskonto_id : alt.beitragskonto_id, id));
+      }
+      feldfehler(fehler);
       var hinweise = p.warnungen.slice();
       var plan = zahlungGeaendert ? zahlungPlanen(ktx, alt, zahlungEingabe) : null;   // prüft alles VOR dem ersten Schreiben
       var r = DB.aktualisieren('Mitglied', id, felder, version, ktx);
@@ -182,7 +204,7 @@ var Mitglieder = (function () {
    *          | { art: 'konto', beitragskonto_id } | { art: 'keine' },
    *   mitGemeinschaft: true → die übrigen aktiven Mitglieder der bisherigen Gemeinschaft wechseln mit auf das neue Konto,
    *   gemeinschaft: { art: 'unveraendert' | 'keine' } | { art: 'bestehend', beitragsgemeinschaft_id }
-   *              | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] (weitere Zahler des Kontos) } }
+   *              | { art: 'neu', beitragsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] (weitere Zahler des Kontos) } }
    * Wirft Feldfehler (bereich 'zahlung' / 'gemeinschaft'); liefert den Plan für zahlungSchreiben.
    */
   function zahlungPlanen(ktx, m, eingabe) {
@@ -338,6 +360,7 @@ var Mitglieder = (function () {
     return DB.mitSperre(function () {
       var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', eingabe.mitglied || {}));
       delete felder.status; delete felder.mitgliedsnummer; delete felder.sterbedatum;
+      DATENSCHUTZ_FELDER.forEach(function (f) { delete felder[f]; });
       var fehler = [];
       if (!istDatum(eingabe.eintrittsdatum)) fehler.push({ feld: 'eintrittsdatum', meldung: 'Eintrittsdatum: Angabe fehlt (TT.MM.JJJJ).' });
       var p = plausibel(felder, {});
@@ -350,12 +373,7 @@ var Mitglieder = (function () {
         throw Fehler.fachlich('Mögliche Dublette: ' + d.map(function (x) { return x.name + ' (Nr. ' + x.mitgliedsnummer + ')'; }).join('; ') +
           '. Bitte prüfen – bei einem Wiedereintritt das bestehende Mitglied verwenden.', [{ feld: 'nachname', meldung: 'Gleicher Name und Geburtsdatum vorhanden.' }]);
       }
-      if (felder.beitragsgemeinschaft_id) {
-        var gleiche = (daten().Mitglied || []).filter(function (m) { return m.beitragsgemeinschaft_id === Number(felder.beitragsgemeinschaft_id); });
-        if (gleiche.length && gleiche[0].beitragskonto_id && Number(felder.beitragskonto_id) !== gleiche[0].beitragskonto_id) {
-          feldfehler([{ feld: 'beitragskonto_id', meldung: 'Alle Mitglieder einer Beitragsgemeinschaft zahlen über dasselbe Konto (Nr. ' + gleiche[0].beitragskonto_id + ').' }]);
-        }
-      }
+      feldfehler(gemeinschaftKontoFehler(felder.beitragsgemeinschaft_id, felder.beitragskonto_id, null));
       (eingabe.abteilungen || []).forEach(function (a) { pruefeAbteilung(ktx, a.abteilung_id); });
 
       felder.mitgliedsnummer = naechsteMitgliedsnummer();
@@ -454,11 +472,11 @@ var Mitglieder = (function () {
   function pruefeGemeinschaftNeu(gemWahl, fehler) {
     var w = { bezeichnung: String(gemWahl.bezeichnung || '').trim() || null, festbetrag: gemWahl.festbetrag === '' || gemWahl.festbetrag === undefined ? null : gemWahl.festbetrag, aktiv: true };
     if (w.festbetrag !== null) w.festbetrag = Number(String(w.festbetrag).replace(',', '.'));
-    if (!leer(gemWahl.gemeinschaftsart_id)) {
-      var gArt = finde('Gemeinschaftsart', 'gemeinschaftsart_id', gemWahl.gemeinschaftsart_id);
-      if (!gArt || gArt.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'gemeinschaftsart_id', meldung: 'Die gewählte Regel (Familien-/Ehegattenbeitrag) gibt es nicht (mehr).' });
+    if (!leer(gemWahl.beitragsart_id)) {
+      var gArt = finde('Beitragsart', 'beitragsart_id', gemWahl.beitragsart_id);
+      if (!gArt || gArt.aktiv === false || !gArt.als_gemeinschaft) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsart_id', meldung: 'Die gewählte Regel (Familien-/Ehegattenbeitrag) gibt es nicht (mehr).' });
       else {
-        w.gemeinschaftsart_id = gArt.gemeinschaftsart_id;
+        w.beitragsart_id = gArt.beitragsart_id;
         if (w.festbetrag === null && !leer(gArt.betrag)) w.festbetrag = Number(gArt.betrag);
       }
     }
@@ -477,7 +495,7 @@ var Mitglieder = (function () {
   function regelHinweise(gem, konto, h, hinweise, alle) {
     if (!gem) return;
     var konfig = Konfig.alle();
-    var art = !leer(gem.gemeinschaftsart_id) ? finde('Gemeinschaftsart', 'gemeinschaftsart_id', gem.gemeinschaftsart_id) : null;
+    var art = !leer(gem.beitragsart_id) ? finde('Beitragsart', 'beitragsart_id', gem.beitragsart_id) : null;
     var mitglieder = (alle || daten().Mitglied || []).filter(function (m) {
       return m.beitragsgemeinschaft_id === gem.beitragsgemeinschaft_id && m.anonymisiert !== true && Mitgliedschaft.status(m, zeitraeume(m.mitglied_id), h) === 'aktiv';
     });
@@ -494,9 +512,9 @@ var Mitglieder = (function () {
    *                vertretung: null | { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | { art: 'frei', name, kontakt } }],
    *   zahlung: { art: 'neu', konto: { zahlweg, iban, bic, mandatsdatum, kontoinhaber_name, abw_… }, inhaber: { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | null, trotzIban }
    *          | { art: 'konto', beitragskonto_id } | { art: 'spaeter' },
-   *   gemeinschaft: { art: 'keine' } | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] } | { art: 'bestehend', beitragsgemeinschaft_id }
+   *   gemeinschaft: { art: 'keine' } | { art: 'neu', beitragsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] } | { art: 'bestehend', beitragsgemeinschaft_id }
    *   (mit = Personen, die schon über das gewählte Konto zahlen und mit in die neue Gemeinschaft kommen)
-   *   (gemeinschaftsart_id = Regel, z. B. Familienbeitrag; ohne festbetrag gilt deren Betrag)
+   *   (beitragsart_id = Regel, z. B. Familienbeitrag; ohne festbetrag gilt deren Betrag)
    * }
    * Feldfehler tragen { person: i } bzw. { bereich: 'zahlung' | 'gemeinschaft' }, damit der Browser sie zuordnen kann.
    * Gesetzliche Vertretung wird nur bei Minderjährigen übernommen. Scheitert ein Schreibschritt, werden die bereits
@@ -524,7 +542,7 @@ var Mitglieder = (function () {
       var personen = personenRoh.map(function (p, i) {
         p = p || {};
         var felder = typisiere('Mitglied', Rechte.erlaubteSchreibfelder(ktx, 'Mitglied', p.mitglied || {}));
-        ['status', 'mitgliedsnummer', 'sterbedatum'].concat(VERTRETUNG_FELDER, ZAHLUNG_FELDER).forEach(function (f) { delete felder[f]; });
+        ['status', 'mitgliedsnummer', 'sterbedatum'].concat(VERTRETUNG_FELDER, ZAHLUNG_FELDER, DATENSCHUTZ_FELDER).forEach(function (f) { delete felder[f]; });
         var pr = plausibel(felder, {});
         var fl = pr.fehler.slice();
         felder.mitgliedsnummer = '0';
@@ -675,7 +693,7 @@ var Mitglieder = (function () {
         if (gem) {
           // Regel der Gemeinschaft prüfen (neue + bisherige aktive Mitglieder) – Abweichungen sind erlaubt, werden aber gemeldet
           var konfig = Konfig.alle();
-          var gArtNeu = !leer(gem.gemeinschaftsart_id) ? finde('Gemeinschaftsart', 'gemeinschaftsart_id', gem.gemeinschaftsart_id) : null;
+          var gArtNeu = !leer(gem.beitragsart_id) ? finde('Beitragsart', 'beitragsart_id', gem.beitragsart_id) : null;
           var neuIds = {};
           neue.forEach(function (m) { neuIds[m.mitglied_id] = true; });
           var mitIds = {};
@@ -720,7 +738,11 @@ var Mitglieder = (function () {
       }
       var ende = zr.length ? Mitgliedschaft.endeVon(zr[zr.length - 1]) : null;
       if (ende && eingabe.eintrittsdatum <= ende) feldfehler([{ feld: 'eintrittsdatum', meldung: 'Der Eintritt muss nach dem letzten Austritt (' + ende + ') liegen.' }]);
-      (eingabe.abteilungen || []).forEach(function (a) { pruefeAbteilung(ktx, a.abteilung_id); });
+      (eingabe.abteilungen || []).forEach(function (a) {
+        pruefeAbteilung(ktx, a.abteilung_id);
+        // Vorab prüfen, damit kein Zeitraum ohne Abteilungen geschrieben wird (Abbruch nach dem ersten Schreiben)
+        zugehoerigkeitPruefen(Number(id), Number(a.abteilung_id), eingabe.eintrittsdatum);
+      });
       var z = DB.einfuegen('Mitgliedschaftszeitraum', { mitglied_id: Number(id), eintrittsdatum: eingabe.eintrittsdatum, bemerkung: 'Wiedereintritt' }, ktx);
       var aenderungen = [{ tab: 'Mitgliedschaftszeitraum', neu: z }];
       var protokoll = [{ aktion: 'angelegt', tabelle: 'Mitgliedschaftszeitraum', datensatz_id: z.zeitraum_id, kommentar: 'Wiedereintritt ' + z.eintrittsdatum }];
@@ -742,19 +764,25 @@ var Mitglieder = (function () {
     return { waisen: w, laufend: laufend ? { zeitraum_id: laufend.zeitraum_id, eintrittsdatum: laufend.eintrittsdatum } : null, vorschlag_wirksam: d };
   }
 
-  /** Beendet laufende Zugehörigkeiten und Funktionen einer Person zum Datum (nie löschen, nur abschließen). */
+  /**
+   * Beendet laufende Zugehörigkeiten und Funktionen einer Person zum Datum (nie löschen, nur abschließen).
+   * Begann eine Zugehörigkeit oder Funktion erst NACH dem (rückwirkenden) Datum, endet sie an ihrem Beginn –
+   * sonst entstünde „Ende vor Beginn“ (Prüfregel datum_reihenfolge).
+   */
   function beendeLaufendes(ktx, id, datum, grund, aenderungen, protokoll) {
     (daten().Abteilungszugehoerigkeit || []).filter(function (a) {
       return a.mitglied_id === Number(id) && (!a.austrittsdatum || a.austrittsdatum > datum);
     }).forEach(function (a) {
-      var r = DB.aktualisieren('Abteilungszugehoerigkeit', a.zugehoerigkeit_id, { austrittsdatum: datum }, a.version || 0, ktx);
+      var ende = a.eintrittsdatum && a.eintrittsdatum > datum ? a.eintrittsdatum : datum;
+      var r = DB.aktualisieren('Abteilungszugehoerigkeit', a.zugehoerigkeit_id, { austrittsdatum: ende }, a.version || 0, ktx);
       aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: r.neu });
       protokoll.push({ aktion: 'beendet', tabelle: 'Abteilungszugehoerigkeit', datensatz_id: a.zugehoerigkeit_id, kommentar: grund });
     });
     (daten().Funktion || []).filter(function (f) {
       return f.mitglied_id === Number(id) && (!f.bis || f.bis > datum);
     }).forEach(function (f) {
-      var r = DB.aktualisieren('Funktion', f.funktion_id, { bis: datum, beendigungsgrund: f.beendigungsgrund || grund }, f.version || 0, ktx);
+      var ende = f.von && f.von > datum ? f.von : datum;
+      var r = DB.aktualisieren('Funktion', f.funktion_id, { bis: ende, beendigungsgrund: f.beendigungsgrund || grund }, f.version || 0, ktx);
       aenderungen.push({ tab: 'Funktion', neu: r.neu });
       protokoll.push({ aktion: 'beendet', tabelle: 'Funktion', datensatz_id: f.funktion_id, kommentar: grund });
     });
@@ -817,12 +845,17 @@ var Mitglieder = (function () {
           });
           hinweise.push(abhaengige.length + ' weitere Person(en) treten mit aus.');
         } else if (opt.code === 'zahlweg_offen') {
+          // Merker als interne Notiz mit Leserkreis Finanzen – NICHT in Mitglied.bemerkung (Sichtklasse kontakt, dort
+          // läsen Abteilungs- und Jugendleitung Zahlungsdaten und den Austritt einer dritten Person; Prüfbefund M6).
           abhaengige.forEach(function (x) {
             var m = finde('Mitglied', 'mitglied_id', x.a.mitglied_id);
             if (!m) return;
-            var r = DB.aktualisieren('Mitglied', m.mitglied_id, { bemerkung: bemerkungAnhaengen(m.bemerkung, 'Zahlweg offen: ' + text + '.') }, m.version || 0, ktx);
-            aenderungen.push({ tab: 'Mitglied', neu: r.neu });
-            protokoll.push({ aktion: 'geändert', tabelle: 'Mitglied', datensatz_id: m.mitglied_id, feld: 'bemerkung', kommentar: 'Zahlweg offen' });
+            var n = DB.einfuegen('Notiz', {
+              mitglied_id: m.mitglied_id, beitragskonto_id: x.konto.konto_id, art: 'Notiz', text: 'Zahlweg offen: ' + text + '.',
+              sichtbar_fuer: 'Finanzen', erstellt_von: ktx.email
+            }, ktx);
+            aenderungen.push({ tab: 'Notiz', neu: n });
+            protokoll.push({ aktion: 'angelegt', tabelle: 'Notiz', datensatz_id: n.notiz_id, kommentar: 'Zahlweg offen · Mitglied ' + m.mitglied_id });
           });
           hinweise.push('Die Abhängigen stehen in der Klärliste des Finanzbereichs und fallen aus dem nächsten SEPA-Lauf.');
         } else if (opt.code === 'uebernahme') {
@@ -877,17 +910,23 @@ var Mitglieder = (function () {
 
   // ================================================================== Abteilungszugehörigkeit
 
-  function zugehoerigkeitAnlegenOderReaktivieren(ktx, mitgliedId, abteilungId, status, ab, aenderungen, protokoll) {
+  /** Prüft, ob eine Zuordnung ab `ab` möglich ist (wirft sonst). Liefert die vorhandene, beendete Zeile oder null. */
+  function zugehoerigkeitPruefen(mitgliedId, abteilungId, ab) {
     var abt = finde('Abteilung', 'abteilung_id', abteilungId);
     if (!abt) feldfehler([{ feld: 'abteilung_id', meldung: 'Abteilung unbekannt.' }]);
     if (abt.aktiv === false) feldfehler([{ feld: 'abteilung_id', meldung: 'Die Abteilung ' + abt.bezeichnung + ' ruht.' }]);
     var vorhanden = (daten().Abteilungszugehoerigkeit || []).filter(function (a) {
       return a.mitglied_id === mitgliedId && a.abteilung_id === abteilungId;
     })[0];
+    if (vorhanden && (!vorhanden.austrittsdatum || vorhanden.austrittsdatum > ab)) {
+      throw Fehler.fachlich('Die Person ist der Abteilung ' + abt.bezeichnung + ' bereits zugeordnet.', [{ feld: 'abteilung_id', meldung: 'Bereits zugeordnet.' }]);
+    }
+    return vorhanden || null;
+  }
+
+  function zugehoerigkeitAnlegenOderReaktivieren(ktx, mitgliedId, abteilungId, status, ab, aenderungen, protokoll) {
+    var vorhanden = zugehoerigkeitPruefen(mitgliedId, abteilungId, ab);
     if (vorhanden) {
-      if (!vorhanden.austrittsdatum || vorhanden.austrittsdatum > ab) {
-        throw Fehler.fachlich('Die Person ist der Abteilung ' + abt.bezeichnung + ' bereits zugeordnet.', [{ feld: 'abteilung_id', meldung: 'Bereits zugeordnet.' }]);
-      }
       var r = DB.aktualisieren('Abteilungszugehoerigkeit', vorhanden.zugehoerigkeit_id,
         { austrittsdatum: null, status: status, eintrittsdatum: ab }, vorhanden.version || 0, ktx);
       aenderungen.push({ tab: 'Abteilungszugehoerigkeit', neu: r.neu });
@@ -1056,6 +1095,17 @@ var Mitglieder = (function () {
       felder.funktionsart_id = Number(felder.funktionsart_id);
       felder.mitglied_id = mid;
       pruefeSchema('Funktion', felder);
+      // Gleiche Funktion (Art, Abteilung, Zusatz) läuft schon → keine zweite Zeile (z. B. Doppelklick); sonst
+      // entstünden doppelte Funktionsehrungen (Ehrung eindeutig je funktion_id). Prüfregel funktion_doppelt.
+      var zusatz = String(felder.zusatz || '').trim().toLowerCase();
+      var doppelt = (daten().Funktion || []).filter(function (x) {
+        return x.mitglied_id === mid && x.funktionsart_id === felder.funktionsart_id && (x.abteilung_id || null) === felder.abteilung_id &&
+          String(x.zusatz || '').trim().toLowerCase() === zusatz && (!x.bis || x.bis >= felder.von);
+      })[0];
+      if (doppelt) {
+        throw Fehler.fachlich('Diese Funktion ist für die Person bereits eingetragen (seit ' + doppelt.von + ').',
+          [{ feld: 'funktionsart_id', meldung: 'Läuft bereits – ggf. die bestehende Funktion beenden oder einen Zusatz (Mannschaft) angeben.' }]);
+      }
       var neu = DB.einfuegen('Funktion', felder, ktx);
       var a = antwort(ktx, [{ tab: 'Funktion', neu: neu }],
         [{ aktion: 'angelegt', tabelle: 'Funktion', datensatz_id: neu.funktion_id, kommentar: art.bezeichnung + (felder.zusatz ? ' ' + felder.zusatz : '') }]);

@@ -60,6 +60,17 @@ var Fristen = (function () {
   }
 
   /**
+   * Löschdatum eines gespeicherten FZ-Vermerks: immer frisch gerechnet, damit eine NACH der Einsicht eingetragene
+   * nachweispflichtige Funktion sofort zählt (der gespeicherte Wert wird erst nachts nachgezogen). Der gespeicherte
+   * Wert gilt nur als Untergrenze – das Ergebnis ist nie früher als bisher. null = nicht löschbar (Funktion läuft).
+   */
+  function loeschdatum(q, daten, art, heute) {
+    var frisch = zuLoeschenAb(q.mitglied_id, daten, art, heute);
+    if (frisch === null) return null;
+    return q.zu_loeschen_ab && q.zu_loeschen_ab > frisch ? q.zu_loeschen_ab : frisch;
+  }
+
+  /**
    * Feldprüfung einer Eingabe (neue Einsichtnahme bzw. Lizenz). Liefert [{ feld, meldung }] (leer = in Ordnung).
    * heute optional ('JJJJ-MM-TT') für „nicht in der Zukunft“.
    */
@@ -159,7 +170,7 @@ var Fristen = (function () {
     quals.forEach(function (q) {
       var a = arten[q.qualifikationsart_id];
       if (!istFz(a) || q.geloescht_am) return;
-      var ab = q.zu_loeschen_ab || zuLoeschenAb(q.mitglied_id, daten, a, heute);
+      var ab = loeschdatum(q, daten, a, heute);
       if (ab && ab <= heute) zuLoeschen.push({ qualifikation_id: q.qualifikation_id, mitglied_id: q.mitglied_id, zu_loeschen_ab: ab });
     });
     personen.sort(function (a, b) { return ['rot', 'gelb', 'gruen'].indexOf(a.ampel) - ['rot', 'gelb', 'gruen'].indexOf(b.ampel) || a.mitglied_id - b.mitglied_id; });
@@ -184,7 +195,7 @@ var Fristen = (function () {
   }
 
   return {
-    ERGEBNIS_ERLAUBT: ERGEBNIS_ERLAUBT, wiedervorlage: wiedervorlage, zuLoeschenAb: zuLoeschenAb,
+    ERGEBNIS_ERLAUBT: ERGEBNIS_ERLAUBT, wiedervorlage: wiedervorlage, zuLoeschenAb: zuLoeschenAb, loeschdatum: loeschdatum,
     pruefeEinsicht: pruefeEinsicht, ampelFuer: ampelFuer, uebersicht: uebersicht, abgeleitet: abgeleitet,
     loeschAenderungen: loeschAenderungen, pflichtigeFunktionen: pflichtigeFunktionen
   };
