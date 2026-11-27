@@ -40,7 +40,6 @@ var SnapshotKern = (function () {
     Funktionsart: 'funktionsarten',
     Funktion: 'funktionen',
     Beitragsart: 'beitragsarten',
-    Gemeinschaftsart: 'gemeinschaftsarten',
     Beitragsgemeinschaft: 'gemeinschaften',
     Beitragskonto: 'konten',
     Sollstellung: 'sollstellungen',
@@ -55,7 +54,7 @@ var SnapshotKern = (function () {
     Notiz: 'notizen'
   };
   var TABS = Object.keys(LISTEN);
-  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Gemeinschaftsart', 'Qualifikationsart', 'Ehrungsregel', 'Vorlage'];
+  var STAMMDATEN = ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel', 'Vorlage'];
   // Schriftverkehr: nur mit Sichtklasse „finanz“; Zeilen nur zu sichtbaren Personen/Konten.
   var KORRESPONDENZ = ['Dokument', 'Anschreiben'];
   // Große Textfelder bleiben aus Basis und Snapshot heraus; sie werden bei Bedarf einzeln geladen.

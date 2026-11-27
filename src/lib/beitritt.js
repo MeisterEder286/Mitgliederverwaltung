@@ -179,7 +179,7 @@ var Beitritt = (function () {
     var betrag = typeof Beitrag !== 'undefined' ? Beitrag.betragAm(art, stichtag) : Number(art.betrag || 0);
     if (art.als_gemeinschaft) {
       var p1 = tabs.Mitglied[0];
-      tabs.Beitragsgemeinschaft = [{ beitragsgemeinschaft_id: 1, bezeichnung: art.als_gemeinschaft + ' ' + (p1.nachname || ''), festbetrag: betrag,
+      tabs.Beitragsgemeinschaft = [{ beitragsgemeinschaft_id: 1, bezeichnung: art.als_gemeinschaft + ' ' + (p1.nachname || ''), beitragsart_id: art.beitragsart_id, festbetrag: betrag,
         aktiv: true, bemerkung: null, version: 1, geaendert_am: null, geaendert_von: null }];
       tabs.Mitglied.forEach(function (mm) { mm.beitragsgemeinschaft_id = 1; });
       if (art.als_gemeinschaft === 'Ehepaar' && tabs.Mitglied.length !== 2) warnungen.push('Ehegattenbeitrag mit ' + tabs.Mitglied.length + ' Person(en) – bitte prüfen.');

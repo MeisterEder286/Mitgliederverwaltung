@@ -1056,7 +1056,7 @@
       var x = zahlerVon(kontoId).filter(function (y) { return y.beitragsgemeinschaft_id; })[0];
       return x ? A.daten.hole('gemeinschaften', x.beitragsgemeinschaft_id) : null;
     }
-    function regelName(g) { var r = g && g.gemeinschaftsart_id ? A.daten.hole('gemeinschaftsarten', g.gemeinschaftsart_id) : null; return r ? ' (' + r.bezeichnung + ')' : ''; }
+    function regelName(g) { var r = g && g.beitragsart_id ? A.daten.hole('beitragsarten', g.beitragsart_id) : null; return r ? ' (' + r.bezeichnung + ')' : ''; }
 
     ziel.appendChild(A.el('h2', 'Wer zahlt den Beitrag?'));
     var box = A.el('section', null, { className: 'karte mv-zahlung' });
@@ -1125,7 +1125,7 @@
       { wert: 'unveraendert', text: altGem ? 'Bleibt in „' + altGem.bezeichnung + '“' : 'Unverändert (keine Gemeinschaft)' },
       { wert: 'keine', text: altGem ? 'Verlässt die Gemeinschaft – zahlt die eigene Beitragsart' : 'Keine Gemeinschaft' },
       { wert: 'bestehend', text: 'In die Gemeinschaft des gewählten Kontos aufnehmen' }
-    ].concat(regeln.map(function (r) { return { wert: 'r' + r.gemeinschaftsart_id, text: 'Neu: ' + r.bezeichnung + ' (' + A.betrag(r.betrag) + ')' }; })), 'unveraendert');
+    ].concat(regeln.map(function (r) { return { wert: 'r' + r.beitragsart_id, text: 'Neu: ' + r.bezeichnung + ' (' + A.betrag(r.betrag) + ')' }; })), 'unveraendert');
     box.appendChild(g.art.element);
     g.info = A.el('p', '', { className: 'leise' });
     box.appendChild(g.info);
@@ -1166,7 +1166,7 @@
       g.art.zeige('unveraendert', bleibtMoeglich);
       g.art.zeige('bestehend', !!zielGem);
       var neuMoeglich = !!ziel && (andereZahler.length + mitzieher.length > 0 || ziel === 'neu');
-      regeln.forEach(function (r) { g.art.zeige('r' + r.gemeinschaftsart_id, neuMoeglich); });
+      regeln.forEach(function (r) { g.art.zeige('r' + r.beitragsart_id, neuMoeglich); });
       var w = g.art.wert();
       if (!g.manuell || (w === 'unveraendert' && !bleibtMoeglich) || (w === 'bestehend' && !zielGem) || (/^r/.test(w) && !neuMoeglich)) {
         g.art.setze(zielGem ? 'bestehend' : bleibtMoeglich ? 'unveraendert' : 'keine', true);
@@ -1181,7 +1181,7 @@
         : w === 'unveraendert' && altGem && wechsel && familie.length ? 'Die ganze Familie wechselt auf das neue Konto.' : '';
       var bez = g.form.feld('bezeichnung');
       if (/^r/.test(w) && (!bez.value || bez.dataset.auto !== 'nein')) {
-        var r = A.daten.hole('gemeinschaftsarten', Number(w.slice(1)));
+        var r = A.daten.hole('beitragsarten', Number(w.slice(1)));
         bez.value = ((r && Number(r.max_kinder) === 0 && r.max_kinder !== undefined) ? 'Ehepaar ' : 'Familie ') + (m.nachname || '');
         bez.dataset.auto = 'ja';
       }
@@ -1208,7 +1208,7 @@
           e.zahlung = { art: 'neu', konto: k, inhaber: z.inhaber.value === 'selbst' ? { art: 'selbst' } : null, trotzIban: z.trotz.checked };
         } else if (a === 'konto') e.zahlung = { art: 'konto', beitragskonto_id: z.kontoWahl.value ? Number(z.kontoWahl.value) : null };
         if (w === 'bestehend' && g.zielGem) e.gemeinschaft = { art: 'bestehend', beitragsgemeinschaft_id: g.zielGem.beitragsgemeinschaft_id };
-        else if (/^r\d+$/.test(w)) e.gemeinschaft = { art: 'neu', gemeinschaftsart_id: Number(w.slice(1)), bezeichnung: g.form.werte().bezeichnung, festbetrag: g.form.werte().festbetrag, mit: g.mit.map(function (x) { return x.mitglied_id; }) };
+        else if (/^r\d+$/.test(w)) e.gemeinschaft = { art: 'neu', beitragsart_id: Number(w.slice(1)), bezeichnung: g.form.werte().bezeichnung, festbetrag: g.form.werte().festbetrag, mit: g.mit.map(function (x) { return x.mitglied_id; }) };
         return e;
       },
       pruefe: function () {
@@ -1303,11 +1303,11 @@
   }
 
   function regelnAktiv() {
-    return A.daten.liste('gemeinschaftsarten').filter(function (r) { return r.aktiv !== false; })
-      .sort(function (a, b) { return a.gemeinschaftsart_id - b.gemeinschaftsart_id; });
+    return A.daten.liste('beitragsarten').filter(function (r) { return r.aktiv !== false && r.als_gemeinschaft; })
+      .sort(function (a, b) { return a.beitragsart_id - b.beitragsart_id; });
   }
   function konfigZahl(k, standard) { var v = ((A.startdaten && A.startdaten.konfig) || {})[k]; return v === undefined || v === null || v === '' || isNaN(Number(v)) ? standard : Number(v); }
-  /** Grenzen einer Regel (Gemeinschaftsart) – leere Felder wie auf dem Server (Familie.einstellungenFuer). */
+  /** Grenzen einer Regel (Beitragsart mit „als Gemeinschaft“) – leere Felder wie auf dem Server (Familie.einstellungenFuer). */
   function regelGrenzen(r) {
     var hat = function (v) { return v !== undefined && v !== null && v !== ''; };
     return {
@@ -1572,7 +1572,7 @@
       gem.ueberschrift = A.el('h2', 'Familien-/Ehegattenbeitrag', { className: 'mv-neu-gruppe' });
       gem.box = A.el('section', null, { className: 'karte mv-gemeinschaft' });
       gem.art = radios('mv-gemart', [{ wert: 'keine', text: 'Keiner – jede Person zahlt ihre eigene Beitragsart' }]
-        .concat(gem.regeln.map(function (r) { return { wert: 'r' + r.gemeinschaftsart_id, text: r.bezeichnung + ' (' + A.betrag(r.betrag) + ') – ' + regelText(r) }; }))
+        .concat(gem.regeln.map(function (r) { return { wert: 'r' + r.beitragsart_id, text: r.bezeichnung + ' (' + A.betrag(r.betrag) + ') – ' + regelText(r) }; }))
         .concat(gem.regeln.length ? [] : [{ wert: 'neu', text: 'Als Familie (neue Beitragsgemeinschaft) führen' }])
         .concat([{ wert: 'bestehend', text: 'In die bestehende Beitragsgemeinschaft aufnehmen' }]), 'keine');
       gem.box.appendChild(gem.art.element);
@@ -1644,12 +1644,12 @@
       });
     }
 
-    function regel(id) { return gem ? gem.regeln.filter(function (r) { return String(r.gemeinschaftsart_id) === String(id); })[0] || null : null; }
+    function regel(id) { return gem ? gem.regeln.filter(function (r) { return String(r.beitragsart_id) === String(id); })[0] || null : null; }
     function gewaehlteRegel() {
       if (!gem) return null;
       var w = gem.art.wert() || '';
       if (/^r\d+$/.test(w)) return regel(w.slice(1));
-      if (w === 'bestehend' && gem.bestehend && gem.bestehend.gemeinschaftsart_id) return A.daten.hole('gemeinschaftsarten', gem.bestehend.gemeinschaftsart_id);
+      if (w === 'bestehend' && gem.bestehend && gem.bestehend.beitragsart_id) return A.daten.hole('beitragsarten', gem.bestehend.beitragsart_id);
       return null;
     }
     /** Vorschlag: Kinder dabei → Regel mit Kindern (Familienbeitrag), genau zwei Erwachsene → Regel ohne Kinder (Ehegattenbeitrag). */
@@ -1660,7 +1660,7 @@
       var ohneKinder = gem.regeln.filter(function (r) { return Number(r.max_kinder) === 0 && r.max_kinder !== undefined; })[0];
       var mitKindern = gem.regeln.filter(function (r) { return !(r.max_kinder !== undefined && Number(r.max_kinder) === 0); })[0];
       var r = !kinder && anzahl === 2 && ohneKinder ? ohneKinder : mitKindern || ohneKinder;
-      return r ? 'r' + r.gemeinschaftsart_id : (gem.regeln.length ? 'keine' : 'neu');
+      return r ? 'r' + r.beitragsart_id : (gem.regeln.length ? 'keine' : 'neu');
     }
 
     function zeigeGemeinschaft() {
@@ -1679,7 +1679,7 @@
       gem.ueberschrift.hidden = !sichtbar;
       gem.box.hidden = !sichtbar;
       var neuMoeglich = mehrere && art !== 'spaeter';
-      gem.regeln.forEach(function (r) { gem.art.zeige('r' + r.gemeinschaftsart_id, neuMoeglich); });
+      gem.regeln.forEach(function (r) { gem.art.zeige('r' + r.beitragsart_id, neuMoeglich); });
       gem.art.zeige('neu', neuMoeglich);
       gem.art.zeige('bestehend', !!bestehend);
       if (!gem.manuell) gem.art.setze(bestehend ? 'bestehend' : mehrere ? regelVorschlag() : 'keine', true);
@@ -1805,7 +1805,7 @@
       } else if (za === 'konto') e.zahlung = { art: 'konto', beitragskonto_id: zahlung.kontoWahl.value ? Number(zahlung.kontoWahl.value) : null };
       else e.zahlung = { art: 'spaeter' };
       var ga = gem.box.hidden ? 'keine' : gem.art.wert();
-      if (ga === 'neu' || /^r\d+$/.test(ga)) e.gemeinschaft = { art: 'neu', gemeinschaftsart_id: /^r\d+$/.test(ga) ? Number(ga.slice(1)) : null, bezeichnung: gem.form.werte().bezeichnung, festbetrag: gem.form.werte().festbetrag,
+      if (ga === 'neu' || /^r\d+$/.test(ga)) e.gemeinschaft = { art: 'neu', beitragsart_id: /^r\d+$/.test(ga) ? Number(ga.slice(1)) : null, bezeichnung: gem.form.werte().bezeichnung, festbetrag: gem.form.werte().festbetrag,
         mit: (gem.mit || []).map(function (x) { return x.mitglied_id; }) };
       else if (ga === 'bestehend' && gem.bestehend) e.gemeinschaft = { art: 'bestehend', beitragsgemeinschaft_id: gem.bestehend.beitragsgemeinschaft_id };
       else e.gemeinschaft = { art: 'keine' };

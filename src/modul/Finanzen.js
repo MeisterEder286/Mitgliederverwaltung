@@ -376,12 +376,12 @@ var Finanzen = (function () {
   function gemeinschaftSpeichern(ktx, id, version, werte) {
     werte = werte || {};
     var w = {};
-    ['bezeichnung', 'gemeinschaftsart_id', 'festbetrag', 'aktiv', 'bemerkung'].forEach(function (f) { if (Object.prototype.hasOwnProperty.call(werte, f)) w[f] = werte[f]; });
-    if (w.gemeinschaftsart_id === '') w.gemeinschaftsart_id = null;
-    if (w.gemeinschaftsart_id !== undefined && w.gemeinschaftsart_id !== null) {
-      w.gemeinschaftsart_id = Number(w.gemeinschaftsart_id);
-      var regel = nachId(basis().tabs.Gemeinschaftsart || [], 'gemeinschaftsart_id')[w.gemeinschaftsart_id];
-      if (!regel) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'gemeinschaftsart_id', meldung: 'Diese Regel gibt es nicht.' }]);
+    ['bezeichnung', 'beitragsart_id', 'festbetrag', 'aktiv', 'bemerkung'].forEach(function (f) { if (Object.prototype.hasOwnProperty.call(werte, f)) w[f] = werte[f]; });
+    if (w.beitragsart_id === '') w.beitragsart_id = null;
+    if (w.beitragsart_id !== undefined && w.beitragsart_id !== null) {
+      w.beitragsart_id = Number(w.beitragsart_id);
+      var regel = nachId(basis().tabs.Beitragsart || [], 'beitragsart_id')[w.beitragsart_id];
+      if (!regel || !regel.als_gemeinschaft) throw Fehler.fachlich('Bitte Eingaben prüfen.', [{ feld: 'beitragsart_id', meldung: 'Diese Regel gibt es nicht.' }]);
       // mit Regel und ohne eigenen Festbetrag: Betrag der Regel übernehmen
       var neuG = id === null || id === undefined || id === '';
       if ((neuG && (w.festbetrag === undefined || w.festbetrag === null || w.festbetrag === '')) ||

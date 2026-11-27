@@ -613,14 +613,14 @@
     }, function () {});
   }
 
-  function regelVon(g) { return g && g.gemeinschaftsart_id ? A.daten.hole('gemeinschaftsarten', g.gemeinschaftsart_id) : null; }
+  function regelVon(g) { return g && g.beitragsart_id ? A.daten.hole('beitragsarten', g.beitragsart_id) : null; }
 
   function gemeinschaftFormular(g) {
-    var regeln = A.daten.liste('gemeinschaftsarten').filter(function (r) { return r.aktiv !== false || (g && g.gemeinschaftsart_id === r.gemeinschaftsart_id); })
-      .map(function (r) { return { wert: r.gemeinschaftsart_id, text: r.bezeichnung + ' (' + A.betrag(r.betrag) + ')' }; });
+    var regeln = A.daten.liste('beitragsarten').filter(function (r) { return r.als_gemeinschaft && r.aktiv !== false || (g && g.beitragsart_id === r.beitragsart_id); })
+      .map(function (r) { return { wert: r.beitragsart_id, text: r.bezeichnung + ' (' + A.betrag(r.betrag) + ')' }; });
     var form = A.formular([
       { name: 'bezeichnung', titel: 'Bezeichnung', typ: 'text', pflicht: true, hilfe: 'z. B. „Familie Wagner“' },
-      { name: 'gemeinschaftsart_id', titel: 'Regel', typ: 'auswahl', liste: regeln, zahl: true, hilfe: 'Familien- oder Ehegattenbeitrag – Abweichungen werden gemeldet (Familien → Abweichungen).' },
+      { name: 'beitragsart_id', titel: 'Regel', typ: 'auswahl', liste: regeln, zahl: true, hilfe: 'Familien- oder Ehegattenbeitrag – Abweichungen werden gemeldet (Familien → Abweichungen).' },
       { name: 'festbetrag', titel: 'Festbetrag (€)', typ: 'betrag', hilfe: 'Leer = Betrag der Regel (ohne Regel: Einzeltarife)' },
       { name: 'bemerkung', titel: 'Bemerkung', typ: 'langtext' }
     ], g || {});

@@ -312,7 +312,7 @@ test('entfernen: Zeilen über ID löschen, zusammenhängende in einem Schritt; a
 
 function nachgelagert() {
   const f = erzeugeFakes({ tabs: beispielTabs(['Mitglied', 'Mitgliedschaftszeitraum', 'Abteilung', 'Abteilungszugehoerigkeit', 'Funktionsart', 'Funktion',
-    'Beitragsart', 'Gemeinschaftsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation', 'Ehrungsregel', 'Ehrung',
+    'Beitragsart', 'Beitragsgemeinschaft', 'Beitragskonto', 'Sollstellung', 'Qualifikationsart', 'Qualifikation', 'Ehrungsregel', 'Ehrung',
     'Einwilligung', 'Vorlage', 'Dokument', 'Anschreiben', 'Notiz', '_Konfig', 'Benutzer', '_Protokoll', '_Messung']), email: 'verwaltung@tsv-ergoldsbach.de' });
   f.globale.__protokollNachgelagert = true;
   return { f, g: ladeProjekt(f.globale) };

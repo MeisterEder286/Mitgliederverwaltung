@@ -17,7 +17,6 @@ next_id_Abteilungszugehoerigkeit,16,ID-Zähler
 next_id_Funktionsart,14,ID-Zähler
 next_id_Funktion,16,ID-Zähler
 next_id_Beitragsart,4,ID-Zähler
-next_id_Gemeinschaftsart,3,ID-Zähler
 next_id_Beitragsgemeinschaft,2,ID-Zähler
 next_id_Beitragskonto,12,ID-Zähler
 next_id_Sollstellung,13,ID-Zähler

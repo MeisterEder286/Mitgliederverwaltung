@@ -125,7 +125,7 @@ test('Mitgliederverwalter: Familie aufnehmen, vorhandene IBAN erkennen und Konto
     // Gehört das Konto schon zu einer Gemeinschaft, wird „bestehende“ vorgeschlagen, sonst eine neue Familie
     const gemArt = await p.locator('input[name=mv-gemart]:checked').inputValue();
     if (gemArt !== 'bestehend') {
-      assert.strictEqual(gemArt, 'r1', 'mit Kind → Familienbeitrag vorgeschlagen');
+      assert.strictEqual(gemArt, 'r4', 'mit Kind → Familienbeitrag vorgeschlagen');
       assert.strictEqual(await p.getByLabel('Bezeichnung *').inputValue(), 'Familie Familienprobe');
       assert.strictEqual(await p.getByLabel('Festbetrag', { exact: true }).inputValue(), '180');
       assert.match(await p.locator('.mv-regelpruefung').innerText(), /Passt zur Regel: \d Erwachsene?r?, 1 Kind/);
@@ -140,7 +140,7 @@ test('Mitgliederverwalter: Familie aufnehmen, vorhandene IBAN erkennen und Konto
     assert.strictEqual(lena.vertreter_mitglied_id, maria.mitglied_id);
     assert.ok(!maria.vertreter_mitglied_id && !maria.vertreter_name);
     assert.ok(lena.beitragsgemeinschaft_id && lena.beitragsgemeinschaft_id === maria.beitragsgemeinschaft_id, 'Familie als Gemeinschaft');
-    if (gemArt !== 'bestehend') assert.strictEqual(ui.objekte('Beitragsgemeinschaft').find(g => g.beitragsgemeinschaft_id === lena.beitragsgemeinschaft_id).gemeinschaftsart_id, 1);
+    if (gemArt !== 'bestehend') assert.strictEqual(ui.objekte('Beitragsgemeinschaft').find(g => g.beitragsgemeinschaft_id === lena.beitragsgemeinschaft_id).beitragsart_id, 4);
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });

@@ -151,7 +151,7 @@ function erzeugeVerein(optionen) {
   const fehlerliste = [];
 
   // ---- Stammdaten aus der Startbelegung
-  ['Abteilung', 'Funktionsart', 'Beitragsart', 'Gemeinschaftsart', 'Qualifikationsart', 'Ehrungsregel', 'Aufbewahrungsfrist'].forEach(tab => {
+  ['Abteilung', 'Funktionsart', 'Beitragsart', 'Qualifikationsart', 'Ehrungsregel', 'Aufbewahrungsfrist'].forEach(tab => {
     const sb = Start[tab];
     sb.zeilen.forEach(zeile => {
       const o = {};
@@ -365,7 +365,7 @@ function erzeugeVerein(optionen) {
       gemeinschaft = {
         beitragsgemeinschaft_id: neueId('Beitragsgemeinschaft'),
         bezeichnung: (h.typ === 'paar' ? 'Ehepaar ' : 'Familie ') + h.nachname,
-        gemeinschaftsart_id: h.typ === 'paar' ? 2 : 1,
+        beitragsart_id: h.typ === 'paar' ? 5 : 4,
         festbetrag: h.typ === 'paar' ? FESTBETRAG_PAAR : FESTBETRAG_FAMILIE,
         aktiv: h.personen.some(istAktiv), bemerkung: null,
         version: 1, geaendert_am: AENDERUNG, geaendert_von: 'migration@tsv-ergoldsbach.de'

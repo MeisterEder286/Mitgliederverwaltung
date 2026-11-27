@@ -35,13 +35,13 @@ var Startbelegung = {
     ]
   },
   "Beitragsart": {
-    kopf: ["beitragsart_id","bezeichnung","betrag","alter_von","alter_bis","intervall","aktiv","gueltig_ab","online_schluessel","als_gemeinschaft","bemerkung"],
+    kopf: ["beitragsart_id","bezeichnung","betrag","alter_von","alter_bis","intervall","aktiv","gueltig_ab","online_schluessel","als_gemeinschaft","max_erwachsene","max_kinder","kinder_bis_alter","ausbildung_bis_alter","bemerkung"],
     zeilen: [
-      ["1","Erwachsene","100","18","","jährlich","ja","2024-01-01","erwachsene, rentner","","BEISPIELBETRAG — echten Satz eintragen"],
-      ["2","Jugendliche bis 18","45","0","17","jährlich","ja","2024-01-01","kind, jugendliche","","BEISPIELBETRAG"],
-      ["3","Fördermitglied","50","","","jährlich","ja","2024-01-01","","","BEISPIELBETRAG"],
-      ["4","Familienbeitrag","180","","","jährlich","ja","2024-01-01","familienbeitrag","Familie","BEISPIELBETRAG – einmal je Familie"],
-      ["5","Ehegattenbeitrag","150","","","jährlich","ja","2024-01-01","ehegattenbeitrag","Ehepaar","BEISPIELBETRAG – einmal je Ehepaar"]
+      ["1","Erwachsene","100","18","","jährlich","ja","2024-01-01","erwachsene, rentner","","","","","","BEISPIELBETRAG — echten Satz eintragen"],
+      ["2","Jugendliche bis 18","45","0","17","jährlich","ja","2024-01-01","kind, jugendliche","","","","","","BEISPIELBETRAG"],
+      ["3","Fördermitglied","50","","","jährlich","ja","2024-01-01","","","","","","","BEISPIELBETRAG"],
+      ["4","Familienbeitrag","180","","","jährlich","ja","2024-01-01","familienbeitrag","Familie","2","","17","25","BEISPIELBETRAG – einmal je Familie: 2 Erwachsene, beliebig viele Kinder bis 18, mit Ausbildung bis 25"],
+      ["5","Ehegattenbeitrag","150","","","jährlich","ja","2024-01-01","ehegattenbeitrag","Ehepaar","2","0","","","BEISPIELBETRAG – einmal je Ehepaar: 2 Erwachsene ohne Kinder"]
     ]
   },
   "Ehrungsregel": {
@@ -77,13 +77,6 @@ var Startbelegung = {
       ["11","Platzwart / Zeugwart","Verein","nein","Berufung","ja","ja",""],
       ["12","Ehrenamtsbeauftragte(r)","Verein","nein","Berufung","ja","ja",""],
       ["13","Kassenprüfer","Verein","nein","Wahl JHV","ja","ja","PRÜFEN: Liste gegen die Satzung abgleichen"]
-    ]
-  },
-  "Gemeinschaftsart": {
-    kopf: ["gemeinschaftsart_id","bezeichnung","betrag","max_erwachsene","max_kinder","kinder_bis_alter","ausbildung_bis_alter","aktiv","bemerkung"],
-    zeilen: [
-      ["1","Familienbeitrag","180","2","","17","25","ja","BEISPIELBETRAG — 2 Erwachsene, beliebig viele Kinder bis 18, mit Ausbildung bis 25"],
-      ["2","Ehegattenbeitrag","150","2","0","","","ja","BEISPIELBETRAG — 2 Erwachsene ohne Kinder"]
     ]
   },
   "Qualifikationsart": {
@@ -137,7 +130,6 @@ var Startbelegung = {
       ["next_id_Funktionsart","14","ID-Zähler"],
       ["next_id_Funktion","16","ID-Zähler"],
       ["next_id_Beitragsart","4","ID-Zähler"],
-      ["next_id_Gemeinschaftsart","3","ID-Zähler"],
       ["next_id_Beitragsgemeinschaft","2","ID-Zähler"],
       ["next_id_Beitragskonto","12","ID-Zähler"],
       ["next_id_Sollstellung","13","ID-Zähler"],

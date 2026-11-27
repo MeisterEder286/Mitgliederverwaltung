@@ -126,12 +126,14 @@ Zu jedem Diagramm gibt es die Zahlen als aufklappbare Tabelle. Das Dashboard ent
 - **Konto/Bankverbindung:** Finanzen → Konten. Neuer Kontoinhaber = neues SEPA-Mandat (Unterschrift!). Neue IBAN bei
   gleichem Inhaber: Das Mandat gilt weiter, der nächste SEPA-Lauf meldet der Bank die Mandatsänderung automatisch
   (Probelauf und Kontrollliste zeigen „Änderung“).
-- **Beitragsregeln einstellen:** Verwaltung → Stammdaten → „Familien-/Ehegattenbeitrag (Regeln)“. Je Regel: Betrag,
-  höchstens wie viele Erwachsene und Kinder (leer = beliebig viele, 0 = keine), Kinder bis Alter (17 = bis 18) und mit
-  Ausbildung bis Alter (leer = keine Verlängerung). Vorbelegt: **Familienbeitrag** (2 Erwachsene, beliebig viele Kinder
-  bis 18, in Ausbildung bis 25) und **Ehegattenbeitrag** (2 Erwachsene, keine Kinder). Der **Kinderbeitrag** (bis 18)
-  ist eine Beitragsart mit Altersgrenze (Stammdaten → Beitragsarten). Jede Gemeinschaft bekommt ihre Regel in
-  Finanzen → Gemeinschaften (bestehende Gemeinschaften einmal zuordnen – sonst Hinweis „ohne Regel“).
+- **Beitragsregeln einstellen:** alles an einer Stelle – Verwaltung → Stammdaten → **Beitragsarten**. Einzeltarife
+  (Erwachsene, Kinderbeitrag bis 18 über „Alter von/bis“, Fördermitglied) und die Pauschalen **Familienbeitrag** und
+  **Ehegattenbeitrag** (Feld „Als Gemeinschaft“ = Familie bzw. Ehepaar). Für die Pauschalen zusätzlich: höchstens wie
+  viele Erwachsene und Kinder (leer = beliebig viele, 0 = keine), Kinder bis Alter (17 = bis 18) und mit Ausbildung bis
+  Alter (leer = keine Verlängerung). Vorbelegt: Familienbeitrag (2 Erwachsene, beliebig viele Kinder bis 18, in
+  Ausbildung bis 25), Ehegattenbeitrag (2 Erwachsene, keine Kinder). Derselbe Eintrag gilt für den Online-Antrag
+  („Schlüssel im Online-Formular“) und die Beitragsänderung zum 01.01. Jede Gemeinschaft bekommt ihren Tarif in
+  Finanzen → Gemeinschaften („Regel“; bestehende Gemeinschaften einmal zuordnen – sonst Hinweis „ohne Regel“).
 - **Abweichungen:** Familien → „Abweichungen“ listet alles, was nicht zu den Regeln passt (zu viele Erwachsene/Kinder,
   Kind über der Altersgrenze ohne Ausbildung, Ausbildung ohne voraussichtliches Ende, Festbetrag ≠ Betrag der Regel,
   Gemeinschaft mit nur einer Person, Beitragsart passt nicht zum Alter – z. B. Kinderbeitrag über 18). Alter zählt zum

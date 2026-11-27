@@ -300,7 +300,7 @@
   // ================================================================== Ansicht
 
   A.registriere('dashboard', {
-    titel: 'Dashboard', aktion: 'dashboard_lesen', reihenfolge: 5,
+    titel: 'Dashboard', aktion: 'dashboard_lesen', reihenfolge: 67,   // Gruppe „Berichte“, nach den Auswertungen
     zeichne: function (ziel) {
       ziel.appendChild(A.el('h1', 'Dashboard'));
       var aktuell = Number((A.startdaten.heute || A.heute()).slice(0, 4));

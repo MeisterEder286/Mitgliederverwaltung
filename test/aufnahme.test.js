@@ -158,7 +158,7 @@ test('Bearbeiten: Person zahlt über eine andere Person, neue Familie mit deren 
   const zahler = einzel[0], kind = einzel.find(x => x.beitragskonto_id !== zahler.beitragskonto_id);
   const d = ok(u.g.apiMitgliedSpeichern(kind.mitglied_id, kind.version, {}, {
     zahlung: { art: 'konto', beitragskonto_id: zahler.beitragskonto_id },
-    gemeinschaft: { art: 'neu', gemeinschaftsart_id: 1, bezeichnung: 'Familie Test', mit: [zahler.mitglied_id] }
+    gemeinschaft: { art: 'neu', beitragsart_id: 4, bezeichnung: 'Familie Test', mit: [zahler.mitglied_id] }
   }));
   const k2 = u.obj('Mitglied').find(x => x.mitglied_id === kind.mitglied_id), z2 = u.obj('Mitglied').find(x => x.mitglied_id === zahler.mitglied_id);
   assert.strictEqual(k2.beitragskonto_id, zahler.beitragskonto_id);

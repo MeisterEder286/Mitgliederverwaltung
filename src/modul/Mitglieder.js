@@ -204,7 +204,7 @@ var Mitglieder = (function () {
    *          | { art: 'konto', beitragskonto_id } | { art: 'keine' },
    *   mitGemeinschaft: true → die übrigen aktiven Mitglieder der bisherigen Gemeinschaft wechseln mit auf das neue Konto,
    *   gemeinschaft: { art: 'unveraendert' | 'keine' } | { art: 'bestehend', beitragsgemeinschaft_id }
-   *              | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] (weitere Zahler des Kontos) } }
+   *              | { art: 'neu', beitragsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] (weitere Zahler des Kontos) } }
    * Wirft Feldfehler (bereich 'zahlung' / 'gemeinschaft'); liefert den Plan für zahlungSchreiben.
    */
   function zahlungPlanen(ktx, m, eingabe) {
@@ -472,11 +472,11 @@ var Mitglieder = (function () {
   function pruefeGemeinschaftNeu(gemWahl, fehler) {
     var w = { bezeichnung: String(gemWahl.bezeichnung || '').trim() || null, festbetrag: gemWahl.festbetrag === '' || gemWahl.festbetrag === undefined ? null : gemWahl.festbetrag, aktiv: true };
     if (w.festbetrag !== null) w.festbetrag = Number(String(w.festbetrag).replace(',', '.'));
-    if (!leer(gemWahl.gemeinschaftsart_id)) {
-      var gArt = finde('Gemeinschaftsart', 'gemeinschaftsart_id', gemWahl.gemeinschaftsart_id);
-      if (!gArt || gArt.aktiv === false) fehler.push({ bereich: 'gemeinschaft', feld: 'gemeinschaftsart_id', meldung: 'Die gewählte Regel (Familien-/Ehegattenbeitrag) gibt es nicht (mehr).' });
+    if (!leer(gemWahl.beitragsart_id)) {
+      var gArt = finde('Beitragsart', 'beitragsart_id', gemWahl.beitragsart_id);
+      if (!gArt || gArt.aktiv === false || !gArt.als_gemeinschaft) fehler.push({ bereich: 'gemeinschaft', feld: 'beitragsart_id', meldung: 'Die gewählte Regel (Familien-/Ehegattenbeitrag) gibt es nicht (mehr).' });
       else {
-        w.gemeinschaftsart_id = gArt.gemeinschaftsart_id;
+        w.beitragsart_id = gArt.beitragsart_id;
         if (w.festbetrag === null && !leer(gArt.betrag)) w.festbetrag = Number(gArt.betrag);
       }
     }
@@ -495,7 +495,7 @@ var Mitglieder = (function () {
   function regelHinweise(gem, konto, h, hinweise, alle) {
     if (!gem) return;
     var konfig = Konfig.alle();
-    var art = !leer(gem.gemeinschaftsart_id) ? finde('Gemeinschaftsart', 'gemeinschaftsart_id', gem.gemeinschaftsart_id) : null;
+    var art = !leer(gem.beitragsart_id) ? finde('Beitragsart', 'beitragsart_id', gem.beitragsart_id) : null;
     var mitglieder = (alle || daten().Mitglied || []).filter(function (m) {
       return m.beitragsgemeinschaft_id === gem.beitragsgemeinschaft_id && m.anonymisiert !== true && Mitgliedschaft.status(m, zeitraeume(m.mitglied_id), h) === 'aktiv';
     });
@@ -512,9 +512,9 @@ var Mitglieder = (function () {
    *                vertretung: null | { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | { art: 'frei', name, kontakt } }],
    *   zahlung: { art: 'neu', konto: { zahlweg, iban, bic, mandatsdatum, kontoinhaber_name, abw_… }, inhaber: { art: 'antrag', index } | { art: 'mitglied', mitglied_id } | null, trotzIban }
    *          | { art: 'konto', beitragskonto_id } | { art: 'spaeter' },
-   *   gemeinschaft: { art: 'keine' } | { art: 'neu', gemeinschaftsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] } | { art: 'bestehend', beitragsgemeinschaft_id }
+   *   gemeinschaft: { art: 'keine' } | { art: 'neu', beitragsart_id, bezeichnung, festbetrag, mit: [mitglied_id …] } | { art: 'bestehend', beitragsgemeinschaft_id }
    *   (mit = Personen, die schon über das gewählte Konto zahlen und mit in die neue Gemeinschaft kommen)
-   *   (gemeinschaftsart_id = Regel, z. B. Familienbeitrag; ohne festbetrag gilt deren Betrag)
+   *   (beitragsart_id = Regel, z. B. Familienbeitrag; ohne festbetrag gilt deren Betrag)
    * }
    * Feldfehler tragen { person: i } bzw. { bereich: 'zahlung' | 'gemeinschaft' }, damit der Browser sie zuordnen kann.
    * Gesetzliche Vertretung wird nur bei Minderjährigen übernommen. Scheitert ein Schreibschritt, werden die bereits
@@ -693,7 +693,7 @@ var Mitglieder = (function () {
         if (gem) {
           // Regel der Gemeinschaft prüfen (neue + bisherige aktive Mitglieder) – Abweichungen sind erlaubt, werden aber gemeldet
           var konfig = Konfig.alle();
-          var gArtNeu = !leer(gem.gemeinschaftsart_id) ? finde('Gemeinschaftsart', 'gemeinschaftsart_id', gem.gemeinschaftsart_id) : null;
+          var gArtNeu = !leer(gem.beitragsart_id) ? finde('Beitragsart', 'beitragsart_id', gem.beitragsart_id) : null;
           var neuIds = {};
           neue.forEach(function (m) { neuIds[m.mitglied_id] = true; });
           var mitIds = {};
