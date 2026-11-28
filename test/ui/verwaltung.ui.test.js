@@ -115,3 +115,14 @@ test('Test-Umgebung: Testdaten einspielen aus testdaten.json', async () => {
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); fs.rmSync(ziel, { recursive: true, force: true }); }
 });
+
+test('Test-Umgebung: Schalter gesetzt, aber Rolle fehlt → Grund wird angezeigt', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Vorstand', properties: { TESTUMGEBUNG: 'ja' } });
+  try {
+    await ui.oeffne('verwaltung');
+    await ui.page.getByRole('tab', { name: 'System' }).click();
+    await ui.page.getByText('Nicht verfügbar: Nur die Rolle Mitgliederverwalter darf Testdaten einspielen.').waitFor();
+    assert.strictEqual(await ui.page.getByLabel('Datei testdaten.json auswählen').count(), 0);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});

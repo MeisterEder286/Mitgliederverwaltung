@@ -872,7 +872,11 @@
         A.darf('messung_lesen') ? A.knopf('Messwerte', function () { A.zeige('messwerte'); }, 'zweit') : null
       ]));
       ziel.appendChild(A.el('p', '„Snapshot neu aufbauen“ ist nur nötig, wenn jemand direkt in der Tabelle geändert hat – im Normalbetrieb hält sich der Snapshot selbst aktuell.', { className: 'leise' }));
-      if (d.testdaten) testdatenBereich(ziel);
+      if (d.testdaten && d.testdaten.frei) testdatenBereich(ziel);
+      else if (d.testdaten) {
+        ziel.appendChild(A.el('h2', 'Testdaten einspielen (Test-Umgebung)'));
+        ziel.appendChild(A.el('p', 'Nicht verfügbar: ' + d.testdaten.grund, { className: 'meldung' }));
+      }
       ziel.appendChild(A.el('h2', 'Zeilen je Tabelle'));
       ziel.appendChild(A.tabelle([{ feld: 'tab', titel: 'Tabelle' }, { feld: 'n', titel: 'Zeilen', zahl: true }],
         Object.keys(d.zeilen).map(function (t) { return { tab: t, n: d.zeilen[t] }; }), { sortiere: 'tab', block: 40 }));

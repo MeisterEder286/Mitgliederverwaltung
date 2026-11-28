@@ -6,7 +6,7 @@
  *             die Zähler in _Konfig nach und baut den Snapshot neu. Kein Drive-Zugriff, kein neuer Scope.
  * Datenquelle: Script Properties TESTUMGEBUNG (Schalter) und testdaten_laeuft (Fortschritt); Tabelle über DB.
  * Wer darf was: Nur wenn ALLES zutrifft: Script Property TESTUMGEBUNG = ja (nur im Test-Skriptprojekt gesetzt, über
- *             die WebApp nicht änderbar), Datenbank-Datei mit „TEST“ im Namen, Rolle Mitgliederverwalter, Recht
+ *             die WebApp nicht änderbar; Groß-/Kleinschreibung und Leerzeichen egal), Datenbank-Datei mit „TEST“ im Namen, Rolle Mitgliederverwalter, Recht
  *             konfig_aendern (Api.ausfuehren). In der Produktion fehlt der Schalter – dort lehnt jede Funktion ab.
  * Besonderheiten:
  *   - Ablauf: start (alles prüfen, dann Tabs leeren) → block (je bis zu Testdaten.MAX_BLOCK Zeilen, lückenlos in
@@ -21,14 +21,26 @@ var TestdatenEinspielen = (function () {
   var GUELTIG_MS = 60 * 60 * 1000;
 
   function props() { return PropertiesService.getScriptProperties(); }
-  function schalterAn() { return props().getProperty('TESTUMGEBUNG') === 'ja'; }
+  function schalterWert() { return props().getProperty('TESTUMGEBUNG'); }
+  function schalterAn() { return String(schalterWert() || '').trim().toLowerCase() === 'ja'; }
 
-  /** Für die Oberfläche: Darf diese Person hier Testdaten einspielen? */
-  function freigegeben(ktx) {
+  /**
+   * Für die Oberfläche. null, wenn TESTUMGEBUNG gar nicht gesetzt ist (Produktion: nichts anzeigen). Sonst
+   * { frei, grund }: grund nennt die erste nicht erfüllte Bedingung, damit man in der Test-Umgebung sieht, woran es liegt.
+   */
+  function status(ktx) {
     try {
-      return schalterAn() && ktx.rollen.indexOf('Mitgliederverwalter') >= 0 && Testdaten.istTestName(DB.dateiName());
-    } catch (e) { return false; }
+      var w = schalterWert();
+      if (w === null || w === undefined) return null;
+      if (!schalterAn()) return { frei: false, grund: 'Script Property TESTUMGEBUNG hat den Wert „' + w + '“ – erwartet wird „ja“.' };
+      if (ktx.rollen.indexOf('Mitgliederverwalter') < 0) return { frei: false, grund: 'Nur die Rolle Mitgliederverwalter darf Testdaten einspielen.' };
+      var name = DB.dateiName();
+      if (!Testdaten.istTestName(name)) return { frei: false, grund: 'Die Datenbank-Tabelle heißt „' + name + '“ – ihr Name muss „TEST“ enthalten.' };
+      return { frei: true, grund: null };
+    } catch (e) { return { frei: false, grund: 'Prüfung fehlgeschlagen.' }; }
   }
+
+  function freigegeben(ktx) { var s = status(ktx); return !!(s && s.frei); }
 
   function pruefeZugang(ktx) {
     if (!schalterAn()) throw Fehler.fachlich('Testdaten einspielen gibt es nur in der Test-Umgebung (Script Property TESTUMGEBUNG = ja).');
@@ -117,5 +129,5 @@ var TestdatenEinspielen = (function () {
     return { tabs: m.tabs, snapshot_gebaut_am: s.snapshot_gebaut_am };
   }
 
-  return { freigegeben: freigegeben, start: start, block: block, ende: ende };
+  return { status: status, freigegeben: freigegeben, start: start, block: block, ende: ende };
 })();

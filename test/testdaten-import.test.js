@@ -97,7 +97,7 @@ test('Einspielen: Tabs ersetzt im Zellformat des Generators, Benutzer und Stammd
   // Die WebApp arbeitet danach mit dem neuen Bestand
   const sys = ok(g.apiVerwaltungSystem());
   assert.strictEqual(sys.zeilen.Mitglied, DATEI.tabs.Mitglied.zeilen.length);
-  assert.strictEqual(sys.testdaten, true);
+  assert.deepStrictEqual(sys.testdaten, { frei: true, grund: null });
   // erneutes Einspielen ist jederzeit möglich
   ok(g.apiTestdatenStart(info(DATEI)));
 });
@@ -105,22 +105,25 @@ test('Einspielen: Tabs ersetzt im Zellformat des Generators, Benutzer und Stammd
 test('Sperren: kein Schalter, kein TEST im Namen, falsche Rolle → abgelehnt, nichts geändert', () => {
   let u = aufbau({ properties: {} });
   fachlich(u.g.apiTestdatenStart(info(DATEI)), /nur in der Test-Umgebung/);
-  assert.strictEqual(ok(u.g.apiVerwaltungSystem()).testdaten, false);
+  assert.strictEqual(ok(u.g.apiVerwaltungSystem()).testdaten, null, 'Produktion: nichts anzeigen');
   fachlich(u.g.apiTestdatenBlock('Mitglied', 0, []), /nur in der Test-Umgebung/);
   fachlich(u.g.apiTestdatenEnde(), /nur in der Test-Umgebung/);
 
   u = aufbau({ properties: { TESTUMGEBUNG: 'JA bitte' } });
   fachlich(u.g.apiTestdatenStart(info(DATEI)), /nur in der Test-Umgebung/);
+  assert.match(ok(u.g.apiVerwaltungSystem()).testdaten.grund, /„JA bitte“/);
+  u = aufbau({ properties: { TESTUMGEBUNG: ' Ja ' } });
+  assert.strictEqual(ok(u.g.apiVerwaltungSystem()).testdaten.frei, true, 'Groß-/Kleinschreibung und Leerzeichen egal');
 
   u = aufbau({ dateiName: 'Mitgliederverwaltung TSV – Datenbank' });
   const vorher = u.f.daten('Mitglied').length;
   fachlich(u.g.apiTestdatenStart(info(DATEI)), /kein „TEST“ im Namen/);
   assert.strictEqual(u.f.daten('Mitglied').length, vorher);
-  assert.strictEqual(ok(u.g.apiVerwaltungSystem()).testdaten, false);
+  assert.match(ok(u.g.apiVerwaltungSystem()).testdaten.grund, /muss „TEST“ enthalten/);
 
   u = aufbau({ email: VORSTAND });
   fachlich(u.g.apiTestdatenStart(info(DATEI)), /Mitgliederverwalter/);
-  assert.strictEqual(ok(u.g.apiVerwaltungSystem()).testdaten, false);
+  assert.match(ok(u.g.apiVerwaltungSystem()).testdaten.grund, /Mitgliederverwalter/);
 
   u = aufbau({ email: 'kassier@tsv-ergoldsbach.de' });
   assert.strictEqual(u.g.apiTestdatenStart(info(DATEI)).fehler.art, 'zugriff');

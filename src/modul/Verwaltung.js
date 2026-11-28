@@ -364,7 +364,7 @@ var Verwaltung = (function () {
       cache: Snapshot.letzterCache(),
       zeilen: zeilen,
       jetzt: DB.jetzt(),
-      testdaten: TestdatenEinspielen.freigegeben(ktx)
+      testdaten: TestdatenEinspielen.status(ktx)
     };
   }
 
