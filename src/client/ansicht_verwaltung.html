@@ -820,7 +820,10 @@
           return A.ladeNeu().then(function () {
             A.meldung('Testdaten eingespielt: ' + Object.keys(res.tabs).map(function (t) { return t + ' ' + res.tabs[t]; }).join(', ') + '.', 'ok');
           });
-        }, function () { stand.textContent = 'Abgebrochen. Die Test-Tabelle kann teilweise gefüllt sein – bitte erneut einspielen.'; })
+        }, function () {
+          stand.textContent = 'Abgebrochen' + (stand.dataset.schritt ? ' bei ' + stand.dataset.schritt : '') +
+            '. Die Test-Tabelle kann teilweise gefüllt sein – bitte erneut einspielen.';
+        })
           .then(function () { knopf.disabled = false; });
       });
     }, 'gefahr');
@@ -833,6 +836,7 @@
     var info = { art: d.art, version: d.version, synthetisch: d.synthetisch, erzeugt: d.erzeugt, konfig: d.konfig, tabs: {} };
     Object.keys(d.tabs).forEach(function (t) { info.tabs[t] = { kopf: d.tabs[t].kopf, anzahl: d.tabs[t].zeilen.length }; });
     var gesamt = 0, fertig = 0;
+    stand.dataset.schritt = 'Vorbereiten';
     return A.rufe('apiTestdatenStart', info).then(function (s) {
       var auftraege = [];
       s.tabs.forEach(function (t) {
@@ -842,11 +846,13 @@
       });
       return auftraege.reduce(function (kette, a) {
         return kette.then(function () {
+          stand.dataset.schritt = a.tab + ', Zeilen ' + (a.von + 2) + '–' + (a.von + a.zeilen.length + 1);
           stand.textContent = a.tab + ' … (' + Math.round(100 * fertig / Math.max(gesamt, 1)) + ' %)';
           return A.rufe('apiTestdatenBlock', a.tab, a.von, a.zeilen).then(function () { fertig += a.zeilen.length; });
         });
       }, Promise.resolve());
     }).then(function () {
+      stand.dataset.schritt = 'Zähler und Snapshot';
       stand.textContent = 'Zähler und Snapshot …';
       return A.rufe('apiTestdatenEnde');
     });

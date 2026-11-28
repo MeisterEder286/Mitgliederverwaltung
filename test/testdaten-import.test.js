@@ -190,3 +190,14 @@ test('Marke gilt nur für die Person, die gestartet hat', () => {
   f.properties.testdaten_laeuft = JSON.stringify(m);
   fachlich(g.apiTestdatenBlock('Mitglied', 0, DATEI.tabs.Mitglied.zeilen.slice(0, 5)), /Kein laufendes Einspielen/);
 });
+
+test('technischer Fehler beim Schreiben → lesbare Meldung mit Tab und Zeilen statt Fehler-Nr.', () => {
+  const { g } = aufbau();
+  ok(g.apiTestdatenStart(info(DATEI)));
+  const original = g.DB.anhaengen;
+  g.DB.anhaengen = function () { throw new Error('Die Daten in Zelle F2 verstoßen gegen die Datenvalidierungsregeln.'); };
+  try {
+    fachlich(g.apiTestdatenBlock('Mitglied', 0, DATEI.tabs.Mitglied.zeilen.slice(0, 5)),
+      /^Technischer Fehler bei Mitglied, Zeilen 2–6: Die Daten in Zelle F2 verstoßen gegen die Datenvalidierungsregeln\.$/);
+  } finally { g.DB.anhaengen = original; }
+});

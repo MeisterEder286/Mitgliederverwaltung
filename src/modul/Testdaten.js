@@ -61,13 +61,25 @@ var TestdatenEinspielen = (function () {
     return m;
   }
 
+  /**
+   * Unerwartete Ausnahmen (z. B. eine Auswahlliste der Tabelle lehnt einen Wert ab) als lesbare Meldung mit Schritt
+   * zurückgeben statt als „Fehler-Nr.“: Die Funktion läuft nur in der Test-Umgebung für Mitgliederverwalter.
+   */
+  function technisch(schritt, fn) {
+    try { return fn(); } catch (e) {
+      if (Fehler.artVon(e)) throw e;
+      console.error('Testdaten ' + schritt + ': ' + (e && e.message) + '\n' + (e && e.stack));
+      throw Fehler.fachlich('Technischer Fehler ' + schritt + ': ' + (e && e.message ? e.message : String(e)));
+    }
+  }
+
   /** info: Kopfdaten der Datei ohne Zeilen ({ art, version, synthetisch, erzeugt, tabs: { Tab: { kopf, anzahl } }, konfig }). */
   function start(ktx, info) {
     pruefeZugang(ktx);
     var p = Testdaten.pruefeKopfdaten(info);
     if (p.fehler.length) throw Fehler.fachlich(p.fehler.join(' '));
     var konfig = Testdaten.konfigWerte(info.konfig, p.tabs).werte;
-    return DB.mitSperre(function () {
+    return technisch('beim Vorbereiten', function () { return DB.mitSperre(function () {
       var blaetter = {}, fehler = [];
       p.tabs.forEach(function (tab) {
         var b = DB.blatt(tab);
@@ -87,7 +99,7 @@ var TestdatenEinspielen = (function () {
       });
       props().setProperty(MARKE, JSON.stringify({ email: ktx.email, seit: Date.now(), tabs: anzahl, konfig: konfig }));
       return { tabs: p.tabs, uebersprungen: p.uebersprungen, block: Testdaten.MAX_BLOCK };
-    });
+    }); });
   }
 
   /** Schreibt zeilen ab Datenzeile `von` (0-basiert). Blöcke müssen lückenlos in Reihenfolge kommen. */
@@ -98,19 +110,19 @@ var TestdatenEinspielen = (function () {
     var f = Testdaten.pruefeBlock(tab, zeilen);
     if (f) throw Fehler.fachlich(f);
     if (!(von >= 0) || Math.floor(von) !== von || von + zeilen.length > m.tabs[tab]) throw Fehler.fachlich('Ungültige Zeilenposition für ' + tab + '.');
-    return DB.mitSperre(function () {
+    return technisch('bei ' + tab + ', Zeilen ' + (von + 2) + '–' + (von + zeilen.length + 1), function () { return DB.mitSperre(function () {
       var b = DB.blatt(tab), letzte = b.getLastRow();
       if (letzte !== von + 1) throw Fehler.fachlich('Reihenfolge gestört bei ' + tab + ' – bitte von vorn beginnen.');
       DB.anhaengen(b, Testdaten.ordneZeilen(tab, zeilen, DB.kopf(b)), letzte);
       return { tab: tab, bis: von + zeilen.length };
-    });
+    }); });
   }
 
   /** Prüft die Zeilenzahlen, setzt die Zähler in _Konfig und baut den Snapshot neu. */
   function ende(ktx) {
     pruefeZugang(ktx);
     var m = leseMarke(ktx);
-    DB.mitSperre(function () {
+    technisch('beim Abschluss (_Konfig)', function () { DB.mitSperre(function () {
       var fehlt = [];
       Object.keys(m.tabs).forEach(function (tab) {
         var n = DB.blatt(tab).getLastRow() - 1;
@@ -122,11 +134,11 @@ var TestdatenEinspielen = (function () {
         DB.zaehlerSetzen(kv[0], kv[1], kv[0].indexOf('next_id_') === 0 ? 'ID-Zähler – nur vom Skript erhöhen' : '');
       });
       DB.konfigVergessen();
-    });
+    }); });
     props().deleteProperty(MARKE);
     Protokoll.schreibe(ktx, [{ aktion: 'geändert', tabelle: '_Konfig', datensatz_id: '-',
       kommentar: 'Testdaten eingespielt: ' + Object.keys(m.tabs).map(function (t) { return t + ' ' + m.tabs[t]; }).join(', ') }]);
-    var s = Verwaltung.snapshotNeu(ktx);
+    var s = technisch('beim Neuaufbau des Snapshots', function () { return Verwaltung.snapshotNeu(ktx); });
     return { tabs: m.tabs, snapshot_gebaut_am: s.snapshot_gebaut_am };
   }
 
