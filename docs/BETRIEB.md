@@ -66,26 +66,37 @@ Schritt für Schritt für den Eigentümer des Funktionskontos. Alle Schritte im 
 Eigenes Sheet mit synthetischen Daten, eigenes Skriptprojekt (gleicher Code, andere `DB_ID`), eigenes
 Deployment. Änderungen immer zuerst dort.
 
-**Mit einem erfundenen Verein (~1.200 Mitglieder) füllen:**
+**Mit einem erfundenen Verein (~1.200 Mitglieder) füllen**
 
-```
-npm run testdaten -- --benutzer deine.adresse@example.org
-```
+1. **Einmalig:** Die Test-Tabelle muss **TEST** im Namen tragen (z. B. „Mitgliederverwaltung TEST“). Im
+   **Test**-Skriptprojekt unter Projekteinstellungen → Script-Eigenschaften `TESTUMGEBUNG` = `ja` setzen.
+   **Nie im Produktiv-Projekt.** Ohne diesen Schalter gibt es die Funktion nicht: Der Knopf erscheint nicht, und der
+   Server lehnt jeden Aufruf ab. Über die WebApp lässt sich der Schalter nicht setzen.
+2. **Datei erzeugen** (lokal im Repository, Node ≥ 20):
 
-Schreibt nach `testdaten/ausgabe/` (in `.gitignore`) je Tab eine `<Tab>.tsv` mit allen Bewegungsdaten: Mitglieder,
-Zeiträume, Abteilungen, Funktionen, Konten, Gemeinschaften, Sollstellungen mehrerer Jahre, Qualifikationen, Ehrungen,
-Einwilligungen, dazu `konfig_werte.txt` und `LIESMICH.txt`. Optionen: `--mitglieder 1200`, `--seed 1` (gleicher Seed →
-gleiche Daten), `--stichtag JJJJ-MM-TT` (Standard heute), `--ziel <Ordner>`. Stammdaten-Tabs legt `setup` identisch an,
-sie werden nicht exportiert. Benutzer nur aus `--benutzer` (Rolle Mitgliederverwalter, mehrere mit Komma), nie
-die erfundenen Konten des Generators.
+   ```
+   npm run testdaten
+   ```
 
-**Einspielen per Skript (empfohlen):** `testdaten.json` aus demselben Ordner in einen Drive-Ordner hochladen und im
-eigenen Projekt `testimport/` erst `testdatenPruefen`, dann `testdatenImportieren` ausführen. Einrichtung und
-Schutzmechanismen: `testimport/LIESMICH.md`. Das Projekt schreibt nur in eine Tabelle mit „TEST“ im Namen.
+   Ergebnis: `testdaten/ausgabe/testdaten.json` (ca. 1,2 MB, in `.gitignore`). Alles ist erfunden, Adressen enden
+   auf `@example.de`. Optionen: `--mitglieder 1200`, `--seed 1` (gleicher Seed → gleiche Daten), `--stichtag JJJJ-MM-TT`
+   (Standard heute), `--ziel <Ordner>`.
+3. **Einspielen:** In der **Test**-WebApp als Mitgliederverwalter **Verwaltung → System → „Testdaten einspielen“**,
+   die Datei auswählen, „Einspielen“ bestätigen. Der Browser schickt die Zeilen in Blöcken, danach werden die Zähler in
+   `_Konfig` gesetzt und der Snapshot neu gebaut (1–3 Minuten).
 
-**Von Hand:** in die **Test**-Tabelle (nach `setup`, Gebietsschema Deutschland) je Tab alle Zeilen unter der Kopfzeile
-löschen, Inhalt der `.tsv` ab Zeile 2 in A2 mit **Strg+Umschalt+V** einfügen, Werte aus `konfig_werte.txt` in `_Konfig`
-eintragen, in der Oberfläche **Verwaltung → System → „Snapshot neu aufbauen“**. Vor E-Mail-Tests `mail_test_an` setzen.
+Ersetzt werden Mitglieder, Zeiträume, Abteilungszugehörigkeiten, Funktionen, Konten, Gemeinschaften, Sollstellungen
+mehrerer Jahre, Qualifikationen, Ehrungen und Einwilligungen. **Benutzer**, Stammdaten (aus `setup`), übrige
+Einstellungen, Protokoll, Vorlagen und Dokumente bleiben. Vorher prüft der Server, dass die Kopfzeilen zu diesem
+Programmstand passen. Sonst wird nichts geändert, dann `setup` ausführen bzw. Export und WebApp auf denselben Stand bringen.
+Bricht das Einspielen mittendrin ab, einfach neu starten. Vor E-Mail-Tests `mail_test_an` setzen.
+
+**Von Hand (ohne WebApp):** Derselbe Befehl schreibt auch je Tab eine `<Tab>.tsv`, dazu `konfig_werte.txt` und
+`LIESMICH.txt`. Je Tab alle Zeilen unter der Kopfzeile löschen, Inhalt ab Zeile 2 in A2 mit **Strg+Umschalt+V**
+einfügen (Gebietsschema Deutschland), Werte aus `konfig_werte.txt` in `_Konfig` eintragen, dann „Snapshot neu
+aufbauen“. Mit `--benutzer adresse@example.org` entsteht zusätzlich `Benutzer.tsv` (Mitgliederverwalter). Die
+erfundenen Benutzerkonten des Generators werden nie exportiert, und beim Einspielen über die WebApp bleibt der Tab
+Benutzer immer unberührt.
 Alternativ testet `tools/daten16-synthetisch.js` → `tools/migration-lokal.js` den Migrationsweg (`docs/MIGRATION.md`).
 
 ## 4. Messwerte

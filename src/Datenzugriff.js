@@ -66,6 +66,7 @@ var DB = (function () {
       getValue: function () { return mess('lesen', { methode: 'getValue', tab: tab, zellen: 1 }, function () { return r.getValue(); }); },
       setValues: function (w) { mess('schreiben', { methode: 'setValues', tab: tab, zellen: zellenVon(w) }, function () { return r.setValues(w); }); return h; },
       setValue: function (v) { mess('schreiben', { methode: 'setValue', tab: tab, zellen: 1 }, function () { return r.setValue(v); }); return h; },
+      clearContent: function () { mess('schreiben', { methode: 'clearContent', tab: tab, zellen: r.getNumRows() * r.getNumColumns() }, function () { return r.clearContent(); }); return h; },
       getRow: function () { return r.getRow(); },
       getColumn: function () { return r.getColumn(); },
       getNumRows: function () { return r.getNumRows(); },
@@ -849,6 +850,8 @@ var DB = (function () {
     blatt: blatt,
     kopf: kopfLesen,
     anhaengen: anhaengen,
+    /** Name der Datenbank-Datei (Testdaten: Schutz „TEST im Namen“). */
+    dateiName: function () { sheetsAufrufe++; return datei().getName(); },
     jetzt: jetzt
   };
 })();

@@ -770,6 +770,88 @@
 
   // ================================================================== System
 
+  // Testdaten einspielen: nur sichtbar, wenn der Server es freigibt (Test-Umgebung, Mitgliederverwalter).
+  // Die Datei liest NUR dieser Browser; zum Server gehen die Zeilen in Blöcken (src/modul/Testdaten.js).
+  var TESTDATEN_MAX_BYTES = 30 * 1024 * 1024;
+
+  function testdatenBereich(ziel) {
+    ziel.appendChild(A.el('h2', 'Testdaten einspielen (Test-Umgebung)'));
+    ziel.appendChild(A.el('p', 'Ersetzt Mitglieder, Zeiträume, Abteilungen, Funktionen, Konten, Gemeinschaften, Sollstellungen, Qualifikationen, ' +
+      'Ehrungen und Einwilligungen durch einen erfundenen Verein aus „npm run testdaten“ (Datei testdaten.json). Benutzer, Stammdaten, ' +
+      'Einstellungen und Protokoll bleiben.', { className: 'leise' }));
+    var eingabe = A.el('input', null, { type: 'file', accept: '.json,application/json', className: 'td-datei' });
+    eingabe.setAttribute('aria-label', 'Datei testdaten.json auswählen');
+    var bereich = A.el('div', null, { className: 'td-bereich' });
+    ziel.appendChild(eingabe);
+    ziel.appendChild(bereich);
+    eingabe.addEventListener('change', function () {
+      A.leere(bereich);
+      var f = eingabe.files && eingabe.files[0];
+      if (!f) return;
+      if (f.size > TESTDATEN_MAX_BYTES) { bereich.appendChild(A.el('p', 'Datei zu groß.', { className: 'meldung' })); return; }
+      var r = new FileReader();
+      r.onerror = function () { bereich.appendChild(A.el('p', 'Datei nicht lesbar.', { className: 'meldung' })); };
+      r.onload = function () {
+        var d = null;
+        try { d = JSON.parse(r.result); } catch (e) { d = null; }
+        if (!d || d.art !== 'mitgliederverwaltung-testdaten' || !d.tabs) {
+          bereich.appendChild(A.el('p', 'Das ist keine Datei aus „npm run testdaten“.', { className: 'meldung' }));
+          return;
+        }
+        testdatenVorschau(bereich, d);
+      };
+      r.readAsText(f, 'utf-8');
+    });
+  }
+
+  function testdatenVorschau(bereich, d) {
+    var e = d.erzeugt || {};
+    bereich.appendChild(A.el('p', 'Erzeugt mit seed ' + e.seed + ', ' + e.mitglieder + ' Mitglieder, Stichtag ' + A.datum(e.stichtag) + '.'));
+    bereich.appendChild(A.tabelle([{ feld: 'tab', titel: 'Tabelle' }, { feld: 'n', titel: 'Zeilen', zahl: true }],
+      Object.keys(d.tabs).map(function (t) { return { tab: t, n: d.tabs[t].zeilen.length }; }), { block: 40 }));
+    var stand = A.el('p', '', { className: 'leise td-stand', role: 'status' });
+    var knopf = A.knopf('Einspielen', function () {
+      return A.bestaetige('Testdaten einspielen', 'Alle Mitglieder und Bewegungsdaten DIESER Test-Tabelle werden gelöscht und durch den ' +
+        'erfundenen Verein ersetzt. Das lässt sich nicht rückgängig machen.', 'Ersetzen', 'gefahr').then(function (ja) {
+        if (!ja) return;
+        knopf.disabled = true;
+        return testdatenSenden(d, stand).then(function (res) {
+          stand.textContent = 'Fertig – Snapshot neu aufgebaut.';
+          return A.ladeNeu().then(function () {
+            A.meldung('Testdaten eingespielt: ' + Object.keys(res.tabs).map(function (t) { return t + ' ' + res.tabs[t]; }).join(', ') + '.', 'ok');
+          });
+        }, function () { stand.textContent = 'Abgebrochen. Die Test-Tabelle kann teilweise gefüllt sein – bitte erneut einspielen.'; })
+          .then(function () { knopf.disabled = false; });
+      });
+    }, 'gefahr');
+    bereich.appendChild(A.el('div', null, { className: 'knopfleiste' }, [knopf]));
+    bereich.appendChild(stand);
+  }
+
+  /** start → Blöcke je Tab nacheinander → ende. Liefert das Ergebnis von apiTestdatenEnde. */
+  function testdatenSenden(d, stand) {
+    var info = { art: d.art, version: d.version, synthetisch: d.synthetisch, erzeugt: d.erzeugt, konfig: d.konfig, tabs: {} };
+    Object.keys(d.tabs).forEach(function (t) { info.tabs[t] = { kopf: d.tabs[t].kopf, anzahl: d.tabs[t].zeilen.length }; });
+    var gesamt = 0, fertig = 0;
+    return A.rufe('apiTestdatenStart', info).then(function (s) {
+      var auftraege = [];
+      s.tabs.forEach(function (t) {
+        var zeilen = d.tabs[t].zeilen;
+        gesamt += zeilen.length;
+        for (var v = 0; v < zeilen.length; v += s.block) auftraege.push({ tab: t, von: v, zeilen: zeilen.slice(v, v + s.block) });
+      });
+      return auftraege.reduce(function (kette, a) {
+        return kette.then(function () {
+          stand.textContent = a.tab + ' … (' + Math.round(100 * fertig / Math.max(gesamt, 1)) + ' %)';
+          return A.rufe('apiTestdatenBlock', a.tab, a.von, a.zeilen).then(function () { fertig += a.zeilen.length; });
+        });
+      }, Promise.resolve());
+    }).then(function () {
+      stand.textContent = 'Zähler und Snapshot …';
+      return A.rufe('apiTestdatenEnde');
+    });
+  }
+
   function reiterSystem(ziel) {
     var l = laedt(ziel);
     A.rufe('apiVerwaltungSystem').then(function (d) {
@@ -790,6 +872,7 @@
         A.darf('messung_lesen') ? A.knopf('Messwerte', function () { A.zeige('messwerte'); }, 'zweit') : null
       ]));
       ziel.appendChild(A.el('p', '„Snapshot neu aufbauen“ ist nur nötig, wenn jemand direkt in der Tabelle geändert hat – im Normalbetrieb hält sich der Snapshot selbst aktuell.', { className: 'leise' }));
+      if (d.testdaten) testdatenBereich(ziel);
       ziel.appendChild(A.el('h2', 'Zeilen je Tabelle'));
       ziel.appendChild(A.tabelle([{ feld: 'tab', titel: 'Tabelle' }, { feld: 'n', titel: 'Zeilen', zahl: true }],
         Object.keys(d.zeilen).map(function (t) { return { tab: t, n: d.zeilen[t] }; }), { sortiere: 'tab', block: 40 }));

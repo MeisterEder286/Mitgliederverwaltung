@@ -1,11 +1,15 @@
 /**
  * Oberflächentest Verwaltung (src/client/ansicht_verwaltung.html): Zugang anlegen, Einstellung ändern,
- * Stammdaten anlegen, Datenqualität, System; Abteilungsleiter ohne Zugang.
+ * Stammdaten anlegen, Datenqualität, System; Abteilungsleiter ohne Zugang; Testdaten einspielen (nur Test-Umgebung).
  */
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { starteOberflaeche } = require('./harness');
+const { exportiere } = require('../../tools/testdaten-export');
 
 test('Mitgliederverwalter: Benutzer, Einstellungen, Stammdaten, Datenqualität, System', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
@@ -75,6 +79,7 @@ test('Mitgliederverwalter: Benutzer, Einstellungen, Stammdaten, Datenqualität, 
     await p.getByRole('heading', { name: 'Zeilen je Tabelle' }).waitFor();
     await p.getByRole('button', { name: 'Snapshot neu aufbauen' }).click();
     await p.getByText('Snapshot neu aufgebaut und geladen.').waitFor();
+    assert.strictEqual(await p.getByRole('heading', { name: /Testdaten einspielen/ }).count(), 0, 'ohne TESTUMGEBUNG kein Import');
     assert.deepStrictEqual(ui.fehler, []);
   } finally { await ui.schliessen(); }
 });
@@ -88,4 +93,25 @@ test('Abteilungsleiter und Kassier sehen keine Verwaltung; Server weist ab', asy
       assert.strictEqual(r, 'zugriff');
     } finally { await ui.schliessen(); }
   }
+});
+
+test('Test-Umgebung: Testdaten einspielen aus testdaten.json', async () => {
+  const ziel = fs.mkdtempSync(path.join(os.tmpdir(), 'testdaten-ui-'));
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter', properties: { TESTUMGEBUNG: 'ja' } });
+  try {
+    exportiere({ mitglieder: 120, seed: 2, stichtag: '2026-11-27', ziel });
+    const datei = JSON.parse(fs.readFileSync(path.join(ziel, 'testdaten.json'), 'utf8'));
+    const p = ui.page;
+    await ui.oeffne('verwaltung');
+    await p.getByRole('tab', { name: 'System' }).click();
+    await p.getByRole('heading', { name: 'Testdaten einspielen (Test-Umgebung)' }).waitFor();
+    await p.getByLabel('Datei testdaten.json auswählen').setInputFiles(path.join(ziel, 'testdaten.json'));
+    await p.getByText('Erzeugt mit seed 2').waitFor();
+    await p.getByRole('button', { name: 'Einspielen' }).click();
+    await p.locator('dialog').getByRole('button', { name: 'Ersetzen' }).click();
+    await p.getByText(/^Testdaten eingespielt: Mitglied /).waitFor({ timeout: 30000 });
+    assert.strictEqual(ui.objekte('Mitglied').filter(m => m.mitglied_id !== '').length, datei.tabs.Mitglied.zeilen.length);
+    assert.ok(ui.aufrufe.filter(n => n === 'apiTestdatenBlock').length >= 10);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); fs.rmSync(ziel, { recursive: true, force: true }); }
 });

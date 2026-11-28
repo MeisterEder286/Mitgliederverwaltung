@@ -363,7 +363,8 @@ var Verwaltung = (function () {
       snapshot_gebaut_am: basis.gebaut_am || null,
       cache: Snapshot.letzterCache(),
       zeilen: zeilen,
-      jetzt: DB.jetzt()
+      jetzt: DB.jetzt(),
+      testdaten: TestdatenEinspielen.freigegeben(ktx)
     };
   }
 

@@ -20,7 +20,7 @@
  *   node tools/testdaten-export.js [--mitglieder 1200] [--seed 1] [--stichtag JJJJ-MM-TT] [--ziel testdaten/ausgabe]
  *                                  [--benutzer ich@example.org]
  *     → <Tab>.tsv je Tab, konfig_werte.txt, LIESMICH.txt (Einfüge-Reihenfolge und Zeilenzahlen),
- *       testdaten.json (alles in einer Datei, Zellformat der Tabelle) für den Import per Skript (testimport/)
+ *       testdaten.json (alles in einer Datei, Zellformat der Tabelle) für Verwaltung → System → „Testdaten einspielen“
  *
  *   require('./tools/testdaten-export').exportiere({ mitglieder, seed, stichtag, ziel, benutzer }) → { tabs, dateien, konfig }
  */
@@ -94,7 +94,7 @@ function exportiere(opt) {
   fs.writeFileSync(path.join(o.ziel, 'konfig_werte.txt'), konfig.map(z => z.join('\t')).join('\r\n') + '\r\n');
   dateien.push('konfig_werte.txt');
 
-  // Eine Datei für den Import per Skript (testimport/Import.js): in den Drive-Ordner hochladen, dort ausführen.
+  // Eine Datei für Verwaltung → System → „Testdaten einspielen“ in der Test-WebApp (src/modul/Testdaten.js).
   fs.writeFileSync(path.join(o.ziel, 'testdaten.json'), JSON.stringify({
     art: 'mitgliederverwaltung-testdaten', version: 1, synthetisch: true,
     erzeugt: { seed: o.seed, mitglieder: o.mitglieder, stichtag: o.stichtag },
@@ -108,8 +108,8 @@ function exportiere(opt) {
     '',
     'Voraussetzung: Test-Tabelle mit eigenem Skriptprojekt (DB_ID), `setup` ausgeführt, Gebietsschema Deutschland.',
     '',
-    'EINFACHER: testdaten.json in den Drive-Ordner des Import-Projekts laden und dort testdatenImportieren',
-    'ausführen (testimport/LIESMICH.md). Sonst von Hand:',
+    'EINFACHER: In der Test-WebApp Verwaltung → System → „Testdaten einspielen“ und testdaten.json auswählen',
+    '(Script Property TESTUMGEBUNG = ja im Test-Skriptprojekt, siehe docs/BETRIEB.md Abschnitt 3). Sonst von Hand:',
     '',
     'Je Tab: alle Zeilen unter der Kopfzeile löschen, <Tab>.tsv im Texteditor öffnen, ab Zeile 2 kopieren,',
     'im Sheet Zelle A2 anklicken, Strg+Umschalt+V (nur Werte).',

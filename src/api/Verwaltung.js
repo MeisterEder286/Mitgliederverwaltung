@@ -4,7 +4,7 @@
  * Zweck:      Benutzer & Rechte, Einstellungen (_Konfig), Stammdaten, Datenqualität, Hinweise und System.
  * Datenquelle: src/modul/Verwaltung.js.
  * Wer darf was: benutzer_verwalten, konfig_aendern, stammdaten_bearbeiten (Vorstand, Mitgliederverwalter) –
- *             je Funktion über Api.ausfuehren geprüft.
+ *             je Funktion über Api.ausfuehren geprüft. apiTestdaten*: zusätzlich nur Test-Umgebung und Mitgliederverwalter.
  * Besonderheiten: keine.
  */
 
@@ -58,4 +58,20 @@ function apiVerwaltungSystem() {
 
 function apiVerwaltungSnapshotNeu() {
   return Api.ausfuehren('apiVerwaltungSnapshotNeu', 'konfig_aendern', function (ktx) { return Verwaltung.snapshotNeu(ktx); });
+}
+
+// Testdaten einspielen – nur Test-Umgebung (TESTUMGEBUNG = ja, „TEST“ im Dateinamen, Mitgliederverwalter; src/modul/Testdaten.js)
+
+function apiTestdatenStart(info) {
+  return Api.ausfuehren('apiTestdatenStart', 'konfig_aendern', function (ktx) { return TestdatenEinspielen.start(ktx, info); });
+}
+
+function apiTestdatenBlock(tab, von, zeilen) {
+  return Api.ausfuehren('apiTestdatenBlock', 'konfig_aendern', function (ktx) {
+    return TestdatenEinspielen.block(ktx, String(tab), Number(von), zeilen);
+  });
+}
+
+function apiTestdatenEnde() {
+  return Api.ausfuehren('apiTestdatenEnde', 'konfig_aendern', function (ktx) { return TestdatenEinspielen.ende(ktx); });
 }

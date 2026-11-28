@@ -18,6 +18,7 @@
  *   eigentuemer  Funktionskonto (Session.getEffectiveUser), Standard 'verwaltung@tsv-ergoldsbach.de'
  *   dbId         Standard 'DB-TEST' (steht als Script Property DB_ID bereit)
  *   properties   weitere Script Properties
+ *   dateiName    Name der Datenbank-Datei, Standard 'Mitgliederverwaltung (Test)'
  *   sperreBelegt true → LockService.waitLock wirft (Sperre durch andere Ausführung)
  *   zeitzone     Standard 'Europe/Berlin'
  *   jetzt        Date für Utilities.formatDate(new Date()) ist NICHT steuerbar; Tests prüfen das Format.
@@ -125,6 +126,7 @@ function erzeugeFakes(opt) {
       getDisplayValues() { return range.getValues().map(z => z.map(v => String(v))); },
       setValues(werte) { zaehle('setValues'); schreib(werte); return range; },
       setValue(v) { zaehle('setValue'); schreib([[v]]); return range; },
+      clearContent() { zaehle('clearContent'); schreib(Array.from({ length: nr }, () => Array(nc).fill(''))); return range; },
       setNumberFormat() { zaehle('setNumberFormat'); return range; },
       setNumberFormats() { zaehle('setNumberFormats'); return range; },
       setDataValidation() { zaehle('setDataValidation'); return range; },
@@ -178,7 +180,7 @@ function erzeugeFakes(opt) {
 
   const datei = {
     getId() { return dbId; },
-    getName() { return 'Mitgliederverwaltung (Test)'; },
+    getName() { return opt.dateiName || 'Mitgliederverwaltung (Test)'; },
     getSheetByName(n) { zaehle('getSheetByName'); return tabs[n] ? blatt(n) : null; },
     getSheets() { zaehle('getSheets'); return Object.keys(tabs).filter(n => n.indexOf('/') < 0).map(blatt); },
     getSpreadsheetTimeZone() { return opt.tabellenZeitzone || zeitzone; },

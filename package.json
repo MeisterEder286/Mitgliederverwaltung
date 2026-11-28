@@ -14,8 +14,7 @@
     "messen:lokal": "node tools/messen-lokal.js --markdown",
     "test:ui": "node tools/tests.js ui",
     "push:backup": "npm run check && cd backup && clasp push",
-    "push:eingang": "npm run check && cd eingang && clasp push",
-    "push:testimport": "npm run check && cd testimport && clasp push"
+    "push:eingang": "npm run check && cd eingang && clasp push"
   },
   "engines": {
     "node": ">=20"
