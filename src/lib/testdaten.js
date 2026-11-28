@@ -53,17 +53,26 @@ var Testdaten = (function () {
     return { fehler: f, tabs: tabs, uebersprungen: weg };
   }
 
-  /** Kopfzeile der Tabelle gegen das Schema: gleiche Spalten am Anfang (hinten mehr ist erlaubt). Fehlertext oder null. */
+  /**
+   * Kopfzeile der Tabelle gegen das Schema. Zugeordnet wird nach NAMEN wie überall in der WebApp: setup hängt neue
+   * Spalten hinten an, ältere Tabellen haben daher eine andere Reihenfolge. Fehlen darf keine Spalte des Schemas,
+   * zusätzliche Spalten der Tabelle bleiben leer. Fehlertext oder null.
+   */
   function pruefeTabellenkopf(tab, ist) {
     if (!ist) return 'Tab ' + tab + ' fehlt in der Tabelle – zuerst setup ausführen.';
-    var soll = sollKopf(tab);
-    for (var i = 0; i < soll.length; i++) {
-      if (String(ist[i] === undefined ? '' : ist[i]).trim() !== soll[i]) {
-        return 'Tab ' + tab + ': Kopfzeile der Tabelle weicht ab (Spalte ' + (i + 1) + ' „' + (ist[i] || '') + '“ statt „' + soll[i] +
-          '“) – setup ausführen.';
-      }
-    }
+    var namen = ist.map(function (k) { return String(k).trim(); });
+    var fehlt = sollKopf(tab).filter(function (s) { return namen.indexOf(s) < 0; });
+    if (fehlt.length) return 'Tab ' + tab + ': Spalte(n) ' + fehlt.join(', ') + ' fehlen in der Tabelle – setup ausführen.';
     return null;
+  }
+
+  /** Zeilen in Schema-Reihenfolge → Zeilen in der Spaltenreihenfolge der Tabelle (ist = deren Kopfzeile). */
+  function ordneZeilen(tab, zeilen, ist) {
+    var soll = sollKopf(tab);
+    var quelle = ist.map(function (k) { return soll.indexOf(String(k).trim()); });
+    return zeilen.map(function (z) {
+      return quelle.map(function (i) { var v = i < 0 ? '' : z[i]; return v === null || v === undefined ? '' : v; });
+    });
   }
 
   /** Zeilenblock prüfen: Liste von Listen mit genau `spalten` Zellen, nur Text/Zahl/leer, kein Formelanfang. */
@@ -102,5 +111,5 @@ var Testdaten = (function () {
   }
 
   return { ART: ART, ERLAUBT: ERLAUBT, MAX_BLOCK: MAX_BLOCK, istTestName: istTestName, pruefeKopfdaten: pruefeKopfdaten,
-    pruefeTabellenkopf: pruefeTabellenkopf, pruefeBlock: pruefeBlock, konfigWerte: konfigWerte };
+    pruefeTabellenkopf: pruefeTabellenkopf, ordneZeilen: ordneZeilen, pruefeBlock: pruefeBlock, konfigWerte: konfigWerte };
 })();

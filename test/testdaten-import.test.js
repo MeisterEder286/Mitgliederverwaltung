@@ -129,12 +129,41 @@ test('Sperren: kein Schalter, kein TEST im Namen, falsche Rolle → abgelehnt, n
   assert.strictEqual(u.g.apiTestdatenStart(info(DATEI)).fehler.art, 'zugriff');
 });
 
-test('Kopfzeile der Tabelle weicht ab → nichts geleert', () => {
+/** Spalte `name` ans Ende verschieben – so sieht eine ältere Tabelle aus, nachdem setup sie angehängt hat. */
+function spalteNachHinten(daten, name) {
+  const i = daten[0].indexOf(name);
+  return daten.map(z => { const r = z.slice(); const [v] = r.splice(i, 1); r.push(v === undefined ? '' : v); return r; });
+}
+
+test('ältere Tabelle: von setup hinten angehängte Spalten und Zusatzspalte → Zuordnung nach Namen', () => {
   const tabs = kopie(ALT);
-  tabs.Ehrung[0] = tabs.Ehrung[0].slice().reverse();
+  tabs.Beitragskonto = spalteNachHinten(tabs.Beitragskonto, 'iban_vorher');
+  tabs.Beitragsgemeinschaft = spalteNachHinten(tabs.Beitragsgemeinschaft, 'beitragsart_id');
+  tabs.Ehrung = tabs.Ehrung.map((z, i) => z.concat([i === 0 ? 'eigene_notiz' : 'x']));
+  const { f, g } = aufbau({ tabs });
+  spiele(g, DATEI);
+  ['Beitragskonto', 'Beitragsgemeinschaft', 'Ehrung'].forEach(t => {
+    const kopfIst = f.daten(t)[0], kopfDatei = DATEI.tabs[t].kopf;
+    const ist = f.daten(t).slice(1).filter(z => z.some(v => v !== ''));
+    assert.strictEqual(ist.length, DATEI.tabs[t].zeilen.length, t);
+    ist.forEach((z, n) => kopfDatei.forEach((k, j) => {
+      assert.deepStrictEqual(z[kopfIst.indexOf(k)], DATEI.tabs[t].zeilen[n][j], t + ' Zeile ' + (n + 2) + ' Spalte ' + k);
+    }));
+  });
+  const e = f.daten('Ehrung');
+  assert.ok(e.slice(1).filter(z => z.some(v => v !== '')).every(z => z[e[0].indexOf('eigene_notiz')] === ''), 'Zusatzspalte leer');
+  // die WebApp liest die Werte danach richtig
+  const sys = ok(g.apiVerwaltungSystem());
+  assert.strictEqual(sys.zeilen.Beitragskonto, DATEI.tabs.Beitragskonto.zeilen.length);
+});
+
+test('Spalte fehlt in der Tabelle → nichts geleert', () => {
+  const tabs = kopie(ALT);
+  const i = tabs.Ehrung[0].indexOf('bemerkung');
+  tabs.Ehrung = tabs.Ehrung.map(z => z.filter((_, j) => j !== i));
   const { f, g } = aufbau({ tabs });
   const vorher = f.daten('Mitglied').map(z => z.slice());
-  fachlich(g.apiTestdatenStart(info(DATEI)), /Nichts geändert: Tab Ehrung/);
+  fachlich(g.apiTestdatenStart(info(DATEI)), /Nichts geändert: Tab Ehrung: Spalte\(n\) bemerkung fehlen/);
   assert.deepStrictEqual(f.daten('Mitglied'), vorher);
 });
 

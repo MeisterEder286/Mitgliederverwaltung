@@ -12,6 +12,7 @@
  *   - Ablauf: start (alles prüfen, dann Tabs leeren) → block (je bis zu Testdaten.MAX_BLOCK Zeilen, lückenlos in
  *     Reihenfolge) → ende (Zeilenzahlen prüfen, _Konfig, Snapshot). Bricht der Browser ab, bleibt die Test-Tabelle
  *     teilweise gefüllt; einfach neu starten.
+ *   - Spalten werden nach Namen zugeordnet (ältere Tabellen haben von setup hinten angehängte Spalten).
  *   - Geschrieben wird wie überall mit setValues im Zellformat des Datenmodells (DB.anhaengen); Formate und
  *     Auswahllisten aus setup bleiben, weil nur Inhalte gelöscht werden (clearContent).
  *   - Benutzer, Stammdaten, Protokoll, Vorlagen, Dokumente bleiben unberührt (Testdaten.ERLAUBT).
@@ -100,7 +101,7 @@ var TestdatenEinspielen = (function () {
     return DB.mitSperre(function () {
       var b = DB.blatt(tab), letzte = b.getLastRow();
       if (letzte !== von + 1) throw Fehler.fachlich('Reihenfolge gestört bei ' + tab + ' – bitte von vorn beginnen.');
-      DB.anhaengen(b, zeilen.map(function (z) { return z.map(function (v) { return v === null ? '' : v; }); }), letzte);
+      DB.anhaengen(b, Testdaten.ordneZeilen(tab, zeilen, DB.kopf(b)), letzte);
       return { tab: tab, bis: von + zeilen.length };
     });
   }

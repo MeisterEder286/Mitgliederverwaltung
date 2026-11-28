@@ -112,7 +112,8 @@ function exportiere(opt) {
     '(Script Property TESTUMGEBUNG = ja im Test-Skriptprojekt, siehe docs/BETRIEB.md Abschnitt 3). Sonst von Hand:',
     '',
     'Je Tab: alle Zeilen unter der Kopfzeile löschen, <Tab>.tsv im Texteditor öffnen, ab Zeile 2 kopieren,',
-    'im Sheet Zelle A2 anklicken, Strg+Umschalt+V (nur Werte).',
+    'im Sheet Zelle A2 anklicken, Strg+Umschalt+V (nur Werte). Nur wenn die Spalten der Tabelle in derselben',
+    'Reihenfolge stehen wie in der .tsv – sonst den Weg über die WebApp nehmen (ordnet nach Spaltennamen zu).',
     ''
   ].concat(Object.keys(tabs).map(t => '  ' + (t + '.tsv').padEnd(34) + String(tabs[t]).padStart(6) + ' Zeilen'), [
     '',

@@ -87,13 +87,15 @@ Deployment. Änderungen immer zuerst dort.
 
 Ersetzt werden Mitglieder, Zeiträume, Abteilungszugehörigkeiten, Funktionen, Konten, Gemeinschaften, Sollstellungen
 mehrerer Jahre, Qualifikationen, Ehrungen und Einwilligungen. **Benutzer**, Stammdaten (aus `setup`), übrige
-Einstellungen, Protokoll, Vorlagen und Dokumente bleiben. Vorher prüft der Server, dass die Kopfzeilen zu diesem
-Programmstand passen. Sonst wird nichts geändert, dann `setup` ausführen bzw. Export und WebApp auf denselben Stand bringen.
+Einstellungen, Protokoll, Vorlagen und Dokumente bleiben. Spalten werden nach Namen zugeordnet. Die Reihenfolge in der
+Tabelle ist also egal (bei älteren Tabellen hängt `setup` neue Spalten hinten an). Fehlt eine Spalte, wird nichts
+geändert, dann `setup` ausführen bzw. Export und WebApp auf denselben Stand bringen.
 Bricht das Einspielen mittendrin ab, einfach neu starten. Vor E-Mail-Tests `mail_test_an` setzen.
 
 **Von Hand (ohne WebApp):** Derselbe Befehl schreibt auch je Tab eine `<Tab>.tsv`, dazu `konfig_werte.txt` und
 `LIESMICH.txt`. Je Tab alle Zeilen unter der Kopfzeile löschen, Inhalt ab Zeile 2 in A2 mit **Strg+Umschalt+V**
-einfügen (Gebietsschema Deutschland), Werte aus `konfig_werte.txt` in `_Konfig` eintragen, dann „Snapshot neu
+einfügen (Gebietsschema Deutschland). Das klappt nur, wenn die Spaltenreihenfolge der Tabelle der Kopfzeile der `.tsv`
+entspricht; bei älteren Tabellen mit hinten angehängten Spalten den Weg über die WebApp nehmen. Werte aus `konfig_werte.txt` in `_Konfig` eintragen, dann „Snapshot neu
 aufbauen“. Mit `--benutzer adresse@example.org` entsteht zusätzlich `Benutzer.tsv` (Mitgliederverwalter). Die
 erfundenen Benutzerkonten des Generators werden nie exportiert, und beim Einspielen über die WebApp bleibt der Tab
 Benutzer immer unberührt.
