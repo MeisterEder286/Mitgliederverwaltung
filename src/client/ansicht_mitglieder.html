@@ -25,6 +25,8 @@
       (h2 mit altem Titel, id „mitglied-teil-<id>“) untereinander. Eine Erweiterung, deren id in keiner Gruppe
       steht, wird ein eigener Reiter am Ende. param.reiter darf ein Reiter- oder Teil-Schlüssel sein
       (z. B. 'zahlungen', 'funktionen', 'notizen'): dann wird der passende Reiter gewählt und zum Abschnitt gescrollt.
+    - Familienleiste unter dem Detail-Kopf: weitere Personen derselben Beitragsgemeinschaft (Familien-/Ehegattenbeitrag)
+      als Sprunglinks mit param.von; „← Zurück zu <Name>“ führt über den Verlauf zur Ausgangsperson zurück.
     - Exporte werden vor dem Herunterladen/Drucken auf dem Server protokolliert (ohne Personendaten).
     - E-Mail-Verteiler sendet nichts: Adressen aus dem Snapshot der Rolle (Minderjährige über die Vertretung wie in
       „Schreiben“), in Blöcken zu 50 zum Kopieren bzw. als mailto-Link; Abruf wird als Export „mailverteiler“ protokolliert.
@@ -78,6 +80,9 @@
   #mv-bz-inhaber, #mv-bz-kontowahl { min-height: 44px; padding: 4px 8px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); max-width: 100%; }
   .mv-regelpruefung ul { margin: 6px 0 0; padding-left: 20px; }
   .mv-ausbildung-hinweis { margin: 4px 0; }
+  .mv-familie { display: flex; flex-wrap: wrap; gap: 2px 14px; align-items: center; background: var(--flaeche); border-radius: var(--radius); padding: 6px 10px; margin: 0 0 10px; }
+  .mv-familie-person { display: inline-flex; align-items: center; gap: 5px; }
+  .mv-link { background: none; border: 0; padding: 0; color: var(--akzent); text-decoration: underline; font: inherit; cursor: pointer; text-align: left; min-height: 36px; }
   .mv-ibantreffer label { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .mv-person [hidden], .mv-zahlung [hidden], .mv-gemeinschaft [hidden], .mv-neu-gruppe[hidden] { display: none; }
 </style>
@@ -684,8 +689,12 @@
     if (m.ehrenmitglied === true) kopf.appendChild(A.el('span', 'Ehrenmitglied', { className: 'marke' }));
     if (m.adresse_ungueltig === true) kopf.appendChild(A.el('span', 'Adresse ungültig', { className: 'marke' }));
     if (m.fz_ampel) kopf.appendChild(ampelText(m.fz_ampel));
-    ziel.appendChild(A.knopf('← Zurück', function () { A.zurueck(); }, 'zweit klein'));
+    // Kam der Benutzer über die Familienleiste eines anderen Mitglieds, nennt „Zurück“ diese Person
+    var herkunft = param && param.von ? mitglied(param.von) : null;
+    ziel.appendChild(A.knopf(herkunft ? '← Zurück zu ' + A.name(herkunft) : '← Zurück', function () { A.zurueck(); }, 'zweit klein'));
     ziel.appendChild(kopf);
+    var familie = familienleiste(m);
+    if (familie) ziel.appendChild(familie);
 
     var knoepfe = A.el('div', null, { className: 'knopfleiste' });
     var s = statusVon(m);
@@ -730,6 +739,43 @@
     ziel.appendChild(reiterLeiste);
     ziel.appendChild(inhalt);
     waehle(aktiv, gewuenscht);
+  }
+
+  /** Sprunglink zu einem anderen Mitglied; „von“ merkt die Herkunft für „← Zurück zu …“. */
+  function mitgliedLink(x, vonId, text) {
+    return A.el('button', text || A.name(x), { type: 'button', className: 'mv-link', onclick: function (e) {
+      e.preventDefault(); e.stopPropagation(); A.zeige('mitglied', { id: x.mitglied_id, von: vonId });
+    } });
+  }
+
+  /**
+   * Familienleiste unter dem Kopf (auf jedem Reiter): alle weiteren Personen derselben Beitragsgemeinschaft
+   * (Familien-/Ehegattenbeitrag) als Sprunglinks. beitragsgemeinschaft_id ist Sichtklasse „finanz“ – ohne diese
+   * Sicht fehlt das Feld im Snapshot und die Leiste entfällt. Die Bezeichnung kommt aus dem Bereich 'finanzen'
+   * und wird bei Bedarf still nachgeladen.
+   */
+  function familienleiste(m) {
+    var gid = m.beitragsgemeinschaft_id;
+    if (!gid) return null;
+    var andere = A.daten.liste('mitglieder').filter(function (x) { return x.beitragsgemeinschaft_id === gid && x.mitglied_id !== m.mitglied_id; })
+      .sort(function (a, b) { return String(a.geburtsdatum || '9999').localeCompare(String(b.geburtsdatum || '9999')) || A.name(a).localeCompare(A.name(b)); });
+    var titel = A.el('strong', 'Familien-/Ehegattenbeitrag');
+    var leiste = A.el('div', null, { className: 'mv-familie', role: 'group', aria: { label: 'Weitere Personen der Beitragsgemeinschaft' } }, [titel]);
+    function benenne() {
+      var g = A.daten.hole('gemeinschaften', gid);
+      if (g && g.bezeichnung) titel.textContent = g.bezeichnung;
+    }
+    if (A.daten.geladen('finanzen')) benenne();
+    else A.daten.lade('finanzen').then(benenne, function () {});
+    if (!andere.length) { leiste.appendChild(A.el('span', 'keine weiteren Personen', { className: 'leise' })); return leiste; }
+    andere.forEach(function (x) {
+      var s = statusVon(x);
+      var eintrag = A.el('span', null, { className: 'mv-familie-person' }, [mitgliedLink(x, m.mitglied_id)]);
+      if (x.alter !== undefined && x.alter !== null) eintrag.appendChild(A.el('span', x.alter + ' J.', { className: 'leise' }));
+      if (s !== 'aktiv') eintrag.appendChild(A.el('span', '(' + statusText(x) + ')', { className: 'leise' }));
+      leiste.appendChild(eintrag);
+    });
+    return leiste;
   }
 
   /**
@@ -874,7 +920,11 @@
         ], true));
         if (konto) {
           var mitzahler = A.daten.liste('mitglieder').filter(function (x) { return x.beitragskonto_id === konto.beitragskonto_id && x.mitglied_id !== m.mitglied_id; });
-          if (mitzahler.length) z.appendChild(A.el('p', 'Über dieses Konto zahlen außerdem: ' + mitzahler.map(A.name).join(', '), { className: 'leise' }));
+          if (mitzahler.length) {
+            var zeile = A.el('p', 'Über dieses Konto zahlen außerdem: ', { className: 'leise' });
+            mitzahler.forEach(function (x, i) { if (i) zeile.appendChild(document.createTextNode(', ')); zeile.appendChild(mitgliedLink(x, m.mitglied_id)); });
+            z.appendChild(zeile);
+          }
           var soll = A.daten.liste('sollstellungen').filter(function (s) { return s.beitragskonto_id === konto.beitragskonto_id; })
             .sort(function (a, b) { return b.jahr - a.jahr; });
           z.appendChild(A.el('h3', 'Sollstellungen des Kontos'));

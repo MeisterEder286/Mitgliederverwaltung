@@ -145,6 +145,34 @@ test('Mitgliederverwalter: Familie aufnehmen, vorhandene IBAN erkennen und Konto
   } finally { await ui.schliessen(); }
 });
 
+test('Detail: Familienleiste zeigt die weiteren Personen der Gemeinschaft – Sprung hin und zurück', async () => {
+  const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
+  const p = ui.page;
+  try {
+    const je = {};
+    ui.objekte('Mitglied').filter(m => m.beitragsgemeinschaft_id && !m.sterbedatum).forEach(m => (je[m.beitragsgemeinschaft_id] = je[m.beitragsgemeinschaft_id] || []).push(m));
+    const fam = Object.values(je).find(l => l.length >= 2);
+    assert.ok(fam, 'Testdaten ohne Familie');
+    const [a, b] = fam;
+    const gem = ui.objekte('Beitragsgemeinschaft').find(g => g.beitragsgemeinschaft_id === a.beitragsgemeinschaft_id);
+    await p.evaluate(id => App.zeige('mitglied', { id, reiter: 'nachweise' }), a.mitglied_id);
+    const leiste = p.locator('.mv-familie');
+    await leiste.waitFor();
+    if (gem && gem.bezeichnung) await leiste.getByText(gem.bezeichnung).waitFor();
+    const nameB = await p.evaluate(id => App.name(App.daten.hole('mitglieder', id)), b.mitglied_id);
+    const nameA = await p.evaluate(id => App.name(App.daten.hole('mitglieder', id)), a.mitglied_id);
+    await leiste.getByRole('button', { name: nameB, exact: true }).click();
+    await p.waitForFunction(id => App.aktuell().param && App.aktuell().param.id === id, b.mitglied_id);
+    assert.match(await p.textContent('.mv-kopf h1'), new RegExp(b.nachname));
+    // Rückweg: über die Leiste von B ist A verlinkt, und „Zurück“ nennt A
+    assert.strictEqual(await p.locator('.mv-familie').getByRole('button', { name: nameA, exact: true }).count(), 1);
+    await p.getByRole('button', { name: '← Zurück zu ' + nameA, exact: true }).click();
+    await p.waitForFunction(id => App.aktuell().param && App.aktuell().param.id === id, a.mitglied_id);
+    await keinUeberlauf(ui);
+    assert.deepStrictEqual(ui.fehler, []);
+  } finally { await ui.schliessen(); }
+});
+
 test('Bearbeiten: „Wer zahlt?“ statt Auswahlliste – neues Konto per IBAN; Familienmitglied braucht „ganze Familie“', async () => {
   const ui = await starteOberflaeche({ rolle: 'Mitgliederverwalter' });
   const p = ui.page;
