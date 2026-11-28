@@ -5,30 +5,42 @@
               Tastaturfokus, große Bedienflächen (mind. 44 px), keine reinen Farbsignale.
   Datenquelle: keine.
   Wer darf:   –
-  Besonderheiten: Nur Systemschriften, keine externen Ressourcen (B8). Farben als Variablen oben gesammelt.
+  Besonderheiten: Keine externen Ressourcen (B8): „Inter“ (Schrift der Vereinswebsite) nur, wenn lokal installiert,
+              sonst Systemschrift. Farben als Variablen oben gesammelt.
+              Farbwelt nach tsv-ergoldsbach.de: Vereinsgrün #19881E (4,6:1 auf Weiß), dunkle Kopfleiste wie die
+              Website-Navigation, grüne Akzentlinie, runde Ecken (12 px Bedienelemente, 16 px Karten).
 -->
 <style>
   :root {
     --grund: #ffffff;
-    --flaeche: #f3f5f8;
-    --text: #1b1f24;
-    --text-leise: #4a5560;
-    --akzent: #0b4f8a;
+    --flaeche: #f4f6f4;
+    --text: #141414;
+    --text-leise: #4f5750;
+    --akzent: #19881e;          /* Vereinsgrün */
+    --akzent-dunkel: #147018;   /* Hover / gedrückt */
     --akzent-text: #ffffff;
-    --rand: #c9d1da;
-    --fehler-grund: #fdecec;
-    --fehler-text: #8a1111;
-    --ok-grund: #e8f5ec;
-    --ok-text: #135c2c;
+    --akzent-hell: #e3f5e3;     /* heller Grün-Tint für Hervorhebungen */
+    --akzent-hell-text: #135c16;
+    --hover: #eef8ee;
+    --kopf-grund: #141414;      /* wie die Navigation der Vereinswebsite */
+    --kopf-text: #ffffff;
+    --kopf-leise: rgba(255, 255, 255, 0.72);
+    --rand: #d3dad3;
+    --fehler-grund: #fde8e8;
+    --fehler-text: #8b1a1a;
+    --ok-grund: #e3f5e3;
+    --ok-text: #135c16;
     --fokus: #f2a900;
-    --radius: 6px;
+    --radius: 12px;
+    --radius-karte: 16px;
     --abstand: 16px;
+    --schatten: 0 1px 2px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.04);
   }
   * { box-sizing: border-box; }
   html { font-size: 16px; }
   body {
     margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     color: var(--text);
     background: var(--grund);
     line-height: 1.45;
@@ -36,27 +48,30 @@
     display: flex;
     flex-direction: column;
   }
-  a { color: var(--akzent); }
+  a { color: var(--akzent-dunkel); }
+  a:hover { color: var(--akzent); }
   :focus-visible { outline: 3px solid var(--fokus); outline-offset: 2px; }
 
   .sprungmarke { position: absolute; left: -9999px; }
   .sprungmarke:focus { left: var(--abstand); top: 8px; background: var(--grund); padding: 8px; z-index: 10; }
 
   .kopf {
-    background: var(--akzent);
-    color: var(--akzent-text);
-    padding: 12px var(--abstand);
+    background: var(--kopf-grund);
+    color: var(--kopf-text);
+    padding: 10px var(--abstand);
+    border-bottom: 4px solid var(--akzent);
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 8px 12px;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: center;
   }
-  .kopf-titel { display: flex; flex-direction: column; }
-  .verein { font-size: 0.85rem; opacity: 0.9; }
-  .app { font-size: 1.15rem; font-weight: 600; }
-  .jahr { font-weight: 400; font-size: 0.9rem; }
-  .kopf-benutzer { font-size: 0.85rem; }
+  .kopf .wappen { flex: 0 0 auto; width: 40px; height: 40px; color: var(--kopf-text); }
+  .kopf-titel { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; }
+  .verein { font-size: 0.8rem; color: var(--kopf-leise); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .app { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+  .jahr { font-weight: 400; font-size: 0.9rem; color: var(--kopf-leise); }
+  .kopf-benutzer { font-size: 0.85rem; color: var(--kopf-leise); }
 
   /* Hauptnavigation – mobil (< 720 px) als Leiste unten, ab 720 px oben (siehe @media unten) */
   .navigation {
@@ -91,7 +106,7 @@
   }
   .nav-symbol { font-size: 1.25rem; line-height: 1; }
   .navigation button[aria-current="page"], .navigation .nav-mehr.aktiv {
-    color: var(--akzent); font-weight: 700; box-shadow: inset 0 3px 0 var(--akzent); background: var(--grund);
+    color: var(--akzent-dunkel); font-weight: 700; box-shadow: inset 0 3px 0 var(--akzent); background: var(--grund);
   }
   .navigation .nav-ueberzaehlig { display: none; }
   .navigation ~ .fuss { padding-bottom: calc(12px + 57px + env(safe-area-inset-bottom, 0px)); }
@@ -100,14 +115,15 @@
     position: fixed; right: 8px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); z-index: 21;
     display: flex; flex-direction: column; min-width: 200px; max-width: calc(100vw - 16px);
     background: var(--grund); border: 1px solid var(--rand); border-radius: var(--radius);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.2); padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 4px;
   }
   .mehr-liste[hidden] { display: none; }
   .mehr-liste button {
     min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; text-align: left;
     border: 0; border-radius: var(--radius); background: transparent; color: var(--text); font: inherit; cursor: pointer;
   }
-  .mehr-liste button[aria-current="page"] { color: var(--akzent); font-weight: 700; box-shadow: inset 3px 0 0 var(--akzent); }
+  .mehr-liste button:hover { background: var(--hover); }
+  .mehr-liste button[aria-current="page"] { color: var(--akzent-dunkel); font-weight: 700; box-shadow: inset 3px 0 0 var(--akzent); background: var(--akzent-hell); }
 
   /* Unterreiter: Ansichten der aktuellen Gruppe als Pillen über der Liste */
   .unterreiter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
@@ -115,12 +131,13 @@
     min-height: 44px; padding: 6px 14px; border: 1px solid var(--rand); border-radius: 999px;
     background: var(--grund); color: var(--text); font: inherit; cursor: pointer;
   }
+  .unterreiter button:hover { border-color: var(--akzent); }
   .unterreiter button[aria-current="page"] { background: var(--akzent); border-color: var(--akzent); color: var(--akzent-text); font-weight: 600; }
 
   .inhalt { flex: 1; padding: var(--abstand); max-width: 1100px; width: 100%; margin: 0 auto; }
   .inhalt:focus { outline: none; }
-  h1 { font-size: 1.35rem; margin: 0 0 12px; }
-  h2 { font-size: 1.1rem; margin: 24px 0 8px; }
+  h1 { font-size: 1.35rem; margin: 0 0 12px; font-weight: 800; letter-spacing: -0.02em; }
+  h2 { font-size: 1.1rem; margin: 24px 0 8px; font-weight: 700; letter-spacing: -0.01em; }
   .leise { color: var(--text-leise); font-size: 0.9rem; }
   .laedt { color: var(--text-leise); }
 
@@ -138,13 +155,17 @@
     background: var(--akzent);
     color: var(--akzent-text);
     font: inherit;
+    font-weight: 600;
     cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
   }
-  .knopf.zweit { background: var(--grund); color: var(--akzent); }
+  .knopf:hover:not(:disabled) { background: var(--akzent-dunkel); border-color: var(--akzent-dunkel); }
+  .knopf.zweit { background: var(--grund); color: var(--akzent-dunkel); }
+  .knopf.zweit:hover:not(:disabled) { background: var(--akzent-hell); color: var(--akzent-hell-text); }
   .knopf:disabled { opacity: 0.6; cursor: default; }
   .knopf[aria-busy="true"] { opacity: 0.6; cursor: progress; }
 
-  .karte { border: 1px solid var(--rand); border-radius: var(--radius); padding: 12px; margin: 0 0 12px; background: var(--grund); }
+  .karte { border: 1px solid var(--rand); border-radius: var(--radius-karte); padding: 12px 16px; margin: 0 0 12px; background: var(--grund); box-shadow: var(--schatten); }
   .liste { list-style: none; padding: 0; margin: 0; }
   .liste li { padding: 6px 0; border-bottom: 1px solid var(--flaeche); }
 
@@ -169,14 +190,14 @@
 
   /* ---- Bausteine aus client/kern ---- */
   .knopf.klein { min-height: 36px; padding: 4px 10px; font-size: 0.9rem; }
-  .knopf.gefahr { background: var(--fehler-text); border-color: var(--fehler-text); color: #fff; }
+  .knopf.gefahr, .knopf.gefahr:hover:not(:disabled) { background: var(--fehler-text); border-color: var(--fehler-text); color: #fff; }
   .knopfleiste { display: flex; flex-wrap: wrap; gap: 8px; }
   .abschnittskopf { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 20px 0 8px; }
   .abschnittskopf h1, .abschnittskopf h2 { margin: 0; }
   .meldung.hinweis { background: #fff6dc; color: #5c4400; }
   .tabelle-info { margin: 6px 0; }
   tr.klickbar { cursor: pointer; }
-  tr.klickbar:hover td, tr.klickbar:focus td { background: #eef4fb; }
+  tr.klickbar:hover td, tr.klickbar:focus td { background: var(--hover); }
   .sortierknopf { background: none; border: 0; font: inherit; font-weight: 600; cursor: pointer; padding: 0; color: inherit; }
   .filterleiste { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
   .filterleiste .suche { flex: 1 1 220px; }
@@ -196,16 +217,17 @@
   .details dt { color: var(--text-leise); font-size: 0.9rem; }
   .details dd { margin: 0; overflow-wrap: anywhere; }
   .kacheln { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 0 0 12px; }
-  .kachel { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--rand); border-radius: var(--radius); background: var(--grund); text-align: left; font: inherit; color: inherit; }
-  button.kachel { cursor: pointer; }
-  .kachel-zahl { font-size: clamp(1.1rem, 5.2vw, 1.5rem); white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kachel { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--rand); border-radius: var(--radius-karte); background: var(--grund); text-align: left; font: inherit; color: inherit; box-shadow: var(--schatten); }
+  button.kachel { cursor: pointer; transition: border-color 0.2s ease, transform 0.2s ease; }
+  button.kachel:hover { border-color: var(--akzent); }
+  .kachel-zahl { font-size: clamp(1.1rem, 5.2vw, 1.5rem); white-space: nowrap; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
   .kachel-text { font-size: 0.85rem; color: var(--text-leise); }
   .kachel.warnung { border-color: #d39b00; background: #fffaeb; }
   .kachel.fehler { border-color: var(--fehler-text); background: var(--fehler-grund); }
   .ampel { white-space: nowrap; font-weight: 600; }
-  .ampel.gruen { color: #135c2c; } .ampel.gelb { color: #7a5600; } .ampel.rot { color: var(--fehler-text); } .ampel.grau { color: var(--text-leise); }
+  .ampel.gruen { color: var(--ok-text); } .ampel.gelb { color: #7a5600; } .ampel.rot { color: var(--fehler-text); } .ampel.grau { color: var(--text-leise); }
   .marke { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 0.8rem; background: var(--flaeche); border: 1px solid var(--rand); margin: 0 4px 2px 0; }
-  .dialog { border: 1px solid var(--rand); border-radius: var(--radius); padding: var(--abstand); max-width: min(640px, calc(100vw - 24px)); width: 100%; }
+  .dialog { border: 1px solid var(--rand); border-radius: var(--radius-karte); padding: var(--abstand); box-shadow: 0 16px 48px rgba(0,0,0,0.25); max-width: min(640px, calc(100vw - 24px)); width: 100%; }
   /* Lange Dialoge scrollen innen; die Knopfleiste bleibt unten sichtbar */
   .dialog { max-height: calc(100dvh - 24px); overflow-y: auto; }
   .dialog > .knopfleiste { position: sticky; bottom: calc(-1 * var(--abstand)); background: var(--grund); padding: 10px 0 var(--abstand); margin-top: 8px; border-top: 1px solid var(--rand); }
@@ -215,7 +237,8 @@
   /* Reiter: eine Zeile, auf dem Handy waagrecht wischbar (statt mehrzeilig umzubrechen) */
   .reiter { display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; border-bottom: 1px solid var(--rand); margin: 0 0 12px; }
   .reiter button { min-height: 44px; white-space: nowrap; flex: 0 0 auto; padding: 6px 12px; border: 1px solid transparent; border-bottom: 0; background: none; font: inherit; cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; }
-  .reiter button[aria-selected="true"] { font-weight: 600; color: var(--akzent); box-shadow: inset 0 -3px 0 var(--akzent); }
+  .reiter button:hover { color: var(--akzent-dunkel); }
+  .reiter button[aria-selected="true"] { font-weight: 600; color: var(--akzent-dunkel); box-shadow: inset 0 -3px 0 var(--akzent); }
   /* Tabellen mit { karten: true }: unter 600 px jede Zeile als Karte, Spaltentitel aus data-titel */
   .kartensortierung { display: none; }
   @media (max-width: 599.98px) {
@@ -224,13 +247,13 @@
     .kartensortierung select { flex: 1 1 180px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rand); border-radius: var(--radius); font: inherit; background: var(--grund); color: var(--text); }
     table.karten, table.karten tbody { display: block; width: 100%; }
     table.karten thead { display: none; }
-    table.karten tr { display: flex; flex-direction: column; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--rand); border-radius: var(--radius); background: var(--grund); }
+    table.karten tr { display: flex; flex-direction: column; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--rand); border-radius: var(--radius-karte); background: var(--grund); }
     table.karten td { display: flex; gap: 12px; padding: 3px 0; border: 0; white-space: normal; overflow-wrap: anywhere; text-align: left; }
     table.karten td::before { content: attr(data-titel); flex: 0 0 38%; color: var(--text-leise); font-size: 0.85rem; }
     table.karten td[data-titel=""]::before, table.karten td.kartentitel::before { content: none; }
     table.karten td.kartentitel { display: block; order: -1; font-weight: 700; font-size: 1rem; }
     table.karten tr.klickbar { min-height: 44px; }
-    table.karten tr.klickbar:hover, table.karten tr.klickbar:focus { background: #eef4fb; }
+    table.karten tr.klickbar:hover, table.karten tr.klickbar:focus { background: var(--hover); }
     table.karten tr.klickbar:hover td, table.karten tr.klickbar:focus td { background: transparent; }
   }
   @media print { .kopf, .navigation, .mehr-liste, .unterreiter, .fuss, .knopfleiste, .filterleiste, .meldung { display: none !important; } }
@@ -246,14 +269,15 @@
     }
     .navigation .nav-symbol, .navigation .nav-mehr, .mehr-liste { display: none; }
     .navigation .nav-ueberzaehlig { display: block; }
-    .navigation button[aria-current="page"] { color: var(--text); background: var(--grund); border-color: var(--rand); box-shadow: none; }
+    .navigation button:hover { background: var(--hover); }
+    .navigation button[aria-current="page"] { color: var(--akzent-text); background: var(--akzent); border-color: var(--akzent); box-shadow: none; }
     .navigation ~ .fuss { padding-bottom: 12px; }
     .kopf .verein { display: inline; }
     .kopf .kopf-benutzer { display: block; }
     .formular { grid-template-columns: 1fr 1fr; }
     .details { grid-template-columns: minmax(110px, 200px) 1fr; }
     .feld.breit { grid-column: 1 / -1; }
-    .kopf { align-items: center; }
+    .kopf .wappen { width: 48px; height: 48px; }
     h1 { font-size: 1.5rem; }
   }
 </style>
